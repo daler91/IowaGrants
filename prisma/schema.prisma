@@ -1,0 +1,97 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Grant {
+  id               String          @id @default(cuid())
+  title            String
+  description      String
+  sourceUrl        String          @unique
+  sourceName       String
+  amount           String?
+  amountMin        Int?
+  amountMax        Int?
+  deadline         DateTime?
+  eligibility      String?
+  grantType        GrantType
+  status           GrantStatus     @default(OPEN)
+  businessStage    BusinessStage   @default(BOTH)
+  gender           GenderFocus     @default(ANY)
+  locations        String[]
+  industries       String[]
+  pdfUrl           String?
+  rawData          Json?
+  lastVerified     DateTime        @default(now())
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  categories       Category[]      @relation("GrantCategories")
+  eligibleExpenses EligibleExpense[] @relation("GrantExpenses")
+}
+
+model Category {
+  id     String  @id @default(cuid())
+  name   String  @unique
+  grants Grant[] @relation("GrantCategories")
+}
+
+model EligibleExpense {
+  id     String  @id @default(cuid())
+  name   String  @unique
+  label  String
+  grants Grant[] @relation("GrantExpenses")
+}
+
+model MonitoredUrl {
+  id           String    @id @default(cuid())
+  url          String    @unique
+  sourceName   String
+  contentHash  String?
+  lastChecked  DateTime?
+  lastChanged  DateTime?
+  needsReparse Boolean   @default(true)
+  createdAt    DateTime  @default(now())
+}
+
+model ScrapeLog {
+  id          String    @id @default(cuid())
+  source      String
+  status      String
+  grantsFound Int       @default(0)
+  grantsNew   Int       @default(0)
+  error       String?
+  startedAt   DateTime  @default(now())
+  completedAt DateTime?
+}
+
+enum GrantType {
+  FEDERAL
+  STATE
+  LOCAL
+  PRIVATE
+}
+
+enum GrantStatus {
+  OPEN
+  CLOSED
+  FORECASTED
+}
+
+enum GenderFocus {
+  WOMEN
+  VETERAN
+  MINORITY
+  GENERAL
+  ANY
+}
+
+enum BusinessStage {
+  STARTUP
+  EXISTING
+  BOTH
+}
