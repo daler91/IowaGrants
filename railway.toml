@@ -5,7 +5,7 @@ builder = "nixpacks"
 nixPkgs = ["nodejs_20"]
 
 [deploy]
-startCommand = "npx prisma migrate deploy; npx prisma generate; npm start"
+startCommand = "sh start.sh"
 healthcheckPath = "/"
 healthcheckTimeout = 300
 restartPolicyType = "on_failure"
