@@ -1,6 +1,9 @@
 [build]
 builder = "nixpacks"
 
+[build.nixpacks]
+nixPkgs = ["nodejs_20"]
+
 [deploy]
 startCommand = "npx prisma migrate deploy && npx prisma generate && npm start"
 healthcheckPath = "/api/grants"
