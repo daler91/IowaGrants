@@ -18,11 +18,6 @@ const NATIONAL_SEARCH_QUERIES = [
   "small business grants for women 2026",
   "nationwide small business grants",
   "grants for women entrepreneurs",
-  "minority small business grants USA",
-  "veteran small business grants",
-  "startup grants United States",
-  "private foundation small business grants",
-  "national small business grant programs",
 ];
 
 const SEARCH_QUERIES = [...IOWA_SEARCH_QUERIES, ...NATIONAL_SEARCH_QUERIES];
@@ -43,6 +38,8 @@ const SKIP_DOMAINS = [
   "reddit.com",
 ];
 
+const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
 function shouldSkipUrl(url: string): boolean {
   const lower = url.toLowerCase();
   return SKIP_DOMAINS.some((domain) => lower.includes(domain));
@@ -51,26 +48,39 @@ function shouldSkipUrl(url: string): boolean {
 async function searchDuckDuckGo(
   query: string
 ): Promise<Array<{ title: string; url: string; snippet: string }>> {
-  try {
-    // Dynamic import for duck-duck-scrape (ESM module)
-    const dds = await import("duck-duck-scrape");
-    const results = await dds.search(query, { safeSearch: dds.SafeSearchType.STRICT });
+  const maxRetries = 2;
 
-    return (results.results || [])
-      .filter((r) => r.url && r.title && !shouldSkipUrl(r.url))
-      .slice(0, 8) // Top 8 per query
-      .map((r) => ({
-        title: r.title,
-        url: r.url,
-        snippet: r.description || "",
-      }));
-  } catch (error) {
-    console.error(
-      `[web-search] DuckDuckGo search failed for "${query}":`,
-      error instanceof Error ? error.message : error
-    );
-    return [];
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      // Dynamic import for duck-duck-scrape (ESM module)
+      const dds = await import("duck-duck-scrape");
+      const results = await dds.search(query, { safeSearch: dds.SafeSearchType.STRICT });
+
+      return (results.results || [])
+        .filter((r) => r.url && r.title && !shouldSkipUrl(r.url))
+        .slice(0, 8) // Top 8 per query
+        .map((r) => ({
+          title: r.title,
+          url: r.url,
+          snippet: r.description || "",
+        }));
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      const isRateLimited = msg.includes("anomaly");
+
+      if (isRateLimited && attempt < maxRetries - 1) {
+        const backoff = (attempt + 1) * 5000; // 5s, 10s
+        console.warn(`[web-search] Rate limited on "${query}", retrying in ${backoff / 1000}s...`);
+        await delay(backoff);
+        continue;
+      }
+
+      console.error(`[web-search] DuckDuckGo search failed for "${query}": ${msg}`);
+      return [];
+    }
   }
+
+  return [];
 }
 
 async function scrapeGrantPage(
@@ -153,7 +163,13 @@ export async function searchWebForGrants(): Promise<GrantData[]> {
   const allGrants: GrantData[] = [];
   const seenUrls = new Set<string>();
 
-  for (const query of SEARCH_QUERIES) {
+  for (let i = 0; i < SEARCH_QUERIES.length; i++) {
+    // Delay between queries to avoid DuckDuckGo rate limiting
+    if (i > 0) {
+      await delay(2000);
+    }
+
+    const query = SEARCH_QUERIES[i];
     const results = await searchDuckDuckGo(query);
     console.log(
       `[web-search] "${query}" → ${results.length} results to check`

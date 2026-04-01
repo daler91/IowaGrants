@@ -21,7 +21,14 @@ interface SimplerResponse {
   pagination_info?: { total_records?: number };
 }
 
-function isNotStateRestricted(opp: SimplerOpportunity): boolean {
+const BUSINESS_RELEVANCE_KEYWORDS = [
+  "small business", "business", "entrepreneur", "startup", "sba",
+  "sbir", "sttr", "commercial", "company", "enterprise", "firm",
+  "women-owned", "veteran-owned", "minority-owned", "disadvantaged",
+  "rural business", "microenterprise",
+];
+
+function isEligibleOpportunity(opp: SimplerOpportunity): boolean {
   const text = [
     opp.opportunity_title,
     opp.summary?.summary_description,
@@ -30,7 +37,11 @@ function isNotStateRestricted(opp: SimplerOpportunity): boolean {
     .filter(Boolean)
     .join(" ");
 
-  return !isExcludedByStateRestriction(text);
+  if (isExcludedByStateRestriction(text)) return false;
+
+  // Check that the grant is relevant to small businesses
+  const lower = text.toLowerCase();
+  return BUSINESS_RELEVANCE_KEYWORDS.some((kw) => lower.includes(kw));
 }
 
 function mapToGrantData(opp: SimplerOpportunity): GrantData {
@@ -76,9 +87,9 @@ export async function fetchSimplerGrants(): Promise<GrantData[]> {
     "minority business",
     "veteran business",
     "startup grant",
-    "rural development",
-    "economic development",
-    "community development",
+    "rural small business",
+    "small business development",
+    "entrepreneurship",
     "Iowa small business",
   ];
 
@@ -95,7 +106,7 @@ export async function fetchSimplerGrants(): Promise<GrantData[]> {
             opportunity_status: { one_of: ["posted", "forecasted"] },
           },
           pagination: {
-            page_size: 100,
+            page_size: 25,
             page_offset: 1,
           },
         },
@@ -109,7 +120,7 @@ export async function fetchSimplerGrants(): Promise<GrantData[]> {
       );
 
       const opportunities = response.data?.data || [];
-      const eligibleOpps = opportunities.filter(isNotStateRestricted);
+      const eligibleOpps = opportunities.filter(isEligibleOpportunity);
 
       for (const opp of eligibleOpps) {
         const grant = mapToGrantData(opp);
