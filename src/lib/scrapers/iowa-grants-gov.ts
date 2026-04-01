@@ -4,7 +4,6 @@ import type { GrantData } from "@/lib/types";
 import { fetchPageDetails } from "./utils";
 
 const IOWA_GRANTS_GOV_URLS = [
-  "https://www.iowagrants.gov/grantSummaryList.do",
   "https://www.iowagrants.gov/",
 ];
 
@@ -37,9 +36,11 @@ export async function scrapeIowaGrantsGov(): Promise<GrantData[]> {
     try {
       const response = await axios.get(pageUrl, {
         headers: {
-          "User-Agent": "IowaGrantScanner/1.0 (educational research project)",
+          "User-Agent":
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+          Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
         },
-        timeout: 15000,
+        timeout: 20000,
       });
 
       const $ = cheerio.load(response.data);
