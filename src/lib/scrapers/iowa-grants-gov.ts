@@ -48,7 +48,7 @@ export async function scrapeIowaGrantsGov(): Promise<GrantData[]> {
         const $el = $(el);
 
         // Try table row format
-        if (el.tagName === "tr") {
+        if ("tagName" in el && el.tagName === "tr") {
           const cells = $el.find("td");
           if (cells.length >= 2) {
             const $link = cells.first().find("a");
