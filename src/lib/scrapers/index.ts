@@ -5,6 +5,7 @@ import { fetchShadowAPIs } from "./shadow-api-hunter";
 import { fetchSimplerGrants } from "./simpler-grants";
 import { scrapeUSDA } from "./usda-iowa";
 import { scrapeOpportunityIowa } from "./opportunity-iowa";
+import { scrapeIowaGrantsGov } from "./iowa-grants-gov";
 import { searchWebForGrants } from "./web-search";
 import { normalizeTitle } from "./utils";
 import { categorizeAll } from "@/lib/ai/categorizer";
@@ -141,13 +142,14 @@ export async function runFullScrape(): Promise<ScraperResult[]> {
   await checkForChanges();
 
   // Step 2: Fetch from all sources in parallel
-  const [samGov, ieda, shadow, simplerGrants, usda, opportunityIowa, webSearch] = await Promise.allSettled([
+  const [samGov, ieda, shadow, simplerGrants, usda, opportunityIowa, iowaGrantsGov, webSearch] = await Promise.allSettled([
     fetchSamGov(),
     scrapeIEDA(),
     fetchShadowAPIs(),
     fetchSimplerGrants(),
     scrapeUSDA(),
     scrapeOpportunityIowa(),
+    scrapeIowaGrantsGov(),
     searchWebForGrants(),
   ]);
 
@@ -158,6 +160,7 @@ export async function runFullScrape(): Promise<ScraperResult[]> {
     { name: "simpler-grants", result: simplerGrants },
     { name: "usda-rd", result: usda },
     { name: "opportunity-iowa", result: opportunityIowa },
+    { name: "iowa-grants-gov", result: iowaGrantsGov },
     { name: "web-search", result: webSearch },
   ];
 
