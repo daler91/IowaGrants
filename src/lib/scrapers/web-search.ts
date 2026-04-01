@@ -35,23 +35,17 @@ function shouldSkipUrl(url: string): boolean {
   return SKIP_DOMAINS.some((domain) => lower.includes(domain));
 }
 
-interface BraveSearchResult {
-  title: string;
-  url: string;
-  description?: string;
-}
+type SearchResult = { title: string; url: string; snippet: string };
+
+// ---------------------------------------------------------------------------
+// Brave Search API (free tier: 2,000 queries/month)
+// ---------------------------------------------------------------------------
 
 interface BraveWebResults {
-  web?: { results?: BraveSearchResult[] };
+  web?: { results?: Array<{ title: string; url: string; description?: string }> };
 }
 
-/**
- * Search using Brave Search API (free tier: 2000 queries/month).
- * Falls back to empty results if the API key is not set.
- */
-async function searchBrave(
-  query: string
-): Promise<Array<{ title: string; url: string; snippet: string }>> {
+async function searchBrave(query: string): Promise<SearchResult[]> {
   const apiKey = process.env.BRAVE_SEARCH_API_KEY;
   if (!apiKey) return [];
 
@@ -59,11 +53,7 @@ async function searchBrave(
     const response = await axios.get<BraveWebResults>(
       "https://api.search.brave.com/res/v1/web/search",
       {
-        params: {
-          q: query,
-          count: 10,
-          safesearch: "strict",
-        },
+        params: { q: query, count: 10, safesearch: "strict" },
         headers: {
           Accept: "application/json",
           "Accept-Encoding": "gzip",
@@ -73,21 +63,88 @@ async function searchBrave(
       }
     );
 
-    const results = response.data?.web?.results || [];
-    return results
+    return (response.data?.web?.results || [])
       .filter((r) => r.url && r.title && !shouldSkipUrl(r.url))
       .slice(0, 8)
-      .map((r) => ({
-        title: r.title,
-        url: r.url,
-        snippet: r.description || "",
-      }));
+      .map((r) => ({ title: r.title, url: r.url, snippet: r.description || "" }));
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
     console.error(`[web-search] Brave search failed for "${query}": ${msg}`);
     return [];
   }
 }
+
+// ---------------------------------------------------------------------------
+// SerpAPI — Google results (free tier: 100 searches/month)
+// ---------------------------------------------------------------------------
+
+interface SerpApiResult {
+  title?: string;
+  link?: string;
+  snippet?: string;
+}
+
+interface SerpApiResponse {
+  organic_results?: SerpApiResult[];
+}
+
+async function searchSerpApi(query: string): Promise<SearchResult[]> {
+  const apiKey = process.env.SERPAPI_API_KEY;
+  if (!apiKey) return [];
+
+  try {
+    const response = await axios.get<SerpApiResponse>(
+      "https://serpapi.com/search.json",
+      {
+        params: {
+          q: query,
+          engine: "google",
+          num: 10,
+          api_key: apiKey,
+        },
+        timeout: 15000,
+      }
+    );
+
+    return (response.data?.organic_results || [])
+      .filter((r) => r.link && r.title && !shouldSkipUrl(r.link))
+      .slice(0, 8)
+      .map((r) => ({ title: r.title!, url: r.link!, snippet: r.snippet || "" }));
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error(`[web-search] SerpAPI search failed for "${query}": ${msg}`);
+    return [];
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Combined search: Brave primary, SerpAPI for extra coverage
+// ---------------------------------------------------------------------------
+
+/**
+ * Runs a query through available search providers.
+ * - Brave is tried first (larger free quota).
+ * - SerpAPI is used as a fallback when Brave returns no results,
+ *   or for a subset of queries to get different result diversity.
+ */
+async function searchWeb(
+  query: string,
+  useSerpApiFallback: boolean
+): Promise<SearchResult[]> {
+  const braveResults = await searchBrave(query);
+  if (braveResults.length > 0) return braveResults;
+
+  // Brave returned nothing — try SerpAPI as fallback
+  if (useSerpApiFallback) {
+    return searchSerpApi(query);
+  }
+
+  return [];
+}
+
+// ---------------------------------------------------------------------------
+// Page scraper
+// ---------------------------------------------------------------------------
 
 async function scrapeGrantPage(
   url: string,
@@ -127,7 +184,7 @@ async function scrapeGrantPage(
 
     const hasGrantContent = grantKeywords.some((kw) => lowerText.includes(kw));
     if (!hasGrantContent) {
-      return null; // Not grant-related
+      return null;
     }
 
     // Exclude grants restricted to a specific non-Iowa state
@@ -148,7 +205,7 @@ async function scrapeGrantPage(
       description,
       sourceUrl: url,
       sourceName: "web-search",
-      grantType: isIowaSpecific ? "STATE" : "PRIVATE", // categorizer will refine
+      grantType: isIowaSpecific ? "STATE" : "PRIVATE",
       status: deadline && deadline < new Date() ? "CLOSED" : "OPEN",
       businessStage: "BOTH",
       gender: "ANY",
@@ -163,28 +220,43 @@ async function scrapeGrantPage(
   }
 }
 
+// ---------------------------------------------------------------------------
+// Main entry point
+// ---------------------------------------------------------------------------
+
 export async function searchWebForGrants(): Promise<GrantData[]> {
-  const apiKey = process.env.BRAVE_SEARCH_API_KEY;
-  if (!apiKey) {
-    console.log("[web-search] BRAVE_SEARCH_API_KEY not set — skipping web search");
+  const hasBrave = !!process.env.BRAVE_SEARCH_API_KEY;
+  const hasSerpApi = !!process.env.SERPAPI_API_KEY;
+
+  if (!hasBrave && !hasSerpApi) {
+    console.log("[web-search] No search API keys set (BRAVE_SEARCH_API_KEY, SERPAPI_API_KEY) — skipping web search");
     return [];
   }
 
-  console.log("[web-search] Starting web search discovery...");
+  const providers: string[] = [];
+  if (hasBrave) providers.push("Brave");
+  if (hasSerpApi) providers.push("SerpAPI");
+  console.log(`[web-search] Starting web search discovery (providers: ${providers.join(", ")})...`);
 
   const allGrants: GrantData[] = [];
   const seenUrls = new Set<string>();
 
   for (let i = 0; i < SEARCH_QUERIES.length; i++) {
-    // Small delay between queries to be polite (Brave free tier allows 1 req/sec)
+    // Small delay between queries (Brave: 1 req/sec, SerpAPI: no strict limit)
     if (i > 0) {
       await delay(1500);
     }
 
     const query = SEARCH_QUERIES[i];
-    const results = await searchBrave(query);
+
+    // Use SerpAPI as fallback for all queries if available
+    const results = await searchWeb(query, hasSerpApi);
+
+    const provider = results.length > 0
+      ? (hasBrave ? "brave" : "serpapi")
+      : "none";
     console.log(
-      `[web-search] "${query}" → ${results.length} results to check`
+      `[web-search] "${query}" → ${results.length} results [${provider}]`
     );
 
     for (const result of results) {
