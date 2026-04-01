@@ -21,11 +21,28 @@ interface SimplerResponse {
   pagination_info?: { total_records?: number };
 }
 
-const BUSINESS_RELEVANCE_KEYWORDS = [
-  "small business", "business", "entrepreneur", "startup", "sba",
-  "sbir", "sttr", "commercial", "company", "enterprise", "firm",
-  "women-owned", "veteran-owned", "minority-owned", "disadvantaged",
-  "rural business", "microenterprise",
+// Specific small-business keywords — no overly broad terms like "business" or "company"
+const SMALL_BUSINESS_KEYWORDS = [
+  "small business", "sba", "sbir", "sttr",
+  "microenterprise", "micro-enterprise",
+  "women-owned", "woman-owned", "veteran-owned", "minority-owned",
+  "small firm", "small company", "small enterprise",
+  "rural business", "disadvantaged business",
+  "entrepreneur", "startup", "start-up",
+];
+
+// Grants mentioning these are likely NOT for small businesses
+const EXCLUSION_KEYWORDS = [
+  "university", "universities", "college", "collegiate",
+  "k-12", "school district", "educational institution",
+  "hospital", "health department", "public health",
+  "tribal government", "tribal nation", "indian tribe",
+  "state government", "state agency", "municipality",
+  "county government", "city government",
+  "non-profit organization", "nonprofit organization",
+  "law enforcement", "fire department",
+  "research institution", "academic research",
+  "housing authority", "transit authority",
 ];
 
 function isEligibleOpportunity(opp: SimplerOpportunity): boolean {
@@ -39,9 +56,21 @@ function isEligibleOpportunity(opp: SimplerOpportunity): boolean {
 
   if (isExcludedByStateRestriction(text)) return false;
 
-  // Check that the grant is relevant to small businesses
   const lower = text.toLowerCase();
-  return BUSINESS_RELEVANCE_KEYWORDS.some((kw) => lower.includes(kw));
+
+  // Must contain at least one strong small-business keyword
+  const hasSmallBizKeyword = SMALL_BUSINESS_KEYWORDS.some((kw) => lower.includes(kw));
+  if (!hasSmallBizKeyword) return false;
+
+  // Reject if exclusion keywords present (unless title itself has small biz terms)
+  const titleLower = (opp.opportunity_title || "").toLowerCase();
+  const hasExclusion = EXCLUSION_KEYWORDS.some((kw) => lower.includes(kw));
+  if (hasExclusion) {
+    const titleHasSmallBiz = SMALL_BUSINESS_KEYWORDS.some((kw) => titleLower.includes(kw));
+    if (!titleHasSmallBiz) return false;
+  }
+
+  return true;
 }
 
 function mapToGrantData(opp: SimplerOpportunity): GrantData {
@@ -83,18 +112,18 @@ export async function fetchSimplerGrants(): Promise<GrantData[]> {
 
   const queries = [
     "small business grant",
-    "women owned business",
-    "minority business",
-    "veteran business",
+    "women owned small business",
+    "minority small business",
+    "veteran small business",
     "startup grant",
     "rural small business",
-    "small business development",
-    "entrepreneurship",
     "Iowa small business",
   ];
 
   const allGrants: GrantData[] = [];
   const seenUrls = new Set<string>();
+  let totalFetched = 0;
+  let totalFiltered = 0;
 
   for (const query of queries) {
     try {
@@ -104,6 +133,7 @@ export async function fetchSimplerGrants(): Promise<GrantData[]> {
           query,
           filters: {
             opportunity_status: { one_of: ["posted", "forecasted"] },
+            applicant_type: { one_of: ["small_businesses", "individuals"] },
           },
           pagination: {
             page_size: 25,
@@ -121,6 +151,8 @@ export async function fetchSimplerGrants(): Promise<GrantData[]> {
 
       const opportunities = response.data?.data || [];
       const eligibleOpps = opportunities.filter(isEligibleOpportunity);
+      totalFetched += opportunities.length;
+      totalFiltered += opportunities.length - eligibleOpps.length;
 
       for (const opp of eligibleOpps) {
         const grant = mapToGrantData(opp);
@@ -141,6 +173,6 @@ export async function fetchSimplerGrants(): Promise<GrantData[]> {
     }
   }
 
-  console.log(`[simpler-grants] Total unique grants: ${allGrants.length}`);
+  console.log(`[simpler-grants] Total unique grants: ${allGrants.length} (fetched ${totalFetched}, filtered out ${totalFiltered})`);
   return allGrants;
 }

@@ -3,24 +3,14 @@ import axios from "axios";
 import type { GrantData } from "@/lib/types";
 import { extractDeadline, isExcludedByStateRestriction, detectLocationScope } from "./utils";
 
-const IOWA_SEARCH_QUERIES = [
+const SEARCH_QUERIES = [
   "Iowa small business grants 2026",
-  "Iowa women owned business grants",
-  "Iowa startup grants for new businesses",
-  "Iowa rural small business grants",
-  "Iowa minority business grants",
-  "Iowa veteran business grants",
-  "Des Moines small business grants",
-  "Cedar Rapids business grants Iowa",
+  "Iowa women veteran minority business grants",
+  "Iowa startup rural small business grants",
+  "Des Moines Cedar Rapids small business grants",
+  "nationwide small business grants 2026",
+  "small business grants for women entrepreneurs",
 ];
-
-const NATIONAL_SEARCH_QUERIES = [
-  "small business grants for women 2026",
-  "nationwide small business grants",
-  "grants for women entrepreneurs",
-];
-
-const SEARCH_QUERIES = [...IOWA_SEARCH_QUERIES, ...NATIONAL_SEARCH_QUERIES];
 
 // URLs to skip (aggregators we already scrape, or non-grant sites)
 const SKIP_DOMAINS = [
@@ -45,10 +35,12 @@ function shouldSkipUrl(url: string): boolean {
   return SKIP_DOMAINS.some((domain) => lower.includes(domain));
 }
 
+let rateLimitCount = 0;
+
 async function searchDuckDuckGo(
   query: string
 ): Promise<Array<{ title: string; url: string; snippet: string }>> {
-  const maxRetries = 2;
+  const maxRetries = 3;
 
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     try {
@@ -69,8 +61,9 @@ async function searchDuckDuckGo(
       const isRateLimited = msg.includes("anomaly");
 
       if (isRateLimited && attempt < maxRetries - 1) {
-        const backoff = (attempt + 1) * 5000; // 5s, 10s
-        console.warn(`[web-search] Rate limited on "${query}", retrying in ${backoff / 1000}s...`);
+        rateLimitCount++;
+        const backoff = (attempt + 1) * 15000 + rateLimitCount * 5000; // 15s+, grows with repeated limits
+        console.warn(`[web-search] Rate limited on "${query}", retrying in ${Math.round(backoff / 1000)}s...`);
         await delay(backoff);
         continue;
       }
@@ -166,7 +159,9 @@ export async function searchWebForGrants(): Promise<GrantData[]> {
   for (let i = 0; i < SEARCH_QUERIES.length; i++) {
     // Delay between queries to avoid DuckDuckGo rate limiting
     if (i > 0) {
-      await delay(2000);
+      const baseDelay = 8000 + Math.random() * 7000; // 8-15s random
+      const penalty = rateLimitCount * 10000; // extra backoff per rate limit hit
+      await delay(baseDelay + penalty);
     }
 
     const query = SEARCH_QUERIES[i];
