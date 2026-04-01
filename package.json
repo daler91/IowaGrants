@@ -21,7 +21,6 @@
     "react-dom": "^18"
   },
   "devDependencies": {
-    "@types/cheerio": "^0.22.35",
     "@types/crypto-js": "^4.2.2",
     "@types/node": "^20",
     "@types/react": "^18",
