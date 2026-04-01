@@ -3,6 +3,43 @@ import * as cheerio from "cheerio";
 import { IOWA_LOCATIONS } from "@/lib/ai/categorizer";
 
 /**
+ * Clean HTML content to plain text. Designed for sanitizing rich-text fields
+ * from databases like Airtable that may contain iframes, tracking scripts,
+ * navigation remnants, and other non-content HTML.
+ */
+export function cleanHtmlToText(html: string, maxLength = 2000): string {
+  if (!html) return "";
+
+  // If it doesn't look like HTML, just clean whitespace and return
+  if (!/<[a-z][\s\S]*>/i.test(html)) {
+    return html.replace(/\s+/g, " ").trim().slice(0, maxLength);
+  }
+
+  const $ = cheerio.load(html);
+
+  // Remove non-content elements entirely
+  $("script, style, iframe, noscript, nav, footer, header, svg").remove();
+
+  // Convert block elements to newlines before stripping tags
+  $("br").replaceWith("\n");
+  $("p, div, li, h1, h2, h3, h4, h5, h6, tr, blockquote").each((_, el) => {
+    $(el).prepend("\n");
+    $(el).append("\n");
+  });
+
+  const text = $.text();
+
+  return text
+    .replace(/\r\n/g, "\n")
+    .replace(/[ \t]+/g, " ")           // collapse horizontal whitespace
+    .replace(/\n /g, "\n")             // trim leading spaces on lines
+    .replace(/ \n/g, "\n")             // trim trailing spaces on lines
+    .replace(/\n{3,}/g, "\n\n")        // max 2 consecutive newlines
+    .trim()
+    .slice(0, maxLength);
+}
+
+/**
  * Extract a deadline date from HTML content by searching for common patterns.
  */
 export function extractDeadline(html: string): Date | undefined {
