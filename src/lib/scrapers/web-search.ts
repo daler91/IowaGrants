@@ -1,9 +1,9 @@
 import * as cheerio from "cheerio";
 import axios from "axios";
 import type { GrantData } from "@/lib/types";
-import { extractDeadline } from "./utils";
+import { extractDeadline, isExcludedByStateRestriction, detectLocationScope } from "./utils";
 
-const SEARCH_QUERIES = [
+const IOWA_SEARCH_QUERIES = [
   "Iowa small business grants 2026",
   "Iowa women owned business grants",
   "Iowa startup grants for new businesses",
@@ -13,6 +13,19 @@ const SEARCH_QUERIES = [
   "Des Moines small business grants",
   "Cedar Rapids business grants Iowa",
 ];
+
+const NATIONAL_SEARCH_QUERIES = [
+  "small business grants for women 2026",
+  "nationwide small business grants",
+  "grants for women entrepreneurs",
+  "minority small business grants USA",
+  "veteran small business grants",
+  "startup grants United States",
+  "private foundation small business grants",
+  "national small business grant programs",
+];
+
+const SEARCH_QUERIES = [...IOWA_SEARCH_QUERIES, ...NATIONAL_SEARCH_QUERIES];
 
 // URLs to skip (aggregators we already scrape, or non-grant sites)
 const SKIP_DOMAINS = [
@@ -45,7 +58,7 @@ async function searchDuckDuckGo(
 
     return (results.results || [])
       .filter((r) => r.url && r.title && !shouldSkipUrl(r.url))
-      .slice(0, 5) // Top 5 per query
+      .slice(0, 8) // Top 8 per query
       .map((r) => ({
         title: r.title,
         url: r.url,
@@ -95,13 +108,15 @@ async function scrapeGrantPage(
       "small business",
       "apply",
     ];
-    const iowaKeywords = ["iowa", "des moines", "cedar rapids", "davenport"];
 
     const hasGrantContent = grantKeywords.some((kw) => lowerText.includes(kw));
-    const hasIowaContent = iowaKeywords.some((kw) => lowerText.includes(kw));
+    if (!hasGrantContent) {
+      return null; // Not grant-related
+    }
 
-    if (!hasGrantContent || !hasIowaContent) {
-      return null; // Not relevant
+    // Exclude grants restricted to a specific non-Iowa state
+    if (isExcludedByStateRestriction(pageText)) {
+      return null;
     }
 
     const deadline = extractDeadline(response.data);
@@ -109,16 +124,19 @@ async function scrapeGrantPage(
     const pageTitle =
       $("h1").first().text().trim() || $("title").text().trim() || searchTitle;
 
+    const locations = detectLocationScope(pageText);
+    const isIowaSpecific = locations.includes("Iowa") && !locations.includes("Nationwide");
+
     return {
       title: pageTitle,
       description,
       sourceUrl: url,
       sourceName: "web-search",
-      grantType: "STATE", // Default; categorizer will refine
+      grantType: isIowaSpecific ? "STATE" : "PRIVATE", // categorizer will refine
       status: deadline && deadline < new Date() ? "CLOSED" : "OPEN",
       businessStage: "BOTH",
       gender: "ANY",
-      locations: ["Iowa"],
+      locations,
       industries: [],
       deadline,
       categories: [],

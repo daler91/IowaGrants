@@ -1,5 +1,6 @@
 import axios from "axios";
 import type { GrantData } from "@/lib/types";
+import { isExcludedByStateRestriction } from "./utils";
 
 const SAM_GOV_API = "https://api.sam.gov/prod/opportunities/v2/search";
 
@@ -37,7 +38,13 @@ function mapToGrantData(opp: SamGovOpportunity): GrantData {
   const isOpen =
     !deadline || deadline > new Date() ? "OPEN" : ("CLOSED" as const);
 
-  const locations: string[] = ["Iowa"];
+  const locations: string[] = [];
+  const perfState = opp.placeOfPerformance?.state?.name?.toLowerCase();
+  if (perfState === "iowa" || perfState === "ia") {
+    locations.push("Iowa");
+  } else {
+    locations.push("Nationwide");
+  }
   if (opp.placeOfPerformance?.city?.name) {
     locations.push(opp.placeOfPerformance.city.name);
   }
@@ -77,35 +84,60 @@ export async function fetchSamGov(): Promise<GrantData[]> {
     return [];
   }
 
-  try {
-    const today = new Date();
-    const sixMonthsAgo = new Date(today);
-    sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+  const keywords = [
+    "small business",
+    "small business grant",
+    "women owned business",
+    "minority business",
+    "rural development",
+  ];
 
-    const formatDate = (d: Date) =>
-      `${String(d.getMonth() + 1).padStart(2, "0")}/${String(d.getDate()).padStart(2, "0")}/${d.getFullYear()}`;
+  const allGrants: GrantData[] = [];
+  const seenIds = new Set<string>();
 
-    const response = await axios.get<SamGovResponse>(SAM_GOV_API, {
-      params: {
-        api_key: apiKey,
-        limit: 100,
-        postedFrom: formatDate(sixMonthsAgo),
-        postedTo: formatDate(today),
-        ptype: "g",
-        keyword: "Iowa small business",
-      },
-    });
+  const today = new Date();
+  const sixMonthsAgo = new Date(today);
+  sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
 
-    const opportunities = response.data.opportunitiesData || [];
-    const grants = opportunities.map(mapToGrantData);
+  const formatDate = (d: Date) =>
+    `${String(d.getMonth() + 1).padStart(2, "0")}/${String(d.getDate()).padStart(2, "0")}/${d.getFullYear()}`;
 
-    console.log(`[sam.gov] Fetched ${grants.length} grants`);
-    return grants;
-  } catch (error) {
-    console.error(
-      "[sam.gov] Error:",
-      error instanceof Error ? error.message : error
-    );
-    return [];
+  for (const keyword of keywords) {
+    try {
+      const response = await axios.get<SamGovResponse>(SAM_GOV_API, {
+        params: {
+          api_key: apiKey,
+          limit: 100,
+          postedFrom: formatDate(sixMonthsAgo),
+          postedTo: formatDate(today),
+          ptype: "g",
+          keyword,
+        },
+      });
+
+      const opportunities = response.data.opportunitiesData || [];
+
+      for (const opp of opportunities) {
+        if (seenIds.has(opp.noticeId)) continue;
+        seenIds.add(opp.noticeId);
+
+        const text = `${opp.title} ${opp.description || ""}`;
+        if (isExcludedByStateRestriction(text)) continue;
+
+        allGrants.push(mapToGrantData(opp));
+      }
+
+      console.log(
+        `[sam.gov] Fetched ${opportunities.length} results for "${keyword}"`
+      );
+    } catch (error) {
+      console.error(
+        `[sam.gov] Error for "${keyword}":`,
+        error instanceof Error ? error.message : error
+      );
+    }
   }
+
+  console.log(`[sam.gov] Total unique grants: ${allGrants.length}`);
+  return allGrants;
 }

@@ -67,10 +67,8 @@ export async function scrapeOpportunityIowa(): Promise<GrantData[]> {
           const lower = (title + " " + fullUrl).toLowerCase();
           const isRelevant =
             lower.includes("grant") ||
-            lower.includes("program") ||
             lower.includes("fund") ||
             lower.includes("assist") ||
-            lower.includes("business") ||
             lower.includes("credit") ||
             lower.includes("incentive") ||
             lower.includes("loan");
@@ -85,6 +83,15 @@ export async function scrapeOpportunityIowa(): Promise<GrantData[]> {
             lower.includes("sitemap")
           )
             return;
+
+          // Skip top-level category pages (e.g., /business, /programs)
+          try {
+            const pathname = new URL(fullUrl).pathname.replace(/\/+$/, "");
+            const segments = pathname.split("/").filter(Boolean);
+            if (segments.length <= 1) return;
+          } catch {
+            // continue if URL parsing fails
+          }
 
           seenUrls.add(fullUrl);
           const description = $el.parent().text().trim().slice(0, 500) || title;

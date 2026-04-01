@@ -1,5 +1,6 @@
 import axios from "axios";
 import * as cheerio from "cheerio";
+import { IOWA_LOCATIONS } from "@/lib/ai/categorizer";
 
 /**
  * Extract a deadline date from HTML content by searching for common patterns.
@@ -76,4 +77,134 @@ export async function fetchPageDetails(
   } catch {
     return null;
   }
+}
+
+const NON_IOWA_STATES = [
+  "Alabama", "Alaska", "Arizona", "Arkansas", "California", "Colorado",
+  "Connecticut", "Delaware", "Florida", "Georgia", "Hawaii", "Idaho",
+  "Illinois", "Indiana", "Kansas", "Kentucky", "Louisiana", "Maine",
+  "Maryland", "Massachusetts", "Michigan", "Minnesota", "Mississippi",
+  "Missouri", "Montana", "Nebraska", "Nevada", "New Hampshire",
+  "New Jersey", "New Mexico", "New York", "North Carolina", "North Dakota",
+  "Ohio", "Oklahoma", "Oregon", "Pennsylvania", "Rhode Island",
+  "South Carolina", "South Dakota", "Tennessee", "Texas", "Utah",
+  "Vermont", "Virginia", "Washington", "West Virginia", "Wisconsin", "Wyoming",
+];
+
+const NATIONWIDE_INDICATORS = [
+  "nationwide", "all states", "50 states", "any state", "all us",
+  "united states", "national", "across the country", "every state",
+  "all 50", "open to all",
+];
+
+/**
+ * Returns true if the text indicates a grant restricted to a specific non-Iowa state.
+ * Returns false for nationwide grants or grants that don't restrict by state.
+ */
+export function isExcludedByStateRestriction(text: string): boolean {
+  const lower = text.toLowerCase();
+
+  // If nationwide indicators are present, it's not state-restricted
+  if (NATIONWIDE_INDICATORS.some((ind) => lower.includes(ind))) {
+    return false;
+  }
+
+  for (const state of NON_IOWA_STATES) {
+    const s = state.toLowerCase();
+    const restrictionPatterns = [
+      `${s} only`,
+      `${s} businesses only`,
+      `${s} residents only`,
+      `restricted to ${s}`,
+      `available only in ${s}`,
+      `must be located in ${s}`,
+      `open to ${s} residents`,
+      `eligible applicants must be in ${s}`,
+      `available to ${s}`,
+      `exclusively for ${s}`,
+      `limited to ${s}`,
+    ];
+
+    if (restrictionPatterns.some((p) => lower.includes(p))) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+/**
+ * Detect the geographic scope of a grant from its text content.
+ * Returns location tags like ["Nationwide"], ["Iowa", "Des Moines"], etc.
+ */
+export function detectLocationScope(text: string): string[] {
+  const lower = text.toLowerCase();
+
+  const mentionsIowa = lower.includes("iowa");
+  const isNationwide = NATIONWIDE_INDICATORS.some((ind) => lower.includes(ind));
+
+  const iowaLocations = IOWA_LOCATIONS.filter((loc) => text.includes(loc));
+
+  if (mentionsIowa && !isNationwide) {
+    return iowaLocations.length > 0
+      ? ["Iowa", ...iowaLocations]
+      : ["Iowa"];
+  }
+
+  if (isNationwide) {
+    const locs: string[] = ["Nationwide"];
+    if (mentionsIowa) locs.push("Iowa");
+    if (iowaLocations.length > 0) locs.push(...iowaLocations);
+    return locs;
+  }
+
+  // No specific state mentioned — assume accessible nationwide
+  return ["Nationwide"];
+}
+
+/**
+ * Check if a scraped URL/page represents an actual grant program
+ * rather than a generic landing/category page.
+ */
+export function isActualGrantPage(url: string, title: string, pageText: string): boolean {
+  // Reject very short/generic URL paths (e.g., /business, /programs)
+  try {
+    const pathname = new URL(url).pathname.replace(/\/+$/, "");
+    const segments = pathname.split("/").filter(Boolean);
+    if (segments.length <= 1) {
+      const genericPaths = ["business", "programs", "grants", "funding", "resources", "services", "about", "help"];
+      if (segments.length === 0 || genericPaths.includes(segments[0].toLowerCase())) {
+        return false;
+      }
+    }
+  } catch {
+    // If URL parsing fails, continue with other checks
+  }
+
+  // Reject very generic titles
+  const genericTitles = [
+    "business", "programs", "grants", "funding", "financial assistance",
+    "resources", "services", "home", "about", "contact", "help",
+    "small business", "entrepreneurs",
+  ];
+  if (genericTitles.includes(title.toLowerCase().trim())) {
+    return false;
+  }
+
+  // Require at least one grant-specific content signal in the page text
+  const lower = pageText.toLowerCase();
+  const grantSignals = [
+    /\$[\d,]+/,                          // Dollar amounts like $5,000
+    /deadline/i,
+    /eligib/i,                           // eligible, eligibility
+    /how to apply/i,
+    /application/i,
+    /award amount/i,
+    /grant program/i,
+    /funding opportunity/i,
+    /apply now/i,
+    /submit.*application/i,
+  ];
+
+  return grantSignals.some((pattern) => pattern.test(lower));
 }

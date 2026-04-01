@@ -55,15 +55,24 @@ function scrapePageForPrograms(
       const lowerUrl = fullUrl.toLowerCase();
       const isRelevant =
         lowerTitle.includes("grant") ||
-        lowerTitle.includes("program") ||
         lowerTitle.includes("fund") ||
         lowerTitle.includes("assist") ||
-        lowerTitle.includes("business") ||
+        lowerTitle.includes("incentive") ||
+        lowerTitle.includes("loan") ||
+        lowerTitle.includes("credit") ||
         lowerUrl.includes("grant") ||
-        lowerUrl.includes("program") ||
         lowerUrl.includes("fund");
 
       if (!isRelevant) return;
+
+      // Skip top-level category pages
+      try {
+        const pathname = new URL(fullUrl).pathname.replace(/\/+$/, "");
+        const segments = pathname.split("/").filter(Boolean);
+        if (segments.length <= 1) return;
+      } catch {
+        // continue if URL parsing fails
+      }
 
       const isPdf = lowerUrl.endsWith(".pdf");
 

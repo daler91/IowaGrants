@@ -1,5 +1,6 @@
 import axios from "axios";
 import type { GrantData } from "@/lib/types";
+import { isExcludedByStateRestriction, detectLocationScope } from "./utils";
 
 const SIMPLER_GRANTS_API = "https://api.simpler.grants.gov/v1/opportunities/search";
 
@@ -20,22 +21,16 @@ interface SimplerResponse {
   pagination_info?: { total_records?: number };
 }
 
-function isIowaRelevant(opp: SimplerOpportunity): boolean {
+function isNotStateRestricted(opp: SimplerOpportunity): boolean {
   const text = [
     opp.opportunity_title,
     opp.summary?.summary_description,
     opp.agency,
   ]
     .filter(Boolean)
-    .join(" ")
-    .toLowerCase();
+    .join(" ");
 
-  return (
-    text.includes("iowa") ||
-    text.includes(" ia ") ||
-    text.includes("midwest") ||
-    text.includes("rural")
-  );
+  return !isExcludedByStateRestriction(text);
 }
 
 function mapToGrantData(opp: SimplerOpportunity): GrantData {
@@ -58,7 +53,9 @@ function mapToGrantData(opp: SimplerOpportunity): GrantData {
     status: isOpen,
     businessStage: "BOTH",
     gender: "ANY",
-    locations: ["Iowa"],
+    locations: detectLocationScope(
+      `${opp.opportunity_title || ""} ${opp.summary?.summary_description || ""}`
+    ),
     industries: [],
     rawData: opp as unknown as Record<string, unknown>,
     categories: opp.category?.category_name ? [opp.category.category_name] : [],
@@ -74,11 +71,15 @@ export async function fetchSimplerGrants(): Promise<GrantData[]> {
   }
 
   const queries = [
+    "small business grant",
+    "women owned business",
+    "minority business",
+    "veteran business",
+    "startup grant",
+    "rural development",
+    "economic development",
+    "community development",
     "Iowa small business",
-    "Iowa grant",
-    "rural development Iowa",
-    "economic development Iowa",
-    "community development Iowa",
   ];
 
   const allGrants: GrantData[] = [];
@@ -108,9 +109,9 @@ export async function fetchSimplerGrants(): Promise<GrantData[]> {
       );
 
       const opportunities = response.data?.data || [];
-      const iowaOpps = opportunities.filter(isIowaRelevant);
+      const eligibleOpps = opportunities.filter(isNotStateRestricted);
 
-      for (const opp of iowaOpps) {
+      for (const opp of eligibleOpps) {
         const grant = mapToGrantData(opp);
         if (!seenUrls.has(grant.sourceUrl)) {
           seenUrls.add(grant.sourceUrl);
@@ -119,7 +120,7 @@ export async function fetchSimplerGrants(): Promise<GrantData[]> {
       }
 
       console.log(
-        `[simpler-grants] Fetched ${opportunities.length} results for "${query}", ${iowaOpps.length} Iowa-relevant`
+        `[simpler-grants] Fetched ${opportunities.length} results for "${query}", ${eligibleOpps.length} eligible`
       );
     } catch (error) {
       console.error(
