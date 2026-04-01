@@ -144,7 +144,7 @@ const INDUSTRY_KEYWORDS: Record<string, string[]> = {
   ],
 };
 
-const IOWA_LOCATIONS: string[] = [
+export const IOWA_LOCATIONS: string[] = [
   "Des Moines",
   "Cedar Rapids",
   "Davenport",
@@ -226,16 +226,31 @@ export function categorizeGrant(grant: GrantData): GrantData {
     grant.industries = findAllMatches(searchText, INDUSTRY_KEYWORDS);
   }
 
-  // Iowa location extraction
-  if (
+  // Location enrichment
+  const foundIowaLocations = IOWA_LOCATIONS.filter((loc) =>
+    searchText.includes(loc)
+  );
+
+  if (grant.locations.includes("Nationwide")) {
+    // For nationwide grants, add Iowa specifics if mentioned but keep Nationwide
+    if (foundIowaLocations.length > 0) {
+      grant.locations = ["Nationwide", "Iowa", ...foundIowaLocations];
+    }
+  } else if (
     grant.locations.length <= 1 &&
     grant.locations[0] === "Iowa"
   ) {
-    const foundLocations = IOWA_LOCATIONS.filter((loc) =>
-      searchText.includes(loc)
-    );
-    if (foundLocations.length > 0) {
-      grant.locations = ["Iowa", ...foundLocations];
+    // Existing logic for Iowa-specific grants
+    if (foundIowaLocations.length > 0) {
+      grant.locations = ["Iowa", ...foundIowaLocations];
+    }
+  }
+
+  // Grant type refinement — detect federal grants miscategorized as PRIVATE/STATE
+  if (grant.grantType === "PRIVATE" || grant.grantType === "STATE") {
+    const federalKeywords = ["federal", "sba", "usda", "department of", "u.s. government", "u.s. department"];
+    if (findKeywords(searchText, federalKeywords)) {
+      grant.grantType = "FEDERAL";
     }
   }
 

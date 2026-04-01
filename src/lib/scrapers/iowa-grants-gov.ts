@@ -76,10 +76,8 @@ export async function scrapeIowaGrantsGov(): Promise<GrantData[]> {
           const lower = (title + " " + fullUrl).toLowerCase();
           const isRelevant =
             lower.includes("grant") ||
-            lower.includes("program") ||
             lower.includes("fund") ||
             lower.includes("assist") ||
-            lower.includes("business") ||
             lower.includes("award") ||
             lower.includes("application");
 
@@ -92,6 +90,15 @@ export async function scrapeIowaGrantsGov(): Promise<GrantData[]> {
             lower.includes("sitemap")
           )
             return;
+
+          // Skip top-level category pages
+          try {
+            const pathname = new URL(fullUrl).pathname.replace(/\/+$/, "");
+            const segments = pathname.split("/").filter(Boolean);
+            if (segments.length <= 1) return;
+          } catch {
+            // continue if URL parsing fails
+          }
 
           seenUrls.add(fullUrl);
           const description =
