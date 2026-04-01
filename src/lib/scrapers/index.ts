@@ -1,5 +1,4 @@
 import { prisma } from "@/lib/db";
-import { fetchGrantsGov } from "./grants-gov";
 import { fetchSamGov } from "./sam-gov";
 import { scrapeIEDA } from "./ieda-scraper";
 import { fetchShadowAPIs } from "./shadow-api-hunter";
@@ -142,8 +141,7 @@ export async function runFullScrape(): Promise<ScraperResult[]> {
   await checkForChanges();
 
   // Step 2: Fetch from all sources in parallel
-  const [grantsGov, samGov, ieda, shadow, simplerGrants, usda, opportunityIowa, webSearch] = await Promise.allSettled([
-    fetchGrantsGov(),
+  const [samGov, ieda, shadow, simplerGrants, usda, opportunityIowa, webSearch] = await Promise.allSettled([
     fetchSamGov(),
     scrapeIEDA(),
     fetchShadowAPIs(),
@@ -154,7 +152,6 @@ export async function runFullScrape(): Promise<ScraperResult[]> {
   ]);
 
   const sourceResults: Array<{ name: string; result: PromiseSettledResult<GrantData[]> }> = [
-    { name: "grants.gov", result: grantsGov },
     { name: "sam.gov", result: samGov },
     { name: "ieda", result: ieda },
     { name: "shadow-api", result: shadow },
