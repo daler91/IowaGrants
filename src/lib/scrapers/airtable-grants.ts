@@ -301,9 +301,10 @@ function extractRecordsFromSharedView(html: string): AirtableRecord[] {
   }
 
   // Strategy 2: Look for JSON data in script tags using Cheerio
-  const $ = cheerio.load(html);
-  $("script").each((_, script) => {
-    const content = $(script).html() || "";
+  const $page = cheerio.load(html);
+  const scripts = $page("script").toArray();
+  for (const script of scripts) {
+    const content = $page(script).html() || "";
 
     // Look for large JSON objects that might contain table data
     const jsonMatches = content.match(/\{[^{}]*"rows"[^{}]*\[[\s\S]*?\]\s*[^{}]*\}/g);
@@ -314,12 +315,13 @@ function extractRecordsFromSharedView(html: string): AirtableRecord[] {
           const extracted = extractFromDataPayload(data);
           if (extracted.length > 0) {
             records.push(...extracted);
-            return false; // break Cheerio each
+            break;
           }
         } catch {
           // Continue
         }
       }
+      if (records.length > 0) break;
     }
 
     // Look for stringified JSON assigned to variables
@@ -332,16 +334,19 @@ function extractRecordsFromSharedView(html: string): AirtableRecord[] {
           .replace(/\\\\/g, "\\");
         const data = JSON.parse(decoded);
         const extracted = extractFromDataPayload(data);
-        if (extracted.length > 0) records.push(...extracted);
+        if (extracted.length > 0) {
+          records.push(...extracted);
+          break;
+        }
       } catch {
         // Continue
       }
     }
-  });
+  }
 
   // Strategy 3: Parse as a rendered HTML table (some shared views render server-side)
   if (records.length === 0) {
-    const tableRecords = extractFromHtmlTable($);
+    const tableRecords = extractFromHtmlTable($page);
     if (tableRecords.length > 0) return tableRecords;
   }
 
