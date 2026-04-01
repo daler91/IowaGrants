@@ -407,7 +407,7 @@ function extractFromDataPayload(data: Record<string, unknown>): AirtableRecord[]
 /**
  * Fallback: extract data from a server-rendered HTML table.
  */
-function extractFromHtmlTable($: cheerio.CheerioAPI): AirtableRecord[] {
+function extractFromHtmlTable($: cheerio.Root): AirtableRecord[] {
   const records: AirtableRecord[] = [];
   const headers: string[] = [];
 
