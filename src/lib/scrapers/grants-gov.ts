@@ -21,7 +21,24 @@ interface GrantsGovOpportunity {
 
 interface GrantsGovResponse {
   oppHits?: GrantsGovOpportunity[];
+  opportunities?: GrantsGovOpportunity[];
+  data?: GrantsGovOpportunity[];
   totalCount?: number;
+}
+
+function isIowaRelevant(opp: GrantsGovOpportunity): boolean {
+  const text = [opp.title, opp.description, opp.agency]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+  return (
+    text.includes("iowa") ||
+    text.includes(" ia ") ||
+    text.includes("all states") ||
+    text.includes("nationwide") ||
+    text.includes("rural")
+  );
 }
 
 function mapToGrantData(opp: GrantsGovOpportunity): GrantData {
@@ -54,10 +71,16 @@ function mapToGrantData(opp: GrantsGovOpportunity): GrantData {
 }
 
 export async function fetchGrantsGov(): Promise<GrantData[]> {
+  // Broader search strategy: single keywords and agency-based searches
   const keywords = [
-    "small business Iowa",
-    "Iowa startup grant",
-    "Iowa entrepreneur",
+    "Iowa",
+    "small business",
+    "rural development",
+    "community development",
+    "economic development",
+    "workforce development",
+    "minority business",
+    "women owned business",
   ];
 
   const allGrants: GrantData[] = [];
@@ -72,9 +95,21 @@ export async function fetchGrantsGov(): Promise<GrantData[]> {
         sortBy: "openDate|desc",
       });
 
-      const opportunities = response.data.oppHits || [];
+      // Handle potential response format differences
+      const opportunities =
+        response.data.oppHits ||
+        response.data.opportunities ||
+        response.data.data ||
+        [];
 
-      for (const opp of opportunities) {
+      // For "Iowa" keyword, keep all results
+      // For broader keywords, filter for Iowa relevance
+      const needsFilter = keyword.toLowerCase() !== "iowa";
+      const filtered = needsFilter
+        ? opportunities.filter(isIowaRelevant)
+        : opportunities;
+
+      for (const opp of filtered) {
         const grant = mapToGrantData(opp);
         if (!seenUrls.has(grant.sourceUrl)) {
           seenUrls.add(grant.sourceUrl);
@@ -83,7 +118,7 @@ export async function fetchGrantsGov(): Promise<GrantData[]> {
       }
 
       console.log(
-        `[grants.gov] Fetched ${opportunities.length} results for "${keyword}"`
+        `[grants.gov] Fetched ${opportunities.length} results for "${keyword}"${needsFilter ? `, ${filtered.length} Iowa-relevant` : ""}`
       );
     } catch (error) {
       console.error(

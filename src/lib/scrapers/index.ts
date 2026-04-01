@@ -3,6 +3,10 @@ import { fetchGrantsGov } from "./grants-gov";
 import { fetchSamGov } from "./sam-gov";
 import { scrapeIEDA } from "./ieda-scraper";
 import { fetchShadowAPIs } from "./shadow-api-hunter";
+import { fetchSimplerGrants } from "./simpler-grants";
+import { scrapeUSDA } from "./usda-iowa";
+import { scrapeOpportunityIowa } from "./opportunity-iowa";
+import { scrapeIowaGrantsGov } from "./iowa-grants-gov";
 import { categorizeAll } from "@/lib/ai/categorizer";
 import { parsePdfFromUrl } from "@/lib/ai/pdf-parser";
 import {
@@ -120,11 +124,15 @@ export async function runFullScrape(): Promise<ScraperResult[]> {
   await checkForChanges();
 
   // Step 2: Fetch from all sources in parallel
-  const [grantsGov, samGov, ieda, shadow] = await Promise.allSettled([
+  const [grantsGov, samGov, ieda, shadow, simplerGrants, usda, opportunityIowa, iowaGrantsGov] = await Promise.allSettled([
     fetchGrantsGov(),
     fetchSamGov(),
     scrapeIEDA(),
     fetchShadowAPIs(),
+    fetchSimplerGrants(),
+    scrapeUSDA(),
+    scrapeOpportunityIowa(),
+    scrapeIowaGrantsGov(),
   ]);
 
   const sourceResults: Array<{ name: string; result: PromiseSettledResult<GrantData[]> }> = [
@@ -132,6 +140,10 @@ export async function runFullScrape(): Promise<ScraperResult[]> {
     { name: "sam.gov", result: samGov },
     { name: "ieda", result: ieda },
     { name: "shadow-api", result: shadow },
+    { name: "simpler-grants", result: simplerGrants },
+    { name: "usda-rd", result: usda },
+    { name: "opportunity-iowa", result: opportunityIowa },
+    { name: "iowagrants-gov", result: iowaGrantsGov },
   ];
 
   let allGrants: GrantData[] = [];
