@@ -1,5 +1,6 @@
 import axios from "axios";
 import * as cheerio from "cheerio";
+import type { CheerioAPI } from "cheerio";
 import type { GrantData } from "@/lib/types";
 import type { GenderFocus } from "@prisma/client";
 import { cleanHtmlToText, detectLocationScope, isExcludedByStateRestriction } from "./utils";
@@ -270,7 +271,7 @@ function parseGrantsFromHtml(html: string): RawGrant[] {
  * Parse sections with H2/H3 grant name headings that have
  * labeled data fields (Amount, Deadline, Eligibility) in the following content.
  */
-function parseStructuredSections($: cheerio.Root, grants: RawGrant[]): void {
+function parseStructuredSections($: CheerioAPI, grants: RawGrant[]): void {
   const headings = $("h2, h3").toArray();
 
   for (const heading of headings) {
@@ -348,7 +349,7 @@ function parseStructuredSections($: cheerio.Root, grants: RawGrant[]): void {
  * Fallback parser: treats each H2/H3 as a potential grant,
  * extracts amounts and links from the content below it.
  */
-function parseHeadingSections($: cheerio.Root, grants: RawGrant[]): void {
+function parseHeadingSections($: CheerioAPI, grants: RawGrant[]): void {
   const headings = $("h2, h3").toArray();
 
   for (const heading of headings) {
