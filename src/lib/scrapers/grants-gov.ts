@@ -22,8 +22,9 @@ interface GrantsGovOpportunity {
 interface GrantsGovResponse {
   oppHits?: GrantsGovOpportunity[];
   opportunities?: GrantsGovOpportunity[];
-  data?: GrantsGovOpportunity[];
+  data?: GrantsGovOpportunity[] | { oppHits?: GrantsGovOpportunity[] };
   totalCount?: number;
+  hitCount?: number;
 }
 
 function isIowaRelevant(opp: GrantsGovOpportunity): boolean {
@@ -95,12 +96,27 @@ export async function fetchGrantsGov(): Promise<GrantData[]> {
         sortBy: "openDate|desc",
       });
 
-      // Handle potential response format differences
-      const opportunities =
-        response.data.oppHits ||
-        response.data.opportunities ||
-        response.data.data ||
-        [];
+      // Handle various response formats from Grants.gov API
+      // Response may be { oppHits: [...] } or { data: { oppHits: [...] } }
+      const rawData = response.data;
+      let opportunities: GrantsGovOpportunity[] = [];
+
+      if (Array.isArray(rawData?.oppHits)) {
+        opportunities = rawData.oppHits;
+      } else if (Array.isArray(rawData?.opportunities)) {
+        opportunities = rawData.opportunities;
+      } else if (rawData?.data && typeof rawData.data === "object" && !Array.isArray(rawData.data)) {
+        const nested = rawData.data as { oppHits?: GrantsGovOpportunity[] };
+        if (Array.isArray(nested.oppHits)) {
+          opportunities = nested.oppHits;
+        }
+      } else if (Array.isArray(rawData?.data)) {
+        opportunities = rawData.data as GrantsGovOpportunity[];
+      }
+
+      if (opportunities.length === 0 && rawData) {
+        console.log(`[grants.gov] Unexpected response format for "${keyword}":`, Object.keys(rawData));
+      }
 
       // For "Iowa" keyword, keep all results
       // For broader keywords, filter for Iowa relevance

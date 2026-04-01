@@ -6,7 +6,8 @@ import { fetchShadowAPIs } from "./shadow-api-hunter";
 import { fetchSimplerGrants } from "./simpler-grants";
 import { scrapeUSDA } from "./usda-iowa";
 import { scrapeOpportunityIowa } from "./opportunity-iowa";
-import { scrapeIowaGrantsGov } from "./iowa-grants-gov";
+import { searchWebForGrants } from "./web-search";
+import { normalizeTitle } from "./utils";
 import { categorizeAll } from "@/lib/ai/categorizer";
 import { parsePdfFromUrl } from "@/lib/ai/pdf-parser";
 import {
@@ -52,9 +53,26 @@ async function upsertGrant(grant: GrantData): Promise<boolean> {
       }
     : undefined;
 
+  // Check for URL-based duplicate
   const existing = await prisma.grant.findUnique({
     where: { sourceUrl: grant.sourceUrl },
   });
+
+  // Also check for title-based duplicate (same grant from different source)
+  if (!existing) {
+    const normalized = normalizeTitle(grant.title);
+    if (normalized.length > 10) {
+      const titleDup = await prisma.grant.findFirst({
+        where: {
+          title: { equals: grant.title, mode: "insensitive" },
+        },
+      });
+      if (titleDup) {
+        console.log(`[orchestrator] Skipping title duplicate: "${grant.title}" (already from ${titleDup.sourceName})`);
+        return false;
+      }
+    }
+  }
 
   if (existing) {
     await prisma.grant.update({
@@ -124,7 +142,7 @@ export async function runFullScrape(): Promise<ScraperResult[]> {
   await checkForChanges();
 
   // Step 2: Fetch from all sources in parallel
-  const [grantsGov, samGov, ieda, shadow, simplerGrants, usda, opportunityIowa, iowaGrantsGov] = await Promise.allSettled([
+  const [grantsGov, samGov, ieda, shadow, simplerGrants, usda, opportunityIowa, webSearch] = await Promise.allSettled([
     fetchGrantsGov(),
     fetchSamGov(),
     scrapeIEDA(),
@@ -132,7 +150,7 @@ export async function runFullScrape(): Promise<ScraperResult[]> {
     fetchSimplerGrants(),
     scrapeUSDA(),
     scrapeOpportunityIowa(),
-    scrapeIowaGrantsGov(),
+    searchWebForGrants(),
   ]);
 
   const sourceResults: Array<{ name: string; result: PromiseSettledResult<GrantData[]> }> = [
@@ -143,7 +161,7 @@ export async function runFullScrape(): Promise<ScraperResult[]> {
     { name: "simpler-grants", result: simplerGrants },
     { name: "usda-rd", result: usda },
     { name: "opportunity-iowa", result: opportunityIowa },
-    { name: "iowagrants-gov", result: iowaGrantsGov },
+    { name: "web-search", result: webSearch },
   ];
 
   let allGrants: GrantData[] = [];

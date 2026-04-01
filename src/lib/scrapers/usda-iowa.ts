@@ -30,7 +30,7 @@ export async function scrapeUSDA(): Promise<GrantData[]> {
       headers: {
         "User-Agent": "IowaGrantScanner/1.0 (educational research project)",
       },
-      timeout: 15000,
+      timeout: 30000,
     });
 
     const $ = cheerio.load(response.data);

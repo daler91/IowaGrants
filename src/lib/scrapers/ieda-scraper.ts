@@ -1,6 +1,7 @@
 import axios from "axios";
 import * as cheerio from "cheerio";
 import type { GrantData } from "@/lib/types";
+import { fetchPageDetails } from "./utils";
 
 const IEDA_URLS = [
   "https://www.iowaeda.com/small-business/",
@@ -128,6 +129,18 @@ export async function scrapeIEDA(): Promise<GrantData[]> {
         `[ieda] Error scraping ${url}:`,
         error instanceof Error ? error.message : error
       );
+    }
+  }
+
+  // Fetch deadline details from individual pages (limit to first 10 to avoid slowdown)
+  const toFetch = allGrants.slice(0, 10);
+  for (const grant of toFetch) {
+    const details = await fetchPageDetails(grant.sourceUrl);
+    if (details?.deadline) {
+      grant.deadline = details.deadline;
+    }
+    if (details?.description && details.description.length > grant.description.length) {
+      grant.description = details.description;
     }
   }
 

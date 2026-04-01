@@ -67,6 +67,12 @@ function mapToGrantData(opp: SimplerOpportunity): GrantData {
 }
 
 export async function fetchSimplerGrants(): Promise<GrantData[]> {
+  const apiKey = process.env.SIMPLER_GRANTS_API_KEY;
+  if (!apiKey) {
+    console.log("[simpler-grants] SIMPLER_GRANTS_API_KEY not set — skipping");
+    return [];
+  }
+
   const queries = [
     "Iowa small business",
     "Iowa grant",
@@ -93,7 +99,10 @@ export async function fetchSimplerGrants(): Promise<GrantData[]> {
           },
         },
         {
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            "X-API-Key": apiKey,
+          },
           timeout: 30000,
         }
       );

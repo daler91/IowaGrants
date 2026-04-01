@@ -1,6 +1,7 @@
 import axios from "axios";
 import * as cheerio from "cheerio";
 import type { GrantData } from "@/lib/types";
+import { fetchPageDetails } from "./utils";
 
 const OPPORTUNITY_IOWA_URLS = [
   "https://opportunityiowa.gov/business/financial-assistance/grants-funding",
@@ -99,6 +100,18 @@ export async function scrapeOpportunityIowa(): Promise<GrantData[]> {
         `[opportunity-iowa] Error scraping ${pageUrl}:`,
         error instanceof Error ? error.message : error
       );
+    }
+  }
+
+  // Fetch deadline details from individual pages (limit to first 10)
+  const toFetch = allGrants.slice(0, 10);
+  for (const grant of toFetch) {
+    const details = await fetchPageDetails(grant.sourceUrl);
+    if (details?.deadline) {
+      grant.deadline = details.deadline;
+    }
+    if (details?.description && details.description.length > grant.description.length) {
+      grant.description = details.description;
     }
   }
 
