@@ -1,5 +1,5 @@
-import * as cheerio from "cheerio";
 import axios from "axios";
+import * as cheerio from "cheerio";
 import type { GrantData } from "@/lib/types";
 import { extractDeadline, isExcludedByStateRestriction, detectLocationScope } from "./utils";
 
@@ -35,45 +35,58 @@ function shouldSkipUrl(url: string): boolean {
   return SKIP_DOMAINS.some((domain) => lower.includes(domain));
 }
 
-let rateLimitCount = 0;
+interface BraveSearchResult {
+  title: string;
+  url: string;
+  description?: string;
+}
 
-async function searchDuckDuckGo(
+interface BraveWebResults {
+  web?: { results?: BraveSearchResult[] };
+}
+
+/**
+ * Search using Brave Search API (free tier: 2000 queries/month).
+ * Falls back to empty results if the API key is not set.
+ */
+async function searchBrave(
   query: string
 ): Promise<Array<{ title: string; url: string; snippet: string }>> {
-  const maxRetries = 3;
+  const apiKey = process.env.BRAVE_SEARCH_API_KEY;
+  if (!apiKey) return [];
 
-  for (let attempt = 0; attempt < maxRetries; attempt++) {
-    try {
-      // Dynamic import for duck-duck-scrape (ESM module)
-      const dds = await import("duck-duck-scrape");
-      const results = await dds.search(query, { safeSearch: dds.SafeSearchType.STRICT });
-
-      return (results.results || [])
-        .filter((r) => r.url && r.title && !shouldSkipUrl(r.url))
-        .slice(0, 8) // Top 8 per query
-        .map((r) => ({
-          title: r.title,
-          url: r.url,
-          snippet: r.description || "",
-        }));
-    } catch (error) {
-      const msg = error instanceof Error ? error.message : String(error);
-      const isRateLimited = msg.includes("anomaly");
-
-      if (isRateLimited && attempt < maxRetries - 1) {
-        rateLimitCount++;
-        const backoff = (attempt + 1) * 15000 + rateLimitCount * 5000; // 15s+, grows with repeated limits
-        console.warn(`[web-search] Rate limited on "${query}", retrying in ${Math.round(backoff / 1000)}s...`);
-        await delay(backoff);
-        continue;
+  try {
+    const response = await axios.get<BraveWebResults>(
+      "https://api.search.brave.com/res/v1/web/search",
+      {
+        params: {
+          q: query,
+          count: 10,
+          safesearch: "strict",
+        },
+        headers: {
+          Accept: "application/json",
+          "Accept-Encoding": "gzip",
+          "X-Subscription-Token": apiKey,
+        },
+        timeout: 15000,
       }
+    );
 
-      console.error(`[web-search] DuckDuckGo search failed for "${query}": ${msg}`);
-      return [];
-    }
+    const results = response.data?.web?.results || [];
+    return results
+      .filter((r) => r.url && r.title && !shouldSkipUrl(r.url))
+      .slice(0, 8)
+      .map((r) => ({
+        title: r.title,
+        url: r.url,
+        snippet: r.description || "",
+      }));
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error(`[web-search] Brave search failed for "${query}": ${msg}`);
+    return [];
   }
-
-  return [];
 }
 
 async function scrapeGrantPage(
@@ -151,21 +164,25 @@ async function scrapeGrantPage(
 }
 
 export async function searchWebForGrants(): Promise<GrantData[]> {
+  const apiKey = process.env.BRAVE_SEARCH_API_KEY;
+  if (!apiKey) {
+    console.log("[web-search] BRAVE_SEARCH_API_KEY not set — skipping web search");
+    return [];
+  }
+
   console.log("[web-search] Starting web search discovery...");
 
   const allGrants: GrantData[] = [];
   const seenUrls = new Set<string>();
 
   for (let i = 0; i < SEARCH_QUERIES.length; i++) {
-    // Delay between queries to avoid DuckDuckGo rate limiting
+    // Small delay between queries to be polite (Brave free tier allows 1 req/sec)
     if (i > 0) {
-      const baseDelay = 8000 + Math.random() * 7000; // 8-15s random
-      const penalty = rateLimitCount * 10000; // extra backoff per rate limit hit
-      await delay(baseDelay + penalty);
+      await delay(1500);
     }
 
     const query = SEARCH_QUERIES[i];
-    const results = await searchDuckDuckGo(query);
+    const results = await searchBrave(query);
     console.log(
       `[web-search] "${query}" → ${results.length} results to check`
     );
