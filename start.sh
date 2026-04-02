@@ -15,6 +15,10 @@ fi
 echo "[start] Running Prisma migrations..."
 npx prisma migrate deploy 2>&1 || echo "[start] Migration failed, continuing anyway..."
 
+# Copy static files for standalone mode
+echo "[start] Setting up standalone static files..."
+cp -r .next/static .next/standalone/.next/static
+
 # Start the Next.js app on the correct port
 echo "[start] Starting Next.js server on port ${PORT:-3000}..."
-exec npx next start -p ${PORT:-3000}
+PORT=${PORT:-3000} HOSTNAME=0.0.0.0 exec node .next/standalone/server.js
