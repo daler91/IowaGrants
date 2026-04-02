@@ -96,7 +96,7 @@ export default function Dashboard() {
   const handleDeleteSelected = () => {
     if (selectedIds.size === 0) return;
     setDeleteTarget({
-      ids: [...selectedIds],
+      ids: Array.from(selectedIds),
       label: `${selectedIds.size} grant${selectedIds.size > 1 ? "s" : ""}`,
     });
   };
