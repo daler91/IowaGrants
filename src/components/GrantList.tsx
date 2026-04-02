@@ -24,6 +24,12 @@ interface GrantListProps {
   totalPages: number;
   onPageChange: (page: number) => void;
   loading: boolean;
+  selectable?: boolean;
+  selectedIds?: Set<string>;
+  onSelectionChange?: (ids: Set<string>) => void;
+  onDeleteSelected?: () => void;
+  onDeleteSingle?: (id: string, title: string) => void;
+  onToggleSelectable?: () => void;
 }
 
 export default function GrantList({
@@ -33,7 +39,37 @@ export default function GrantList({
   totalPages,
   onPageChange,
   loading,
+  selectable = false,
+  selectedIds = new Set(),
+  onSelectionChange,
+  onDeleteSelected,
+  onDeleteSingle,
+  onToggleSelectable,
 }: GrantListProps) {
+  const allOnPageSelected =
+    grants.length > 0 && grants.every((g) => selectedIds.has(g.id));
+
+  const handleSelectAll = () => {
+    if (!onSelectionChange) return;
+    if (allOnPageSelected) {
+      const next = new Set(selectedIds);
+      grants.forEach((g) => next.delete(g.id));
+      onSelectionChange(next);
+    } else {
+      const next = new Set(selectedIds);
+      grants.forEach((g) => next.add(g.id));
+      onSelectionChange(next);
+    }
+  };
+
+  const handleSelectOne = (id: string, checked: boolean) => {
+    if (!onSelectionChange) return;
+    const next = new Set(selectedIds);
+    if (checked) next.add(id);
+    else next.delete(id);
+    onSelectionChange(next);
+  };
+
   if (loading) {
     return (
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -84,13 +120,61 @@ export default function GrantList({
 
   return (
     <div>
-      <p className="text-sm text-[var(--muted)] mb-4">
-        Showing {grants.length} of {total} grants
-      </p>
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-3">
+          <p className="text-sm text-[var(--muted)]">
+            Showing {grants.length} of {total} grants
+          </p>
+          {selectable && selectedIds.size > 0 && (
+            <span className="text-sm font-medium text-blue-600">
+              {selectedIds.size} selected
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          {selectable && (
+            <>
+              <label className="flex items-center gap-1.5 text-sm text-[var(--muted)] cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={allOnPageSelected}
+                  onChange={handleSelectAll}
+                  className="w-4 h-4 rounded border-gray-300 text-blue-600"
+                />
+                Select all
+              </label>
+              <button
+                onClick={onDeleteSelected}
+                disabled={selectedIds.size === 0}
+                className="px-3 py-1.5 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Delete ({selectedIds.size})
+              </button>
+            </>
+          )}
+          <button
+            onClick={onToggleSelectable}
+            className={`px-3 py-1.5 rounded-lg border text-sm font-medium transition-colors ${
+              selectable
+                ? "border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100"
+                : "border-[var(--border)] text-[var(--muted)] hover:bg-gray-50"
+            }`}
+          >
+            {selectable ? "Cancel" : "Select"}
+          </button>
+        </div>
+      </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {grants.map((grant) => (
-          <GrantCard key={grant.id} grant={grant} />
+          <GrantCard
+            key={grant.id}
+            grant={grant}
+            selectable={selectable}
+            selected={selectedIds.has(grant.id)}
+            onSelectChange={handleSelectOne}
+            onDelete={onDeleteSingle}
+          />
         ))}
       </div>
 

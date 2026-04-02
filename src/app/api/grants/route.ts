@@ -94,3 +94,31 @@ export async function GET(request: NextRequest) {
     totalPages: Math.ceil(total / limit),
   });
 }
+
+export async function DELETE(request: NextRequest) {
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+  }
+
+  const { ids } = body as { ids?: unknown };
+
+  if (
+    !Array.isArray(ids) ||
+    ids.length === 0 ||
+    !ids.every((id) => typeof id === "string")
+  ) {
+    return NextResponse.json(
+      { error: "ids must be a non-empty array of strings" },
+      { status: 400 },
+    );
+  }
+
+  const result = await prisma.grant.deleteMany({
+    where: { id: { in: ids } },
+  });
+
+  return NextResponse.json({ deleted: result.count });
+}
