@@ -13,11 +13,13 @@ export async function GET(request: NextRequest) {
   const industry = params.get("industry") || undefined;
   const status = params.get("status") || undefined;
   const eligibleExpense = params.get("eligibleExpense") || undefined;
-  const amountMin = params.get("amountMin")
-    ? Number.parseInt(params.get("amountMin")!)
+  const amountMinParam = params.get("amountMin");
+  const amountMin = amountMinParam
+    ? Number.parseInt(amountMinParam)
     : undefined;
-  const amountMax = params.get("amountMax")
-    ? Number.parseInt(params.get("amountMax")!)
+  const amountMaxParam = params.get("amountMax");
+  const amountMax = amountMaxParam
+    ? Number.parseInt(amountMaxParam)
     : undefined;
   const page = Math.max(1, Number.parseInt(params.get("page") || "1"));
   const limit = Math.min(100, Math.max(1, Number.parseInt(params.get("limit") || "20")));
