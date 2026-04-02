@@ -40,6 +40,22 @@ async function ensureEligibleExpenses() {
   }
 }
 
+async function findExistingGrant(grant: GrantData) {
+  const existing = await prisma.grant.findUnique({
+    where: { sourceUrl: grant.sourceUrl },
+  });
+  if (existing) return existing;
+
+  const normalized = normalizeTitle(grant.title);
+  if (normalized.length > 10) {
+    const titleDup = await prisma.grant.findFirst({
+      where: { title: { equals: grant.title, mode: "insensitive" } },
+    });
+    if (titleDup) return titleDup; // treat as "exists" for skip purposes
+  }
+  return null;
+}
+
 async function upsertGrant(grant: GrantData): Promise<boolean> {
   const categoryConnections = grant.categories.length > 0
     ? {
@@ -56,25 +72,12 @@ async function upsertGrant(grant: GrantData): Promise<boolean> {
       }
     : undefined;
 
-  // Check for URL-based duplicate
-  const existing = await prisma.grant.findUnique({
-    where: { sourceUrl: grant.sourceUrl },
-  });
+  const existing = await findExistingGrant(grant);
 
-  // Also check for title-based duplicate (same grant from different source)
-  if (!existing) {
-    const normalized = normalizeTitle(grant.title);
-    if (normalized.length > 10) {
-      const titleDup = await prisma.grant.findFirst({
-        where: {
-          title: { equals: grant.title, mode: "insensitive" },
-        },
-      });
-      if (titleDup) {
-        console.log(`[orchestrator] Skipping title duplicate: "${grant.title}" (already from ${titleDup.sourceName})`);
-        return false;
-      }
-    }
+  // Title-only duplicate (no matching sourceUrl) — skip entirely
+  if (existing && existing.sourceUrl !== grant.sourceUrl) {
+    console.log(`[orchestrator] Skipping title duplicate: "${grant.title}" (already from ${existing.sourceName})`);
+    return false;
   }
 
   if (existing) {
@@ -95,7 +98,7 @@ async function upsertGrant(grant: GrantData): Promise<boolean> {
         locations: grant.locations,
         industries: grant.industries,
         pdfUrl: grant.pdfUrl,
-        rawData: grant.rawData ? JSON.parse(JSON.stringify(grant.rawData)) : undefined,
+        rawData: grant.rawData ? structuredClone(grant.rawData) : undefined,
         lastVerified: new Date(),
         categories: categoryConnections
           ? { set: [], ...categoryConnections }
@@ -126,12 +129,98 @@ async function upsertGrant(grant: GrantData): Promise<boolean> {
       locations: grant.locations,
       industries: grant.industries,
       pdfUrl: grant.pdfUrl,
-      rawData: grant.rawData ? JSON.parse(JSON.stringify(grant.rawData)) : undefined,
+      rawData: grant.rawData ? structuredClone(grant.rawData) : undefined,
       categories: categoryConnections,
       eligibleExpenses: expenseConnections,
     },
   });
   return true; // new grant
+}
+
+function collectSourceResults(
+  sourceResults: Array<{ name: string; result: PromiseSettledResult<GrantData[]> }>,
+  results: ScraperResult[],
+): GrantData[] {
+  const allGrants: GrantData[] = [];
+  for (const { name, result } of sourceResults) {
+    if (result.status === "fulfilled") {
+      allGrants.push(...result.value);
+      results.push({ source: name, grants: result.value });
+    } else {
+      console.error(`[orchestrator] ${name} failed:`, result.reason);
+      results.push({
+        source: name,
+        grants: [],
+        error: result.reason?.message || "Unknown error",
+      });
+    }
+  }
+  return allGrants;
+}
+
+async function processPdfGrants(
+  allGrants: GrantData[],
+  urlsToReparse: string[],
+): Promise<void> {
+  // Parse any PDFs that need reparsing
+  for (const url of urlsToReparse) {
+    if (url.endsWith(".pdf")) {
+      const parsed = await parsePdfFromUrl(url, "pdf-parse");
+      if (parsed) {
+        allGrants.push(parsed);
+      }
+      await markReparsed(url);
+    }
+  }
+
+  // Also parse PDFs found by scrapers
+  const pdfGrants = allGrants.filter((g) => g.pdfUrl);
+  for (const grant of pdfGrants) {
+    if (grant.pdfUrl) {
+      const parsed = await parsePdfFromUrl(grant.pdfUrl, grant.sourceName);
+      if (parsed) {
+        // Merge parsed data back - prefer AI-extracted data
+        Object.assign(grant, {
+          ...parsed,
+          sourceUrl: grant.sourceUrl, // keep original URL as dedup key
+          sourceName: grant.sourceName,
+        });
+      }
+    }
+  }
+}
+
+async function upsertAndLog(
+  allGrants: GrantData[],
+  results: ScraperResult[],
+): Promise<number> {
+  let totalNew = 0;
+  for (const grant of allGrants) {
+    try {
+      const isNew = await upsertGrant(grant);
+      if (isNew) totalNew++;
+    } catch (error) {
+      console.error(
+        `[orchestrator] Error upserting "${grant.title}":`,
+        error instanceof Error ? error.message : error
+      );
+    }
+  }
+
+  for (const result of results) {
+    await prisma.scrapeLog.create({
+      data: {
+        source: result.source,
+        status: result.error ? "error" : "success",
+        grantsFound: result.grants.length,
+        grantsNew: 0, // tracked at aggregate level
+        error: result.error,
+        completedAt: new Date(),
+      },
+    });
+  }
+
+  return totalNew;
 }
 
 export async function runFullScrape(): Promise<ScraperResult[]> {
@@ -173,80 +262,18 @@ export async function runFullScrape(): Promise<ScraperResult[]> {
     { name: "grants-gov-api", result: grantsGovApi },
   ];
 
-  let allGrants: GrantData[] = [];
+  // Step 2b: Collect results from all sources
+  const allGrants = collectSourceResults(sourceResults, results);
 
-  for (const { name, result } of sourceResults) {
-    if (result.status === "fulfilled") {
-      allGrants.push(...result.value);
-      results.push({ source: name, grants: result.value });
-    } else {
-      console.error(`[orchestrator] ${name} failed:`, result.reason);
-      results.push({
-        source: name,
-        grants: [],
-        error: result.reason?.message || "Unknown error",
-      });
-    }
-  }
-
-  // Step 3: Parse any PDFs that need reparsing
+  // Step 3 & 4: Parse PDFs (reparsing + scraper-found)
   const urlsToReparse = await getUrlsNeedingReparse();
-  for (const url of urlsToReparse) {
-    if (url.endsWith(".pdf")) {
-      const parsed = await parsePdfFromUrl(url, "pdf-parse");
-      if (parsed) {
-        allGrants.push(parsed);
-      }
-      await markReparsed(url);
-    }
-  }
-
-  // Step 4: Also parse PDFs found by scrapers
-  const pdfGrants = allGrants.filter((g) => g.pdfUrl);
-  for (const grant of pdfGrants) {
-    if (grant.pdfUrl) {
-      const parsed = await parsePdfFromUrl(grant.pdfUrl, grant.sourceName);
-      if (parsed) {
-        // Merge parsed data back - prefer AI-extracted data
-        Object.assign(grant, {
-          ...parsed,
-          sourceUrl: grant.sourceUrl, // keep original URL as dedup key
-          sourceName: grant.sourceName,
-        });
-      }
-    }
-  }
+  await processPdfGrants(allGrants, urlsToReparse);
 
   // Step 5: Run categorizer on all grants
-  allGrants = categorizeAll(allGrants);
+  const categorized = categorizeAll(allGrants);
 
-  // Step 6: Upsert all grants into DB
-  let totalNew = 0;
-  for (const grant of allGrants) {
-    try {
-      const isNew = await upsertGrant(grant);
-      if (isNew) totalNew++;
-    } catch (error) {
-      console.error(
-        `[orchestrator] Error upserting "${grant.title}":`,
-        error instanceof Error ? error.message : error
-      );
-    }
-  }
-
-  // Step 7: Log results
-  for (const result of results) {
-    await prisma.scrapeLog.create({
-      data: {
-        source: result.source,
-        status: result.error ? "error" : "success",
-        grantsFound: result.grants.length,
-        grantsNew: 0, // tracked at aggregate level
-        error: result.error,
-        completedAt: new Date(),
-      },
-    });
-  }
+  // Step 6 & 7: Upsert all grants and log results
+  const totalNew = await upsertAndLog(categorized, results);
 
   console.log(
     `[orchestrator] Done. ${allGrants.length} total grants, ${totalNew} new.`

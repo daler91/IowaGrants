@@ -106,6 +106,19 @@ function mapToGrantData(program: ScrapedProgram): GrantData {
   };
 }
 
+async function enrichGrantsWithDetails(grants: GrantData[]): Promise<void> {
+  const toFetch = grants.slice(0, 10);
+  for (const grant of toFetch) {
+    const details = await fetchPageDetails(grant.sourceUrl);
+    if (details?.deadline) {
+      grant.deadline = details.deadline;
+    }
+    if (details?.description && details.description.length > grant.description.length) {
+      grant.description = details.description;
+    }
+  }
+}
+
 export async function scrapeIEDA(): Promise<GrantData[]> {
   const allGrants: GrantData[] = [];
   const seenUrls = new Set<string>();
@@ -142,16 +155,7 @@ export async function scrapeIEDA(): Promise<GrantData[]> {
   }
 
   // Fetch deadline details from individual pages (limit to first 10 to avoid slowdown)
-  const toFetch = allGrants.slice(0, 10);
-  for (const grant of toFetch) {
-    const details = await fetchPageDetails(grant.sourceUrl);
-    if (details?.deadline) {
-      grant.deadline = details.deadline;
-    }
-    if (details?.description && details.description.length > grant.description.length) {
-      grant.description = details.description;
-    }
-  }
+  await enrichGrantsWithDetails(allGrants);
 
   console.log(`[ieda] Total unique grants: ${allGrants.length}`);
   return allGrants;

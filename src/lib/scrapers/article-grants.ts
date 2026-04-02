@@ -232,28 +232,28 @@ async function fetchPage(url: string, logPrefix: string): Promise<string | null>
 function parseAmount(text: string): { amount?: string; amountMin?: number; amountMax?: number } {
   if (!text) return {};
 
-  const cleaned = text.replace(/,/g, "");
+  const cleaned = text.replaceAll(",", "");
 
   // Range: "$5,000 to $50,000" or "$5,000 - $50,000"
-  const rangeMatch = cleaned.match(/\$\s*([\d.]+)\s*(?:to|-|–|—)\s*\$\s*([\d.]+)/i);
+  const rangeMatch = /\$\s*([\d.]+)\s*(?:to|-|–|—)\s*\$\s*([\d.]+)/i.exec(cleaned);
   if (rangeMatch) {
     return {
       amount: text.trim(),
-      amountMin: parseFloat(rangeMatch[1]),
-      amountMax: parseFloat(rangeMatch[2]),
+      amountMin: Number.parseFloat(rangeMatch[1]),
+      amountMax: Number.parseFloat(rangeMatch[2]),
     };
   }
 
   // "Up to $X"
-  const upToMatch = cleaned.match(/up\s+to\s+\$\s*([\d.]+)/i);
+  const upToMatch = /up\s+to\s+\$\s*([\d.]+)/i.exec(cleaned);
   if (upToMatch) {
-    return { amount: text.trim(), amountMax: parseFloat(upToMatch[1]) };
+    return { amount: text.trim(), amountMax: Number.parseFloat(upToMatch[1]) };
   }
 
   // Single amount "$X"
-  const singleMatch = cleaned.match(/\$\s*([\d.]+)/);
+  const singleMatch = /\$\s*([\d.]+)/.exec(cleaned);
   if (singleMatch) {
-    const val = parseFloat(singleMatch[1]);
+    const val = Number.parseFloat(singleMatch[1]);
     return { amount: text.trim(), amountMin: val, amountMax: val };
   }
 
@@ -269,7 +269,7 @@ function parseDeadlineStr(str: string | undefined): Date | undefined {
   const cleaned = str.trim();
   if (/rolling|ongoing|year-round|open|varies|tbd|n\/a/i.test(cleaned)) return undefined;
   const d = new Date(cleaned);
-  if (!isNaN(d.getTime()) && d.getFullYear() >= 2024) return d;
+  if (!Number.isNaN(d.getTime()) && d.getFullYear() >= 2024) return d;
   return undefined;
 }
 
@@ -280,10 +280,10 @@ function parseDeadlineStr(str: string | undefined): Date | undefined {
 function extractLabeledField(text: string, labels: string[]): string | undefined {
   for (const label of labels) {
     const pattern = new RegExp(
-      `(?:^|\\n)\\s*${label}[.:\\s]+([^\\n]{3,150})`,
+      String.raw`(?:^|\n)\s*${label}[.:\s]+([^\n]{3,150})`,
       "im"
     );
-    const match = text.match(pattern);
+    const match = pattern.exec(text);
     if (match?.[1]) {
       const value = match[1].trim();
       if (!/^(amount|deadline|eligibility|apply|award|who can)/i.test(value)) {
@@ -295,7 +295,7 @@ function extractLabeledField(text: string, labels: string[]): string | undefined
 }
 
 function extractAmountFromText(text: string): string | undefined {
-  const match = text.match(/\$[\d,]+(?:\s*(?:to|-|–)\s*\$[\d,]+)?/);
+  const match = /\$[\d,]+(?:\s*(?:to|-|–)\s*\$[\d,]+)?/.exec(text);
   return match?.[0];
 }
 
@@ -362,6 +362,36 @@ function parseGrantsFromHtml(html: string, siteDomain: string): RawGrant[] {
   return grants;
 }
 
+function findApplyUrl($: CheerioAPI, $section: cheerio.Cheerio<cheerio.AnyNode>, siteDomain: string): string | undefined {
+  // Prefer external links with action text
+  let applyUrl: string | undefined;
+  $section.find("a[href]").each((_, a) => {
+    if (applyUrl) return;
+    const href = $(a).attr("href") || "";
+    const linkText = $(a).text().toLowerCase();
+    if (
+      href.startsWith("http") &&
+      !href.includes(siteDomain) &&
+      (linkText.includes("apply") || linkText.includes("learn more") || linkText.includes("visit"))
+    ) {
+      applyUrl = href;
+    }
+  });
+
+  // Fallback: any external link
+  if (!applyUrl) {
+    $section.find("a[href]").each((_, a) => {
+      if (applyUrl) return;
+      const href = $(a).attr("href") || "";
+      if (href.startsWith("http") && !href.includes(siteDomain)) {
+        applyUrl = href;
+      }
+    });
+  }
+
+  return applyUrl;
+}
+
 function parseStructuredSections($: CheerioAPI, grants: RawGrant[], siteDomain: string): void {
   const headings = $("h2, h3").toArray();
 
@@ -405,30 +435,7 @@ function parseStructuredSections($: CheerioAPI, grants: RawGrant[], siteDomain: 
       grant.amount = extractAmountFromText(sectionText);
     }
 
-    // Find apply URL — prefer external links with action text
-    $section.find("a[href]").each((_, a) => {
-      if (grant.applyUrl) return;
-      const href = $(a).attr("href") || "";
-      const linkText = $(a).text().toLowerCase();
-      if (
-        href.startsWith("http") &&
-        !href.includes(siteDomain) &&
-        (linkText.includes("apply") || linkText.includes("learn more") || linkText.includes("visit"))
-      ) {
-        grant.applyUrl = href;
-      }
-    });
-
-    // Fallback: any external link
-    if (!grant.applyUrl) {
-      $section.find("a[href]").each((_, a) => {
-        if (grant.applyUrl) return;
-        const href = $(a).attr("href") || "";
-        if (href.startsWith("http") && !href.includes(siteDomain)) {
-          grant.applyUrl = href;
-        }
-      });
-    }
+    grant.applyUrl = findApplyUrl($, $section, siteDomain);
 
     grants.push(grant);
   }
@@ -537,6 +544,34 @@ function toGrantData(raw: RawGrant, page: ArticleGrantPage): GrantData | null {
 }
 
 // ---------------------------------------------------------------------------
+// Dedup + collection helper
+// ---------------------------------------------------------------------------
+
+function collectNewGrants(
+  rawGrants: RawGrant[],
+  page: ArticleGrantPage,
+  seenUrls: Set<string>,
+  seenTitles: Set<string>,
+): GrantData[] {
+  const newGrants: GrantData[] = [];
+
+  for (const raw of rawGrants) {
+    const grant = toGrantData(raw, page);
+    if (!grant) continue;
+
+    // Deduplicate by URL and normalized title across ALL pages/sites
+    const titleKey = grant.title.toLowerCase().replaceAll(/[^a-z0-9]/g, "");
+    if (seenUrls.has(grant.sourceUrl) || seenTitles.has(titleKey)) continue;
+    seenUrls.add(grant.sourceUrl);
+    seenTitles.add(titleKey);
+
+    newGrants.push(grant);
+  }
+
+  return newGrants;
+}
+
+// ---------------------------------------------------------------------------
 // Main export
 // ---------------------------------------------------------------------------
 
@@ -569,23 +604,10 @@ export async function scrapeArticleGrants(): Promise<GrantData[]> {
       }
 
       const rawGrants = parseGrantsFromHtml(html, page.siteDomain);
-      let added = 0;
+      const newGrants = collectNewGrants(rawGrants, page, seenUrls, seenTitles);
+      allGrants.push(...newGrants);
 
-      for (const raw of rawGrants) {
-        const grant = toGrantData(raw, page);
-        if (!grant) continue;
-
-        // Deduplicate by URL and normalized title across ALL pages/sites
-        const titleKey = grant.title.toLowerCase().replace(/[^a-z0-9]/g, "");
-        if (seenUrls.has(grant.sourceUrl) || seenTitles.has(titleKey)) continue;
-        seenUrls.add(grant.sourceUrl);
-        seenTitles.add(titleKey);
-
-        allGrants.push(grant);
-        added++;
-      }
-
-      console.log(`${logPrefix} ${rawGrants.length} parsed → ${added} new grants`);
+      console.log(`${logPrefix} ${rawGrants.length} parsed → ${newGrants.length} new grants`);
     } catch (error) {
       console.error(
         `[article-grants:${page.sourceName}] Error:`,

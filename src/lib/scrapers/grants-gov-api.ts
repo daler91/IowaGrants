@@ -103,6 +103,28 @@ async function searchGrantsGov(keyword: string): Promise<GrantsGovHit[]> {
 // Transform to GrantData
 // ---------------------------------------------------------------------------
 
+function parseHitAmounts(hit: GrantsGovHit): { amount?: string; amountMin?: number; amountMax?: number } {
+  if (hit.awardFloor || hit.awardCeiling) {
+    const amountMin = hit.awardFloor || undefined;
+    const amountMax = hit.awardCeiling || undefined;
+    let amount: string | undefined;
+    if (amountMin && amountMax) {
+      amount = `$${amountMin.toLocaleString()} - $${amountMax.toLocaleString()}`;
+    } else if (amountMax) {
+      amount = `Up to $${amountMax.toLocaleString()}`;
+    } else if (amountMin) {
+      amount = `$${amountMin.toLocaleString()}`;
+    }
+    return { amount, amountMin, amountMax };
+  } else if (hit.estimatedFunding) {
+    return {
+      amount: `$${hit.estimatedFunding.toLocaleString()} (estimated total)`,
+      amountMax: hit.estimatedFunding,
+    };
+  }
+  return {};
+}
+
 function hitToGrantData(hit: GrantsGovHit): GrantData | null {
   const title = hit.title?.trim();
   if (!title) return null;
@@ -119,30 +141,13 @@ function hitToGrantData(hit: GrantsGovHit): GrantData | null {
   if (isExcludedByStateRestriction(fullText)) return null;
 
   // Parse amounts
-  let amount: string | undefined;
-  let amountMin: number | undefined;
-  let amountMax: number | undefined;
-
-  if (hit.awardFloor || hit.awardCeiling) {
-    amountMin = hit.awardFloor || undefined;
-    amountMax = hit.awardCeiling || undefined;
-    if (amountMin && amountMax) {
-      amount = `$${amountMin.toLocaleString()} - $${amountMax.toLocaleString()}`;
-    } else if (amountMax) {
-      amount = `Up to $${amountMax.toLocaleString()}`;
-    } else if (amountMin) {
-      amount = `$${amountMin.toLocaleString()}`;
-    }
-  } else if (hit.estimatedFunding) {
-    amount = `$${hit.estimatedFunding.toLocaleString()} (estimated total)`;
-    amountMax = hit.estimatedFunding;
-  }
+  const { amount, amountMin, amountMax } = parseHitAmounts(hit);
 
   // Parse deadline
   let deadline: Date | undefined;
   if (hit.closeDate) {
     const d = new Date(hit.closeDate);
-    if (!isNaN(d.getTime()) && d.getFullYear() >= 2024) {
+    if (!Number.isNaN(d.getTime()) && d.getFullYear() >= 2024) {
       deadline = d;
     }
   }

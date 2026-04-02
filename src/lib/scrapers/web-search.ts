@@ -169,7 +169,7 @@ async function scrapeGrantPage(
     const pageText = $("main, article, .content, .entry-content, body")
       .first()
       .text()
-      .replace(/\s+/g, " ")
+      .replaceAll(/\s+/g, " ")
       .trim();
 
     // Check if this page is actually about a grant/funding program
@@ -223,6 +223,24 @@ async function scrapeGrantPage(
 }
 
 // ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+async function processSearchResults(
+  results: SearchResult[],
+  seenUrls: Set<string>
+): Promise<GrantData[]> {
+  const grants: GrantData[] = [];
+  for (const result of results) {
+    if (seenUrls.has(result.url)) continue;
+    seenUrls.add(result.url);
+    const grant = await scrapeGrantPage(result.url, result.title, result.snippet);
+    if (grant) grants.push(grant);
+  }
+  return grants;
+}
+
+// ---------------------------------------------------------------------------
 // Main entry point
 // ---------------------------------------------------------------------------
 
@@ -254,26 +272,18 @@ export async function searchWebForGrants(): Promise<GrantData[]> {
     // Use SerpAPI as fallback for all queries if available
     const results = await searchWeb(query, hasSerpApi);
 
-    const provider = results.length > 0
-      ? (hasBrave ? "brave" : "serpapi")
-      : "none";
+    let provider: string;
+    if (results.length === 0) {
+      provider = "none";
+    } else {
+      provider = hasBrave ? "brave" : "serpapi";
+    }
     console.log(
       `[web-search] "${query}" → ${results.length} results [${provider}]`
     );
 
-    for (const result of results) {
-      if (seenUrls.has(result.url)) continue;
-      seenUrls.add(result.url);
-
-      const grant = await scrapeGrantPage(
-        result.url,
-        result.title,
-        result.snippet
-      );
-      if (grant) {
-        allGrants.push(grant);
-      }
-    }
+    const grants = await processSearchResults(results, seenUrls);
+    allGrants.push(...grants);
   }
 
   console.log(

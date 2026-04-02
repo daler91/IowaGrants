@@ -45,7 +45,7 @@ export default function GrantList({
   onDeleteSelected,
   onDeleteSingle,
   onToggleSelectable,
-}: GrantListProps) {
+}: Readonly<GrantListProps>) {
   const allOnPageSelected =
     grants.length > 0 && grants.every((g) => selectedIds.has(g.id));
 

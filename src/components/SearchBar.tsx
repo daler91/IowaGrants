@@ -5,7 +5,7 @@ interface SearchBarProps {
   onChange: (value: string) => void;
 }
 
-export default function SearchBar({ value, onChange }: SearchBarProps) {
+export default function SearchBar({ value, onChange }: Readonly<SearchBarProps>) {
   return (
     <div className="relative">
       <svg
