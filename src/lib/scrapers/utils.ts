@@ -12,7 +12,7 @@ export function cleanHtmlToText(html: string, maxLength = 2000): string {
 
   // If it doesn't look like HTML, just clean whitespace and return
   if (!/<[a-z][\s\S]*>/i.test(html)) {
-    return html.replace(/\s+/g, " ").trim().slice(0, maxLength);
+    return html.replaceAll(/\s+/g, " ").trim().slice(0, maxLength);
   }
 
   const $ = cheerio.load(html);
@@ -30,11 +30,11 @@ export function cleanHtmlToText(html: string, maxLength = 2000): string {
   const text = $.text();
 
   return text
-    .replace(/\r\n/g, "\n")
-    .replace(/[ \t]+/g, " ")           // collapse horizontal whitespace
-    .replace(/\n /g, "\n")             // trim leading spaces on lines
-    .replace(/ \n/g, "\n")             // trim trailing spaces on lines
-    .replace(/\n{3,}/g, "\n\n")        // max 2 consecutive newlines
+    .replaceAll("\r\n", "\n")
+    .replaceAll(/[ \t]+/g, " ")        // collapse horizontal whitespace
+    .replaceAll("\n ", "\n")           // trim leading spaces on lines
+    .replaceAll(" \n", "\n")           // trim trailing spaces on lines
+    .replaceAll(/\n{3,}/g, "\n\n")     // max 2 consecutive newlines
     .trim()
     .slice(0, maxLength);
 }
@@ -43,21 +43,26 @@ export function cleanHtmlToText(html: string, maxLength = 2000): string {
  * Extract a deadline date from HTML content by searching for common patterns.
  */
 export function extractDeadline(html: string): Date | undefined {
-  const text = html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
+  const text = html.replaceAll(/<[^>]+>/g, " ").replaceAll(/\s+/g, " ");
 
-  // Patterns that precede a date
-  const dateContextPatterns = [
-    /(?:deadline|due date|closes?|closing date|expir(?:es?|ation)|submit by|applications? due|apply by)[:\s]*([A-Z][a-z]+ \d{1,2},?\s*\d{4})/i,
-    /(?:deadline|due date|closes?|closing date|expir(?:es?|ation)|submit by|applications? due|apply by)[:\s]*(\d{1,2}\/\d{1,2}\/\d{2,4})/i,
-    /(?:deadline|due date|closes?|closing date|expir(?:es?|ation)|submit by|applications? due|apply by)[:\s]*(\d{4}-\d{2}-\d{2})/i,
+  // Find deadline label positions, then extract dates after them
+  const labelPattern = /(?:deadline|due date|closes?|closing date|expiration|expires?|submit by|applications? due|apply by)[:\s]*/gi;
+  const dateFormats = [
+    /([A-Z][a-z]+ \d{1,2},?\s*\d{4})/i,
+    /(\d{1,2}\/\d{1,2}\/\d{2,4})/,
+    /(\d{4}-\d{2}-\d{2})/,
   ];
 
-  for (const pattern of dateContextPatterns) {
-    const match = text.match(pattern);
-    if (match?.[1]) {
-      const parsed = new Date(match[1]);
-      if (!isNaN(parsed.getTime()) && parsed.getFullYear() >= 2024) {
-        return parsed;
+  let labelMatch;
+  while ((labelMatch = labelPattern.exec(text)) !== null) {
+    const after = text.slice(labelMatch.index + labelMatch[0].length);
+    for (const fmt of dateFormats) {
+      const dateMatch = fmt.exec(after);
+      if (dateMatch?.[1]) {
+        const parsed = new Date(dateMatch[1]);
+        if (!Number.isNaN(parsed.getTime()) && parsed.getFullYear() >= 2024) {
+          return parsed;
+        }
       }
     }
   }
@@ -72,8 +77,8 @@ export function extractDeadline(html: string): Date | undefined {
 export function normalizeTitle(title: string): string {
   return title
     .toLowerCase()
-    .replace(/[^a-z0-9\s]/g, "")
-    .replace(/\s+/g, " ")
+    .replaceAll(/[^a-z0-9\s]/g, "")
+    .replaceAll(/\s+/g, " ")
     .trim();
 }
 
@@ -101,7 +106,7 @@ export async function fetchPageDetails(
     const bodyText = $("main, article, .content, .entry-content, body")
       .first()
       .text()
-      .replace(/\s+/g, " ")
+      .replaceAll(/\s+/g, " ")
       .trim()
       .slice(0, 1000);
 
