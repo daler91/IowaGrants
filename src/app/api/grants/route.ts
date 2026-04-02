@@ -14,13 +14,13 @@ export async function GET(request: NextRequest) {
   const status = params.get("status") || undefined;
   const eligibleExpense = params.get("eligibleExpense") || undefined;
   const amountMin = params.get("amountMin")
-    ? parseInt(params.get("amountMin")!)
+    ? Number.parseInt(params.get("amountMin")!)
     : undefined;
   const amountMax = params.get("amountMax")
-    ? parseInt(params.get("amountMax")!)
+    ? Number.parseInt(params.get("amountMax")!)
     : undefined;
-  const page = Math.max(1, parseInt(params.get("page") || "1"));
-  const limit = Math.min(100, Math.max(1, parseInt(params.get("limit") || "20")));
+  const page = Math.max(1, Number.parseInt(params.get("page") || "1"));
+  const limit = Math.min(100, Math.max(1, Number.parseInt(params.get("limit") || "20")));
 
   const where: Prisma.GrantWhereInput = {};
 
