@@ -283,6 +283,7 @@ function parseStructuredSections($: CheerioAPI, grants: RawGrant[]): void {
 
     // Collect sibling content until the next same-level or higher heading
     const headingTag = ($heading.prop("tagName") || "H2").toLowerCase();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const sectionElements: any[] = [];
     let $el = $heading.next();
     let count = 0;
