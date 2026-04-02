@@ -3,8 +3,8 @@ import { prisma } from "@/lib/db";
 
 export async function GET(request: NextRequest) {
   const params = request.nextUrl.searchParams;
-  const year = parseInt(params.get("year") || new Date().getFullYear().toString());
-  const month = parseInt(params.get("month") || (new Date().getMonth() + 1).toString());
+  const year = Number.parseInt(params.get("year") || new Date().getFullYear().toString());
+  const month = Number.parseInt(params.get("month") || (new Date().getMonth() + 1).toString());
 
   const startDate = new Date(year, month - 1, 1);
   const endDate = new Date(year, month, 0, 23, 59, 59);
