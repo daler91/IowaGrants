@@ -245,3 +245,34 @@ export function isActualGrantPage(url: string, title: string, pageText: string):
 
   return grantSignals.some((pattern) => pattern.test(lower));
 }
+
+/**
+ * Check if a URL is a generic landing page / homepage rather than a
+ * specific grant page. Returns true if the URL looks like a homepage.
+ */
+export function isGenericHomepage(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    const pathname = parsed.pathname.replace(/\/+$/, "");
+
+    // Root path = homepage
+    if (pathname === "" || pathname === "/") return true;
+
+    const segments = pathname.split("/").filter(Boolean);
+
+    // Single-segment generic paths
+    if (segments.length === 1) {
+      const generic = [
+        "about", "contact", "home", "index", "main", "welcome",
+        "business", "programs", "grants", "funding", "resources",
+        "services", "help", "support", "faq", "blog", "news",
+        "partners", "sponsors", "donate", "join", "membership",
+      ];
+      if (generic.includes(segments[0].toLowerCase())) return true;
+    }
+
+    return false;
+  } catch {
+    return false;
+  }
+}
