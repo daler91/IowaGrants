@@ -1,8 +1,6 @@
 [build]
 builder = "nixpacks"
-
-[build.nixpacks]
-nixPkgs = ["nodejs_20"]
+buildCommand = "npm run build"
 
 [deploy]
 startCommand = "sh start.sh"

@@ -1,5 +1,6 @@
 import axios from "axios";
 import * as cheerio from "cheerio";
+import type { CheerioAPI } from "cheerio";
 import type { GrantData } from "@/lib/types";
 import { cleanHtmlToText, detectLocationScope, isExcludedByStateRestriction } from "./utils";
 
@@ -407,7 +408,7 @@ function extractFromDataPayload(data: Record<string, unknown>): AirtableRecord[]
 /**
  * Fallback: extract data from a server-rendered HTML table.
  */
-function extractFromHtmlTable($: cheerio.CheerioAPI): AirtableRecord[] {
+function extractFromHtmlTable($: CheerioAPI): AirtableRecord[] {
   const records: AirtableRecord[] = [];
   const headers: string[] = [];
 

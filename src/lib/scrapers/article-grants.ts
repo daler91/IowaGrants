@@ -1,5 +1,6 @@
 import axios from "axios";
 import * as cheerio from "cheerio";
+import type { CheerioAPI } from "cheerio";
 import type { GrantData } from "@/lib/types";
 import type { GenderFocus, GrantType, BusinessStage } from "@prisma/client";
 import { cleanHtmlToText, detectLocationScope, isExcludedByStateRestriction } from "./utils";
@@ -361,7 +362,7 @@ function parseGrantsFromHtml(html: string, siteDomain: string): RawGrant[] {
   return grants;
 }
 
-function parseStructuredSections($: cheerio.CheerioAPI, grants: RawGrant[], siteDomain: string): void {
+function parseStructuredSections($: CheerioAPI, grants: RawGrant[], siteDomain: string): void {
   const headings = $("h2, h3").toArray();
 
   for (const heading of headings) {
@@ -372,7 +373,8 @@ function parseStructuredSections($: cheerio.CheerioAPI, grants: RawGrant[], site
     if (title.length < 5 || title.length > 200) continue;
 
     const headingTag = ($heading.prop("tagName") || "H2").toLowerCase();
-    const sectionElements: cheerio.Element[] = [];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const sectionElements: any[] = [];
     let $el = $heading.next();
     let count = 0;
 
@@ -432,7 +434,7 @@ function parseStructuredSections($: cheerio.CheerioAPI, grants: RawGrant[], site
   }
 }
 
-function parseHeadingSections($: cheerio.CheerioAPI, grants: RawGrant[], siteDomain: string): void {
+function parseHeadingSections($: CheerioAPI, grants: RawGrant[], siteDomain: string): void {
   const headings = $("h2, h3").toArray();
 
   for (const heading of headings) {
