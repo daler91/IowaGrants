@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { fetchSamGov } from "./sam-gov";
 import { scrapeIEDA } from "./ieda-scraper";
@@ -98,7 +99,7 @@ async function upsertGrant(grant: GrantData): Promise<boolean> {
         locations: grant.locations,
         industries: grant.industries,
         pdfUrl: grant.pdfUrl,
-        rawData: grant.rawData ? structuredClone(grant.rawData) : undefined,
+        rawData: grant.rawData ? (grant.rawData as Prisma.InputJsonValue) : undefined,
         lastVerified: new Date(),
         categories: categoryConnections
           ? { set: [], ...categoryConnections }
@@ -129,7 +130,7 @@ async function upsertGrant(grant: GrantData): Promise<boolean> {
       locations: grant.locations,
       industries: grant.industries,
       pdfUrl: grant.pdfUrl,
-      rawData: grant.rawData ? structuredClone(grant.rawData) : undefined,
+      rawData: grant.rawData ? (grant.rawData as Prisma.InputJsonValue) : undefined,
       categories: categoryConnections,
       eligibleExpenses: expenseConnections,
     },
