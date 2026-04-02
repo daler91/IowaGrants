@@ -1,14 +1,14 @@
-import { createHash } from "crypto";
+import { createHash } from "node:crypto";
 import axios from "axios";
 import { prisma } from "@/lib/db";
 
 function computeHash(content: string): string {
   // Strip dynamic elements (timestamps, session tokens) before hashing
   const cleaned = content
-    .replace(/\d{1,2}\/\d{1,2}\/\d{4}/g, "") // dates
-    .replace(/\d{10,13}/g, "") // unix timestamps
-    .replace(/csrf[^"']*["'][^"']*["']/gi, "") // CSRF tokens
-    .replace(/\s+/g, " ") // normalize whitespace
+    .replaceAll(/\d{1,2}\/\d{1,2}\/\d{4}/g, "") // dates
+    .replaceAll(/\d{10,13}/g, "") // unix timestamps
+    .replaceAll(/csrf[^"']*["'][^"']*["']/gi, "") // CSRF tokens
+    .replaceAll(/\s+/g, " ") // normalize whitespace
     .trim();
 
   return createHash("sha256").update(cleaned).digest("hex");

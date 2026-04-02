@@ -87,7 +87,7 @@ export async function parsePdfFromUrl(
     });
 
     const textContent = message.content.find((c) => c.type === "text");
-    if (!textContent || textContent.type !== "text") {
+    if (textContent?.type !== "text") {
       console.error("[pdf-parser] No text response from Claude");
       return null;
     }
@@ -155,7 +155,7 @@ export async function parseTextWithAI(
     });
 
     const textContent = message.content.find((c) => c.type === "text");
-    if (!textContent || textContent.type !== "text") return null;
+    if (textContent?.type !== "text") return null;
 
     const parsed: ParsedGrant = JSON.parse(textContent.text);
 

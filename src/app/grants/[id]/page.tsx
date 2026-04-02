@@ -17,9 +17,9 @@ const STATUS_COLORS: Record<string, string> = {
 
 export default async function GrantDetailPage({
   params,
-}: {
+}: Readonly<{
   params: Promise<{ id: string }>;
-}) {
+}>) {
   const { id } = await params;
 
   const grant = await prisma.grant.findUnique({

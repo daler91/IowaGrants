@@ -392,6 +392,22 @@ function findApplyUrl($: CheerioAPI, $section: cheerio.Cheerio<cheerio.AnyNode>,
   return applyUrl;
 }
 
+function collectSectionElements($: CheerioAPI, $heading: cheerio.Cheerio<cheerio.AnyNode>, headingTag: string) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const sectionElements: any[] = [];
+  let $el = $heading.next();
+  let count = 0;
+
+  while ($el.length && count < 20) {
+    const tag = ($el.prop("tagName") || "").toLowerCase();
+    if (tag === headingTag || (tag === "h2" && headingTag === "h3")) break;
+    sectionElements.push($el[0]);
+    $el = $el.next();
+    count++;
+  }
+  return sectionElements;
+}
+
 function parseStructuredSections($: CheerioAPI, grants: RawGrant[], siteDomain: string): void {
   const headings = $("h2, h3").toArray();
 
@@ -403,25 +419,14 @@ function parseStructuredSections($: CheerioAPI, grants: RawGrant[], siteDomain: 
     if (title.length < 5 || title.length > 200) continue;
 
     const headingTag = ($heading.prop("tagName") || "H2").toLowerCase();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const sectionElements: any[] = [];
-    let $el = $heading.next();
-    let count = 0;
-
-    while ($el.length && count < 20) {
-      const tag = ($el.prop("tagName") || "").toLowerCase();
-      if (tag === headingTag || (tag === "h2" && headingTag === "h3")) break;
-      sectionElements.push($el[0]);
-      $el = $el.next();
-      count++;
-    }
+    const sectionElements = collectSectionElements($, $heading, headingTag);
 
     const $section = $(sectionElements);
     const sectionText = $section.text();
 
     if (!hasGrantFields(sectionText)) continue;
 
-    const sectionHtml = sectionElements.map((el) => $.html(el)).join("");
+    const sectionHtml = sectionElements.map((el: cheerio.AnyNode) => $.html(el)).join("");
 
     const grant: RawGrant = {
       title,

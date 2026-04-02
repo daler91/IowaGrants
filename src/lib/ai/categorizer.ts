@@ -195,64 +195,61 @@ function findAllMatches(
   return matches;
 }
 
+function detectGenderFocus(searchText: string, current: GrantData["gender"]): GrantData["gender"] {
+  if (current !== "ANY") return current;
+  for (const [focus, keywords] of Object.entries(GENDER_KEYWORDS)) {
+    if (keywords.length > 0 && findKeywords(searchText, keywords)) {
+      return focus as GenderFocus;
+    }
+  }
+  return current;
+}
+
+function detectBusinessStage(searchText: string, current: GrantData["businessStage"]): GrantData["businessStage"] {
+  if (current !== "BOTH") return current;
+  const hasStartup = findKeywords(searchText, STAGE_KEYWORDS.STARTUP);
+  const hasExisting = findKeywords(searchText, STAGE_KEYWORDS.EXISTING);
+  if (hasStartup && !hasExisting) return "STARTUP";
+  if (hasExisting && !hasStartup) return "EXISTING";
+  return current;
+}
+
+function enrichLocations(searchText: string, locations: string[]): string[] {
+  const foundIowaLocations = IOWA_LOCATIONS.filter((loc) =>
+    searchText.includes(loc)
+  );
+  if (foundIowaLocations.length === 0) return locations;
+
+  if (locations.includes("Nationwide")) {
+    return ["Nationwide", "Iowa", ...foundIowaLocations];
+  }
+  if (locations.length <= 1 && locations[0] === "Iowa") {
+    return ["Iowa", ...foundIowaLocations];
+  }
+  return locations;
+}
+
+function refineGrantType(searchText: string, current: GrantData["grantType"]): GrantData["grantType"] {
+  if (current !== "PRIVATE" && current !== "STATE") return current;
+  const federalKeywords = ["federal", "sba", "usda", "department of", "u.s. government", "u.s. department"];
+  return findKeywords(searchText, federalKeywords) ? "FEDERAL" : current;
+}
+
 export function categorizeGrant(grant: GrantData): GrantData {
   const searchText = `${grant.title} ${grant.description} ${grant.eligibility || ""}`;
 
-  // Gender focus detection
-  if (grant.gender === "ANY") {
-    for (const [focus, keywords] of Object.entries(GENDER_KEYWORDS)) {
-      if (keywords.length > 0 && findKeywords(searchText, keywords)) {
-        grant.gender = focus as GenderFocus;
-        break;
-      }
-    }
-  }
+  grant.gender = detectGenderFocus(searchText, grant.gender);
+  grant.businessStage = detectBusinessStage(searchText, grant.businessStage);
 
-  // Business stage detection
-  if (grant.businessStage === "BOTH") {
-    const hasStartup = findKeywords(searchText, STAGE_KEYWORDS.STARTUP);
-    const hasExisting = findKeywords(searchText, STAGE_KEYWORDS.EXISTING);
-    if (hasStartup && !hasExisting) grant.businessStage = "STARTUP";
-    else if (hasExisting && !hasStartup) grant.businessStage = "EXISTING";
-  }
-
-  // Eligible expenses detection
   if (grant.eligibleExpenses.length === 0) {
     grant.eligibleExpenses = findAllMatches(searchText, EXPENSE_KEYWORDS);
   }
-
-  // Industry detection
   if (grant.industries.length === 0) {
     grant.industries = findAllMatches(searchText, INDUSTRY_KEYWORDS);
   }
 
-  // Location enrichment
-  const foundIowaLocations = IOWA_LOCATIONS.filter((loc) =>
-    searchText.includes(loc)
-  );
-
-  if (grant.locations.includes("Nationwide")) {
-    // For nationwide grants, add Iowa specifics if mentioned but keep Nationwide
-    if (foundIowaLocations.length > 0) {
-      grant.locations = ["Nationwide", "Iowa", ...foundIowaLocations];
-    }
-  } else if (
-    grant.locations.length <= 1 &&
-    grant.locations[0] === "Iowa"
-  ) {
-    // Existing logic for Iowa-specific grants
-    if (foundIowaLocations.length > 0) {
-      grant.locations = ["Iowa", ...foundIowaLocations];
-    }
-  }
-
-  // Grant type refinement — detect federal grants miscategorized as PRIVATE/STATE
-  if (grant.grantType === "PRIVATE" || grant.grantType === "STATE") {
-    const federalKeywords = ["federal", "sba", "usda", "department of", "u.s. government", "u.s. department"];
-    if (findKeywords(searchText, federalKeywords)) {
-      grant.grantType = "FEDERAL";
-    }
-  }
+  grant.locations = enrichLocations(searchText, grant.locations);
+  grant.grantType = refineGrantType(searchText, grant.grantType);
 
   return grant;
 }

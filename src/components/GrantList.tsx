@@ -73,9 +73,9 @@ export default function GrantList({
   if (loading) {
     return (
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {Array.from({ length: 6 }).map((_, i) => (
+        {Array.from({ length: 6 }, (_, i) => `skeleton-${i}`).map((key) => (
           <div
-            key={i}
+            key={key}
             className="bg-white rounded-lg border border-[var(--border)] p-5 animate-pulse"
           >
             <div className="flex gap-2 mb-3">
@@ -140,8 +140,8 @@ export default function GrantList({
                   checked={allOnPageSelected}
                   onChange={handleSelectAll}
                   className="w-4 h-4 rounded border-gray-300 text-blue-600"
-                />
-                Select all
+                />{" "}
+                <span>Select all</span>
               </label>
               <button
                 onClick={onDeleteSelected}
