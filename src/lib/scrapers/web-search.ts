@@ -1,7 +1,7 @@
 import axios from "axios";
 import * as cheerio from "cheerio";
 import type { GrantData } from "@/lib/types";
-import { extractDeadline, isExcludedByStateRestriction, detectLocationScope, isGenericHomepage } from "./utils";
+import { extractDeadline, isExcludedByStateRestriction, detectLocationScope, isGenericHomepage, cleanHtmlToText } from "./utils";
 
 const SEARCH_QUERIES = [
   "Iowa small business grants 2026",
@@ -20,6 +20,15 @@ const SKIP_DOMAINS = [
   "sam.gov",
   "iowagrants.gov",
   "grantwatch.com", // paywall
+  // Domains already handled by article-grants scraper
+  "nerdwallet.com",
+  "shopify.com",
+  "uschamber.com",
+  "fundera.com",
+  "joinhomebase.com",
+  "hiscox.com",
+  "foundr.com",
+  "sofi.com",
   "facebook.com",
   "twitter.com",
   "youtube.com",
@@ -34,6 +43,52 @@ function shouldSkipUrl(url: string): boolean {
   const lower = url.toLowerCase();
   if (SKIP_DOMAINS.some((domain) => lower.includes(domain))) return true;
   if (isGenericHomepage(url)) return true;
+  return false;
+}
+
+/**
+ * Detect if a page is a list/aggregator of multiple grants rather than a single grant.
+ * Returns true for pages like "100+ Small Business Grants" that should be handled
+ * by article-grants.ts instead.
+ */
+function isListPage($: cheerio.CheerioAPI, pageTitle: string): boolean {
+  const lowerTitle = pageTitle.toLowerCase();
+
+  // Title signals: "100+ grants", "best grants", "top grants", etc.
+  const listTitlePatterns = [
+    /\d+\+?\s*(best|top)?\s*(small\s*business\s*)?(grants|funding|loans)/i,
+    /best\s+(small\s*business\s*)?(grants|funding)/i,
+    /top\s+\d*\s*(small\s*business\s*)?(grants|funding)/i,
+    /list of\s+(small\s*business\s*)?(grants|funding)/i,
+  ];
+  if (listTitlePatterns.some((p) => p.test(lowerTitle))) return true;
+
+  // Count grant-themed H2/H3 headings
+  const grantKeywords = ["grant", "fund", "program", "award", "foundation", "$"];
+  const genericPrefixes = [
+    "table of contents", "faq", "frequently asked", "how to apply",
+    "how to find", "what is", "what are", "tips for", "methodology",
+    "about the author", "conclusion", "summary", "bottom line",
+    "key takeaways", "related", "next steps", "subscribe",
+  ];
+
+  let grantHeadingCount = 0;
+  let totalNonGenericHeadings = 0;
+
+  $("h2, h3").each((_, el) => {
+    const text = $(el).text().trim().toLowerCase();
+    if (text.length < 4) return;
+    if (genericPrefixes.some((g) => text.startsWith(g))) return;
+
+    totalNonGenericHeadings++;
+    if (grantKeywords.some((kw) => text.includes(kw))) {
+      grantHeadingCount++;
+    }
+  });
+
+  if (grantHeadingCount >= 5) return true;
+  if (totalNonGenericHeadings >= 10) return true;
+
   return false;
 }
 
@@ -164,7 +219,20 @@ async function scrapeGrantPage(
     });
 
     const $ = cheerio.load(response.data);
-    $("nav, footer, script, style, header").remove();
+
+    // Remove noise elements (expanded to match article-grants cleanup)
+    $("nav, footer, script, style, header, iframe, noscript, svg, aside").remove();
+    $("[role='navigation'], [role='banner'], [class*='sidebar'], [class*='cookie']").remove();
+
+    // Extract title early for list page detection
+    const pageTitle =
+      $("h1").first().text().trim() || $("title").text().trim() || searchTitle;
+
+    // Skip list/aggregator pages — these should be handled by article-grants
+    if (isListPage($, pageTitle)) {
+      console.log(`[web-search] Skipping list/aggregator page: ${url} ("${pageTitle}")`);
+      return null;
+    }
 
     const pageText = $("main, article, .content, .entry-content, body")
       .first()
@@ -195,9 +263,8 @@ async function scrapeGrantPage(
     }
 
     const deadline = extractDeadline(response.data);
-    const description = pageText.slice(0, 800) || searchSnippet;
-    const pageTitle =
-      $("h1").first().text().trim() || $("title").text().trim() || searchTitle;
+    const rawHtml = $("main, article, .content, .entry-content, body").first().html() || "";
+    const description = cleanHtmlToText(rawHtml, 800) || searchSnippet;
 
     const locations = detectLocationScope(pageText);
     const isIowaSpecific = locations.includes("Iowa") && !locations.includes("Nationwide");
