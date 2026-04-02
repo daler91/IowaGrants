@@ -26,6 +26,14 @@ const MONTH_NAMES = [
 
 const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
+function getCellBorderClass(isSelected: boolean, isUrgent: boolean, isToday: boolean, hasGrants: boolean): string {
+  if (isSelected) return "border-[var(--primary)] bg-blue-50 ring-2 ring-[var(--primary-light)]";
+  if (isUrgent) return "border-red-200 bg-red-50";
+  if (isToday) return "border-[var(--primary-light)] bg-blue-50";
+  if (hasGrants) return "border-[var(--border)] bg-white hover:bg-gray-50";
+  return "border-transparent bg-gray-50/50";
+}
+
 export default function DeadlineCalendar() {
   const today = new Date();
   const [year, setYear] = useState(today.getFullYear());
@@ -77,14 +85,14 @@ export default function DeadlineCalendar() {
   const daysInMonth = new Date(year, month, 0).getDate();
   const todayStr = today.toISOString().split("T")[0];
 
-  const cells: Array<{ day: number | null; dateStr: string }> = [];
+  const cells: Array<{ day: number | null; dateStr: string; key: string }> = [];
 
   for (let i = 0; i < firstDay; i++) {
-    cells.push({ day: null, dateStr: "" });
+    cells.push({ day: null, dateStr: "", key: `empty-${i}` });
   }
   for (let d = 1; d <= daysInMonth; d++) {
     const dateStr = `${year}-${String(month).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
-    cells.push({ day: d, dateStr });
+    cells.push({ day: d, dateStr, key: dateStr });
   }
 
   const selectedGrants = selectedDate ? grants[selectedDate] || [] : [];
@@ -130,18 +138,18 @@ export default function DeadlineCalendar() {
         {/* Calendar grid */}
         {loading ? (
           <div className="grid grid-cols-7 gap-1">
-            {Array.from({ length: 35 }).map((_, i) => (
+            {Array.from({ length: 35 }, (_, i) => `skeleton-${i}`).map((key) => (
               <div
-                key={i}
+                key={key}
                 className="h-20 rounded-lg bg-gray-50 animate-pulse"
               />
             ))}
           </div>
         ) : (
           <div className="grid grid-cols-7 gap-1">
-            {cells.map((cell, i) => {
+            {cells.map((cell) => {
               if (cell.day === null) {
-                return <div key={i} className="h-20" />;
+                return <div key={cell.key} className="h-20" />;
               }
 
               const dayGrants = grants[cell.dateStr] || [];
@@ -158,23 +166,13 @@ export default function DeadlineCalendar() {
 
               return (
                 <button
-                  key={i}
+                  key={cell.key}
                   onClick={() =>
                     setSelectedDate(
                       isSelected ? null : cell.dateStr
                     )
                   }
-                  className={`h-20 rounded-lg p-1.5 text-left transition-all border ${
-                    isSelected
-                      ? "border-[var(--primary)] bg-blue-50 ring-2 ring-[var(--primary-light)]"
-                      : isUrgent
-                        ? "border-red-200 bg-red-50"
-                        : isToday
-                          ? "border-[var(--primary-light)] bg-blue-50"
-                          : hasGrants
-                            ? "border-[var(--border)] bg-white hover:bg-gray-50"
-                            : "border-transparent bg-gray-50/50"
-                  }`}
+                  className={`h-20 rounded-lg p-1.5 text-left transition-all border ${getCellBorderClass(isSelected, isUrgent, isToday, hasGrants)}`}
                 >
                   <span
                     className={`text-sm font-medium ${

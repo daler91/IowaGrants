@@ -20,7 +20,7 @@ export default function ConfirmModal({
   message,
   confirmLabel = "Delete",
   loading = false,
-}: ConfirmModalProps) {
+}: Readonly<ConfirmModalProps>) {
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
       if (e.key === "Escape" && !loading) onCancel();
@@ -39,13 +39,18 @@ export default function ConfirmModal({
 
   return (
     <div
+      role="button"
+      tabIndex={-1}
       className="fixed inset-0 z-50 flex items-center justify-center"
       onClick={() => { if (!loading) onCancel(); }}
+      onKeyDown={(e: React.KeyboardEvent) => { if ((e.key === "Enter" || e.key === " ") && !loading) onCancel(); }}
     >
       <div className="absolute inset-0 bg-black/40" />
       <div
+        role="dialog"
         className="relative bg-white rounded-lg border border-[var(--border)] p-6 shadow-xl max-w-md w-full mx-4"
         onClick={(e: React.MouseEvent) => e.stopPropagation()}
+        onKeyDown={(e: React.KeyboardEvent) => e.stopPropagation()}
       >
         <h2 className="text-lg font-semibold text-[var(--foreground)] mb-2">
           {title}

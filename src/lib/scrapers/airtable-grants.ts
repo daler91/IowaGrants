@@ -78,7 +78,7 @@ const AIRTABLE_SOURCES: AirtableSource[] = [
 // Field matching helpers
 // ---------------------------------------------------------------------------
 
-function findField(fields: Record<string, unknown>, candidates: string[]): unknown | undefined {
+function findField(fields: Record<string, unknown>, candidates: string[]): unknown {
   // Try exact match first
   for (const name of candidates) {
     if (name in fields) return fields[name];
@@ -100,47 +100,48 @@ function findField(fields: Record<string, unknown>, candidates: string[]): unkno
 }
 
 function fieldToString(value: unknown): string {
-  if (value === null || value === undefined) return "";
+  if (value == null) return "";
   if (typeof value === "string") return value;
   if (Array.isArray(value)) return value.map(fieldToString).join(", ");
   if (typeof value === "object") return JSON.stringify(value);
-  return String(value);
+  if (typeof value === "number" || typeof value === "boolean" || typeof value === "bigint") return String(value);
+  return JSON.stringify(value);
 }
 
 // ---------------------------------------------------------------------------
 // Amount parsing
 // ---------------------------------------------------------------------------
 
+function applyKMultiplier(value: number, originalStr: string): number {
+  if (originalStr.toLowerCase().includes("k") && value < 1000) return value * 1000;
+  return value;
+}
+
+const RANGE_PATTERN = /\$?([\d.]+)\s*[kK]?\s*[-\u2013\u2014to]+\s*\$?([\d.]+)\s*[kK]?/;
+const UP_TO_PATTERN = /up\s+to\s+\$?([\d.]+)\s*[kK]?/i;
+const SINGLE_AMOUNT_PATTERN = /\$?([\d.]+)\s*[kK]?/;
+
 function parseAmounts(amountStr: string): { amount?: string; amountMin?: number; amountMax?: number } {
   if (!amountStr) return {};
 
-  const cleaned = amountStr.replace(/,/g, "");
+  const cleaned = amountStr.replaceAll(",", "");
 
-  // Range: "$5,000 - $50,000" or "$5k-$50k"
-  const rangeMatch = cleaned.match(/\$?([\d.]+)\s*[kK]?\s*[-–—to]+\s*\$?([\d.]+)\s*[kK]?/);
+  const rangeMatch = RANGE_PATTERN.exec(cleaned);
   if (rangeMatch) {
-    let min = parseFloat(rangeMatch[1]);
-    let max = parseFloat(rangeMatch[2]);
-    if (amountStr.toLowerCase().includes("k")) {
-      if (min < 1000) min *= 1000;
-      if (max < 1000) max *= 1000;
-    }
+    const min = applyKMultiplier(Number.parseFloat(rangeMatch[1]), amountStr);
+    const max = applyKMultiplier(Number.parseFloat(rangeMatch[2]), amountStr);
     return { amount: amountStr.trim(), amountMin: min, amountMax: max };
   }
 
-  // "Up to $X" or "Up to $Xk"
-  const upToMatch = cleaned.match(/up\s+to\s+\$?([\d.]+)\s*[kK]?/i);
+  const upToMatch = UP_TO_PATTERN.exec(cleaned);
   if (upToMatch) {
-    let max = parseFloat(upToMatch[1]);
-    if (amountStr.toLowerCase().includes("k") && max < 1000) max *= 1000;
+    const max = applyKMultiplier(Number.parseFloat(upToMatch[1]), amountStr);
     return { amount: amountStr.trim(), amountMax: max };
   }
 
-  // Single amount: "$10,000" or "$10k"
-  const singleMatch = cleaned.match(/\$?([\d.]+)\s*[kK]?/);
+  const singleMatch = SINGLE_AMOUNT_PATTERN.exec(cleaned);
   if (singleMatch) {
-    let val = parseFloat(singleMatch[1]);
-    if (amountStr.toLowerCase().includes("k") && val < 1000) val *= 1000;
+    const val = applyKMultiplier(Number.parseFloat(singleMatch[1]), amountStr);
     return { amount: amountStr.trim(), amountMin: val, amountMax: val };
   }
 
@@ -154,17 +155,17 @@ function parseAmounts(amountStr: string): { amount?: string; amountMin?: number;
 function parseDeadline(value: unknown): Date | undefined {
   if (!value) return undefined;
 
-  const str = String(value).trim();
+  const str = typeof value === "string" ? value.trim() : String(value).trim();
 
   // ISO date string from Airtable (YYYY-MM-DD)
   if (/^\d{4}-\d{2}-\d{2}/.test(str)) {
     const d = new Date(str);
-    if (!isNaN(d.getTime()) && d.getFullYear() >= 2024) return d;
+    if (!Number.isNaN(d.getTime()) && d.getFullYear() >= 2024) return d;
   }
 
   // Natural language date (e.g., "March 15, 2026")
   const d = new Date(str);
-  if (!isNaN(d.getTime()) && d.getFullYear() >= 2024) return d;
+  if (!Number.isNaN(d.getTime()) && d.getFullYear() >= 2024) return d;
 
   return undefined;
 }
@@ -213,7 +214,7 @@ function transformRecord(record: AirtableRecord, source: AirtableSource): GrantD
     eligibility,
     ...defaults,
     locations: locations.length > 0 ? locations : defaults.locations,
-    rawData: fields as Record<string, unknown>,
+    rawData: fields,
   };
 }
 
@@ -277,14 +278,7 @@ async function fetchViaSharedView(source: AirtableSource): Promise<AirtableRecor
   return extractRecordsFromSharedView(html);
 }
 
-/**
- * Parse the embedded JSON data from an Airtable shared view page.
- * Airtable inlines initial data in script tags as serialized JSON.
- */
-function extractRecordsFromSharedView(html: string): AirtableRecord[] {
-  const records: AirtableRecord[] = [];
-
-  // Strategy 1: Look for window.__sharedViewData or similar inline JSON
+function extractViaInlineJson(html: string): AirtableRecord[] {
   const dataPatterns = [
     /window\.__sharedViewData\s*=\s*({[\s\S]*?});/,
     /initData\s*[=:]\s*({[\s\S]*?});\s*<\/script>/,
@@ -293,7 +287,7 @@ function extractRecordsFromSharedView(html: string): AirtableRecord[] {
   ];
 
   for (const pattern of dataPatterns) {
-    const match = html.match(pattern);
+    const match = pattern.exec(html);
     if (match?.[1]) {
       try {
         const data = JSON.parse(match[1]);
@@ -304,58 +298,72 @@ function extractRecordsFromSharedView(html: string): AirtableRecord[] {
       }
     }
   }
+  return [];
+}
 
-  // Strategy 2: Look for JSON data in script tags using Cheerio
-  const $page = cheerio.load(html);
+function extractViaScriptTags($page: CheerioAPI): AirtableRecord[] {
   const scripts = $page("script").toArray();
+
   for (const script of scripts) {
     const content = $page(script).html() || "";
 
-    // Look for large JSON objects that might contain table data
-    const jsonMatches = content.match(/\{[^{}]*"rows"[^{}]*\[[\s\S]*?\]\s*[^{}]*\}/g);
-    if (jsonMatches) {
-      for (const jsonStr of jsonMatches) {
-        try {
-          const data = JSON.parse(jsonStr);
-          const extracted = extractFromDataPayload(data);
-          if (extracted.length > 0) {
-            records.push(...extracted);
-            break;
-          }
-        } catch {
-          // Continue
-        }
-      }
-      if (records.length > 0) break;
-    }
+    const fromRows = extractRowsJsonFromScript(content);
+    if (fromRows.length > 0) return fromRows;
 
-    // Look for stringified JSON assigned to variables
-    const assignmentMatch = content.match(/=\s*JSON\.parse\(["'](.+?)["']\)/);
-    if (assignmentMatch?.[1]) {
-      try {
-        const decoded = assignmentMatch[1]
-          .replace(/\\"/g, '"')
-          .replace(/\\'/g, "'")
-          .replace(/\\\\/g, "\\");
-        const data = JSON.parse(decoded);
-        const extracted = extractFromDataPayload(data);
-        if (extracted.length > 0) {
-          records.push(...extracted);
-          break;
-        }
-      } catch {
-        // Continue
-      }
+    const fromAssignment = extractParsedJsonFromScript(content);
+    if (fromAssignment.length > 0) return fromAssignment;
+  }
+  return [];
+}
+
+function extractRowsJsonFromScript(content: string): AirtableRecord[] {
+  const jsonMatches = content.match(/\{[^{}]*"rows"[^{}]*\[[\s\S]*?\]\s*[^{}]*\}/g);
+  if (!jsonMatches) return [];
+
+  for (const jsonStr of jsonMatches) {
+    try {
+      const data = JSON.parse(jsonStr);
+      const extracted = extractFromDataPayload(data);
+      if (extracted.length > 0) return extracted;
+    } catch {
+      // Continue
     }
   }
+  return [];
+}
+
+function extractParsedJsonFromScript(content: string): AirtableRecord[] {
+  const assignmentMatch = /=\s*JSON\.parse\(["'](.+?)["']\)/.exec(content);
+  if (!assignmentMatch?.[1]) return [];
+
+  try {
+    const decoded = assignmentMatch[1]
+      .replaceAll('\\"', '"')
+      .replaceAll("\\'", "'")
+      .replaceAll("\\\\", "\\");
+    const data = JSON.parse(decoded);
+    return extractFromDataPayload(data);
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Parse the embedded JSON data from an Airtable shared view page.
+ * Airtable inlines initial data in script tags as serialized JSON.
+ */
+function extractRecordsFromSharedView(html: string): AirtableRecord[] {
+  // Strategy 1: Look for window.__sharedViewData or similar inline JSON
+  const inlineRecords = extractViaInlineJson(html);
+  if (inlineRecords.length > 0) return inlineRecords;
+
+  // Strategy 2: Look for JSON data in script tags using Cheerio
+  const $page = cheerio.load(html);
+  const scriptRecords = extractViaScriptTags($page);
+  if (scriptRecords.length > 0) return scriptRecords;
 
   // Strategy 3: Parse as a rendered HTML table (some shared views render server-side)
-  if (records.length === 0) {
-    const tableRecords = extractFromHtmlTable($page);
-    if (tableRecords.length > 0) return tableRecords;
-  }
-
-  return records;
+  return extractFromHtmlTable($page);
 }
 
 /**
@@ -451,6 +459,50 @@ function extractFromHtmlTable($: CheerioAPI): AirtableRecord[] {
 // Main export
 // ---------------------------------------------------------------------------
 
+async function fetchRecordsForSource(source: AirtableSource): Promise<AirtableRecord[]> {
+  let records: AirtableRecord[] = [];
+
+  if (process.env.AIRTABLE_API_KEY) {
+    console.log(`[airtable:${source.name}] Fetching via official API...`);
+    records = await fetchViaApi(source);
+  }
+
+  if (records.length === 0 && source.sharedViewId) {
+    console.log(`[airtable:${source.name}] Fetching via shared view...`);
+    try {
+      records = await fetchViaSharedView(source);
+    } catch (error) {
+      console.error(
+        `[airtable:${source.name}] Shared view fetch failed:`,
+        error instanceof Error ? error.message : error
+      );
+    }
+  }
+
+  return records;
+}
+
+function deduplicateAndTransform(records: AirtableRecord[], source: AirtableSource): GrantData[] {
+  if (records[0]?.fields) {
+    console.log(
+      `[airtable:${source.name}] Fields found: ${Object.keys(records[0].fields).join(", ")}`
+    );
+  }
+
+  const seenUrls = new Set<string>();
+  const grants: GrantData[] = [];
+
+  for (const record of records) {
+    const grant = transformRecord(record, source);
+    if (!grant) continue;
+    if (seenUrls.has(grant.sourceUrl)) continue;
+    seenUrls.add(grant.sourceUrl);
+    grants.push(grant);
+  }
+
+  return grants;
+}
+
 export async function fetchAirtableGrants(): Promise<GrantData[]> {
   const allGrants: GrantData[] = [];
 
@@ -461,53 +513,18 @@ export async function fetchAirtableGrants(): Promise<GrantData[]> {
     }
 
     try {
-      let records: AirtableRecord[] = [];
-
-      // Try official API first if key is available
-      if (process.env.AIRTABLE_API_KEY) {
-        console.log(`[airtable:${source.name}] Fetching via official API...`);
-        records = await fetchViaApi(source);
-      }
-
-      // Fall back to shared view scraping
-      if (records.length === 0 && source.sharedViewId) {
-        console.log(`[airtable:${source.name}] Fetching via shared view...`);
-        try {
-          records = await fetchViaSharedView(source);
-        } catch (error) {
-          console.error(
-            `[airtable:${source.name}] Shared view fetch failed:`,
-            error instanceof Error ? error.message : error
-          );
-        }
-      }
+      const records = await fetchRecordsForSource(source);
 
       if (records.length === 0) {
         console.log(`[airtable:${source.name}] No records found`);
         continue;
       }
 
-      // Log field names from first record to help debug mapping
-      if (records[0]?.fields) {
-        console.log(
-          `[airtable:${source.name}] Fields found: ${Object.keys(records[0].fields).join(", ")}`
-        );
-      }
-
-      const seenUrls = new Set<string>();
-      let transformed = 0;
-
-      for (const record of records) {
-        const grant = transformRecord(record, source);
-        if (!grant) continue;
-        if (seenUrls.has(grant.sourceUrl)) continue;
-        seenUrls.add(grant.sourceUrl);
-        allGrants.push(grant);
-        transformed++;
-      }
+      const grants = deduplicateAndTransform(records, source);
+      allGrants.push(...grants);
 
       console.log(
-        `[airtable:${source.name}] ${records.length} records → ${transformed} grants`
+        `[airtable:${source.name}] ${records.length} records → ${grants.length} grants`
       );
     } catch (error) {
       console.error(
