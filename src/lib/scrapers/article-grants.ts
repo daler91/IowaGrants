@@ -3,7 +3,7 @@ import * as cheerio from "cheerio";
 import type { CheerioAPI } from "cheerio";
 import type { GrantData } from "@/lib/types";
 import type { GenderFocus, GrantType, BusinessStage } from "@prisma/client";
-import { cleanHtmlToText, detectLocationScope, isExcludedByStateRestriction } from "./utils";
+import { cleanHtmlToText, detectLocationScope, isExcludedByStateRestriction, isGenericHomepage } from "./utils";
 
 // ---------------------------------------------------------------------------
 // Article-based grant page configuration
@@ -511,7 +511,10 @@ function toGrantData(raw: RawGrant, page: ArticleGrantPage): GrantData | null {
 
   const amounts = parseAmount(raw.amount || "");
   const locations = detectLocationScope(fullText);
-  const sourceUrl = raw.applyUrl || page.url;
+  // Use the apply URL if it's a real grant page, not a generic homepage
+  const sourceUrl = (raw.applyUrl && !isGenericHomepage(raw.applyUrl))
+    ? raw.applyUrl
+    : page.url;
 
   return {
     title: raw.title,

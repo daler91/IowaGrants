@@ -2,7 +2,7 @@ import axios from "axios";
 import * as cheerio from "cheerio";
 import type { CheerioAPI } from "cheerio";
 import type { GrantData } from "@/lib/types";
-import { cleanHtmlToText, detectLocationScope, isExcludedByStateRestriction } from "./utils";
+import { cleanHtmlToText, detectLocationScope, isExcludedByStateRestriction, isGenericHomepage } from "./utils";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -185,7 +185,11 @@ function transformRecord(record: AirtableRecord, source: AirtableSource): GrantD
 
   const rawUrl = fieldToString(findField(fields, fieldMapping.sourceUrl)).trim();
   // If URL is an array of URLs (Airtable can return arrays), take the first
-  const sourceUrl = rawUrl.startsWith("http") ? rawUrl.split(/[,\s]/)[0] : source.sourcePageUrl;
+  // Skip generic homepages — use the source page URL instead
+  const extractedUrl = rawUrl.startsWith("http") ? rawUrl.split(/[,\s]/)[0] : "";
+  const sourceUrl = (extractedUrl && !isGenericHomepage(extractedUrl))
+    ? extractedUrl
+    : source.sourcePageUrl;
 
   const rawAmount = fieldToString(findField(fields, fieldMapping.amount));
   const amounts = parseAmounts(rawAmount);

@@ -1,7 +1,7 @@
 import axios from "axios";
 import * as cheerio from "cheerio";
 import type { GrantData } from "@/lib/types";
-import { extractDeadline, isExcludedByStateRestriction, detectLocationScope } from "./utils";
+import { extractDeadline, isExcludedByStateRestriction, detectLocationScope, isGenericHomepage } from "./utils";
 
 const SEARCH_QUERIES = [
   "Iowa small business grants 2026",
@@ -32,7 +32,9 @@ const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 function shouldSkipUrl(url: string): boolean {
   const lower = url.toLowerCase();
-  return SKIP_DOMAINS.some((domain) => lower.includes(domain));
+  if (SKIP_DOMAINS.some((domain) => lower.includes(domain))) return true;
+  if (isGenericHomepage(url)) return true;
+  return false;
 }
 
 type SearchResult = { title: string; url: string; snippet: string };
