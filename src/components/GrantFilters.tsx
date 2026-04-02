@@ -53,12 +53,12 @@ function FilterSelect({
   options,
   value,
   onChange,
-}: {
+}: Readonly<{
   label: string;
   options: { value: string; label: string }[];
   value: string;
   onChange: (value: string) => void;
-}) {
+}>) {
   return (
     <div>
       <label className="block text-sm font-medium text-[var(--muted)] mb-1">
@@ -79,7 +79,7 @@ function FilterSelect({
   );
 }
 
-export default function GrantFilters({ filters, onChange }: GrantFiltersProps) {
+export default function GrantFilters({ filters, onChange }: Readonly<GrantFiltersProps>) {
   const update = (key: string, value: string) => {
     onChange({ ...filters, [key]: value || undefined, page: 1 });
   };

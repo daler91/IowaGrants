@@ -60,7 +60,7 @@ export default function GrantCard({
   selected,
   onSelectChange,
   onDelete,
-}: GrantCardProps) {
+}: Readonly<GrantCardProps>) {
   const deadlineStr = formatDeadline(grant.deadline);
   const isUrgent =
     grant.deadline &&
