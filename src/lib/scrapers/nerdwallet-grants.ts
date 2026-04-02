@@ -1,6 +1,6 @@
 import axios from "axios";
 import * as cheerio from "cheerio";
-import type { CheerioAPI, AnyNode } from "cheerio";
+import type { CheerioAPI } from "cheerio";
 import type { GrantData } from "@/lib/types";
 import type { GenderFocus } from "@prisma/client";
 import { cleanHtmlToText, detectLocationScope, isExcludedByStateRestriction } from "./utils";
@@ -283,7 +283,7 @@ function parseStructuredSections($: CheerioAPI, grants: RawGrant[]): void {
 
     // Collect sibling content until the next same-level or higher heading
     const headingTag = ($heading.prop("tagName") || "H2").toLowerCase();
-    const sectionElements: AnyNode[] = [];
+    const sectionElements: any[] = [];
     let $el = $heading.next();
     let count = 0;
 
