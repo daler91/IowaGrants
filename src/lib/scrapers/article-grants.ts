@@ -1,49 +1,152 @@
 import axios from "axios";
 import * as cheerio from "cheerio";
 import type { GrantData } from "@/lib/types";
-import type { GenderFocus } from "@prisma/client";
+import type { GenderFocus, GrantType, BusinessStage } from "@prisma/client";
 import { cleanHtmlToText, detectLocationScope, isExcludedByStateRestriction } from "./utils";
 
 // ---------------------------------------------------------------------------
-// NerdWallet grant list pages
+// Article-based grant page configuration
 // ---------------------------------------------------------------------------
 
-interface NerdWalletPage {
+interface ArticleGrantPage {
   url: string;
-  name: string;
+  /** Unique source name stored in DB */
+  sourceName: string;
+  /** Domain to exclude from external link extraction (e.g., "nerdwallet.com") */
+  siteDomain: string;
   gender: GenderFocus;
+  grantType: GrantType;
+  businessStage: BusinessStage;
 }
 
-const NERDWALLET_PAGES: NerdWalletPage[] = [
+/**
+ * All blog/article pages that list grants in a structured H2/H3 format.
+ * Each page is fetched independently and parsed with the same logic.
+ */
+const ARTICLE_GRANT_PAGES: ArticleGrantPage[] = [
+  // ── NerdWallet ──────────────────────────────────────────────────────────
   {
     url: "https://www.nerdwallet.com/article/small-business/small-business-grants",
-    name: "nerdwallet-general",
+    sourceName: "nerdwallet",
+    siteDomain: "nerdwallet.com",
     gender: "ANY",
+    grantType: "PRIVATE",
+    businessStage: "BOTH",
   },
   {
     url: "https://www.nerdwallet.com/article/small-business/small-business-grants-for-women",
-    name: "nerdwallet-women",
+    sourceName: "nerdwallet",
+    siteDomain: "nerdwallet.com",
     gender: "WOMEN",
+    grantType: "PRIVATE",
+    businessStage: "BOTH",
   },
   {
     url: "https://www.nerdwallet.com/business/loans/learn/grants-for-minorities",
-    name: "nerdwallet-minorities",
+    sourceName: "nerdwallet",
+    siteDomain: "nerdwallet.com",
     gender: "MINORITY",
+    grantType: "PRIVATE",
+    businessStage: "BOTH",
   },
   {
     url: "https://www.nerdwallet.com/business/loans/learn/grants-for-veterans",
-    name: "nerdwallet-veterans",
+    sourceName: "nerdwallet",
+    siteDomain: "nerdwallet.com",
     gender: "VETERAN",
+    grantType: "PRIVATE",
+    businessStage: "BOTH",
   },
   {
     url: "https://www.nerdwallet.com/business/loans/learn/startup-business-grants",
-    name: "nerdwallet-startup",
+    sourceName: "nerdwallet",
+    siteDomain: "nerdwallet.com",
     gender: "ANY",
+    grantType: "PRIVATE",
+    businessStage: "STARTUP",
+  },
+
+  // ── Shopify ─────────────────────────────────────────────────────────────
+  {
+    url: "https://www.shopify.com/blog/small-business-grants",
+    sourceName: "shopify",
+    siteDomain: "shopify.com",
+    gender: "ANY",
+    grantType: "PRIVATE",
+    businessStage: "BOTH",
+  },
+  {
+    url: "https://www.shopify.com/blog/grants-for-black-women",
+    sourceName: "shopify",
+    siteDomain: "shopify.com",
+    gender: "WOMEN",
+    grantType: "PRIVATE",
+    businessStage: "BOTH",
+  },
+
+  // ── US Chamber of Commerce (CO–) ────────────────────────────────────────
+  {
+    url: "https://www.uschamber.com/co/run/business-financing/small-business-grants-and-programs",
+    sourceName: "uschamber",
+    siteDomain: "uschamber.com",
+    gender: "ANY",
+    grantType: "PRIVATE",
+    businessStage: "BOTH",
+  },
+
+  // ── Fundera ─────────────────────────────────────────────────────────────
+  {
+    url: "https://fundera.com/blog/small-business-grants",
+    sourceName: "fundera",
+    siteDomain: "fundera.com",
+    gender: "ANY",
+    grantType: "PRIVATE",
+    businessStage: "BOTH",
+  },
+
+  // ── Homebase ────────────────────────────────────────────────────────────
+  {
+    url: "https://www.joinhomebase.com/blog/small-business-grants",
+    sourceName: "homebase",
+    siteDomain: "joinhomebase.com",
+    gender: "ANY",
+    grantType: "PRIVATE",
+    businessStage: "BOTH",
+  },
+
+  // ── Hiscox ──────────────────────────────────────────────────────────────
+  {
+    url: "https://www.hiscox.com/blog/small-business-grants-women-entrepreneurs",
+    sourceName: "hiscox",
+    siteDomain: "hiscox.com",
+    gender: "WOMEN",
+    grantType: "PRIVATE",
+    businessStage: "BOTH",
+  },
+
+  // ── Foundr ──────────────────────────────────────────────────────────────
+  {
+    url: "https://foundr.com/articles/building-a-business/grants-for-small-businesses",
+    sourceName: "foundr",
+    siteDomain: "foundr.com",
+    gender: "ANY",
+    grantType: "PRIVATE",
+    businessStage: "BOTH",
+  },
+
+  // ── SoFi ────────────────────────────────────────────────────────────────
+  {
+    url: "https://www.sofi.com/learn/content/small-business-start-up-grants-loans-programs/",
+    sourceName: "sofi",
+    siteDomain: "sofi.com",
+    gender: "ANY",
+    grantType: "PRIVATE",
+    businessStage: "STARTUP",
   },
 ];
 
 // ---------------------------------------------------------------------------
-// Browser-like headers for Cloudflare WAF
+// Browser-like headers for Cloudflare / WAF bypass
 // ---------------------------------------------------------------------------
 
 const BROWSER_HEADERS = {
@@ -68,7 +171,7 @@ const BROWSER_HEADERS = {
 // Page fetching with Google Cache fallback
 // ---------------------------------------------------------------------------
 
-async function fetchPage(url: string): Promise<string | null> {
+async function fetchPage(url: string, logPrefix: string): Promise<string | null> {
   // Attempt 1: Direct fetch with browser headers
   try {
     const response = await axios.get(url, {
@@ -83,26 +186,22 @@ async function fetchPage(url: string): Promise<string | null> {
       return response.data;
     }
 
-    console.log(`[nerdwallet] Direct fetch returned ${response.status} for ${url}`);
+    console.log(`${logPrefix} Direct fetch returned ${response.status} for ${url}`);
   } catch (error) {
     console.log(
-      `[nerdwallet] Direct fetch failed:`,
+      `${logPrefix} Direct fetch failed:`,
       error instanceof Error ? error.message : error
     );
   }
 
-  // Brief delay before retry
+  // Brief delay before cache attempt
   await new Promise((r) => setTimeout(r, 2000));
 
   // Attempt 2: Google Cache fallback
   try {
     const cacheUrl = `https://webcache.googleusercontent.com/search?q=cache:${encodeURIComponent(url)}`;
     const response = await axios.get(cacheUrl, {
-      headers: {
-        ...BROWSER_HEADERS,
-        "User-Agent":
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-      },
+      headers: BROWSER_HEADERS,
       timeout: 20000,
       maxRedirects: 5,
       decompress: true,
@@ -110,14 +209,14 @@ async function fetchPage(url: string): Promise<string | null> {
     });
 
     if (response.status === 200 && typeof response.data === "string") {
-      console.log(`[nerdwallet] Fetched via Google Cache: ${url}`);
+      console.log(`${logPrefix} Fetched via Google Cache: ${url}`);
       return response.data;
     }
 
-    console.log(`[nerdwallet] Google Cache returned ${response.status} for ${url}`);
+    console.log(`${logPrefix} Google Cache returned ${response.status} for ${url}`);
   } catch (error) {
     console.log(
-      `[nerdwallet] Google Cache failed:`,
+      `${logPrefix} Google Cache failed:`,
       error instanceof Error ? error.message : error
     );
   }
@@ -167,7 +266,6 @@ function parseAmount(text: string): { amount?: string; amountMin?: number; amoun
 function parseDeadlineStr(str: string | undefined): Date | undefined {
   if (!str) return undefined;
   const cleaned = str.trim();
-  // Skip non-date values
   if (/rolling|ongoing|year-round|open|varies|tbd|n\/a/i.test(cleaned)) return undefined;
   const d = new Date(cleaned);
   if (!isNaN(d.getTime()) && d.getFullYear() >= 2024) return d;
@@ -178,9 +276,6 @@ function parseDeadlineStr(str: string | undefined): Date | undefined {
 // Field extraction helpers
 // ---------------------------------------------------------------------------
 
-/**
- * Extract a value following a label like "Amount: $10,000" or "Deadline: March 2026"
- */
 function extractLabeledField(text: string, labels: string[]): string | undefined {
   for (const label of labels) {
     const pattern = new RegExp(
@@ -190,7 +285,6 @@ function extractLabeledField(text: string, labels: string[]): string | undefined
     const match = text.match(pattern);
     if (match?.[1]) {
       const value = match[1].trim();
-      // Don't return if it starts with another label
       if (!/^(amount|deadline|eligibility|apply|award|who can)/i.test(value)) {
         return value;
       }
@@ -199,9 +293,6 @@ function extractLabeledField(text: string, labels: string[]): string | undefined
   return undefined;
 }
 
-/**
- * Extract a dollar amount from freeform text.
- */
 function extractAmountFromText(text: string): string | undefined {
   const match = text.match(/\$[\d,]+(?:\s*(?:to|-|–)\s*\$[\d,]+)?/);
   return match?.[0];
@@ -215,10 +306,14 @@ const GENERIC_HEADINGS = [
   "table of contents", "bottom line", "frequently asked questions", "faq",
   "how to apply", "how to find", "what is", "what are", "tips for",
   "methodology", "about the author", "compare", "types of", "pros and cons",
-  "how we chose", "our methodology", "related articles", "more from nerdwallet",
+  "how we chose", "our methodology", "related articles", "more from",
   "best small-business loans", "what are small-business grants",
   "how do small-business grants work", "where to find", "summary",
-  "on this page", "key takeaways", "frequently asked",
+  "on this page", "key takeaways", "frequently asked", "final thoughts",
+  "the bottom line", "next steps", "additional resources", "other resources",
+  "how to write", "what you need", "before you apply", "wrapping up",
+  "conclusion", "in summary", "share this", "about the",
+  "you may also like", "related posts", "newsletter", "subscribe",
 ];
 
 function isGenericHeading(text: string): boolean {
@@ -230,12 +325,11 @@ function isGenericHeading(text: string): boolean {
 }
 
 function cleanGrantTitle(title: string): string {
-  // Remove leading numbers like "1. " or "43. "
   return title.replace(/^\d+\.\s*/, "").trim();
 }
 
 // ---------------------------------------------------------------------------
-// HTML parsing — extract grants from the page
+// HTML parsing — extract grants from article pages
 // ---------------------------------------------------------------------------
 
 interface RawGrant {
@@ -247,30 +341,27 @@ interface RawGrant {
   applyUrl?: string;
 }
 
-function parseGrantsFromHtml(html: string): RawGrant[] {
+function parseGrantsFromHtml(html: string, siteDomain: string): RawGrant[] {
   const $ = cheerio.load(html);
   const grants: RawGrant[] = [];
 
-  // Remove navigation, sidebar, footer, ads
+  // Remove noise elements
   $("nav, footer, header, aside, [role='navigation'], [role='banner']").remove();
   $("[class*='sidebar'], [class*='related'], [class*='footer'], [class*='nav']").remove();
+  $("[class*='newsletter'], [class*='subscribe'], [class*='cookie']").remove();
 
-  // Strategy 1: Structured cards with labeled fields
-  parseStructuredSections($, grants);
+  // Strategy 1: Structured sections with labeled fields
+  parseStructuredSections($, grants, siteDomain);
 
   // Strategy 2: Heading-based sections (fallback)
   if (grants.length === 0) {
-    parseHeadingSections($, grants);
+    parseHeadingSections($, grants, siteDomain);
   }
 
   return grants;
 }
 
-/**
- * Parse sections with H2/H3 grant name headings that have
- * labeled data fields (Amount, Deadline, Eligibility) in the following content.
- */
-function parseStructuredSections($: cheerio.CheerioAPI, grants: RawGrant[]): void {
+function parseStructuredSections($: cheerio.CheerioAPI, grants: RawGrant[], siteDomain: string): void {
   const headings = $("h2, h3").toArray();
 
   for (const heading of headings) {
@@ -280,7 +371,6 @@ function parseStructuredSections($: cheerio.CheerioAPI, grants: RawGrant[]): voi
     if (isGenericHeading(title)) continue;
     if (title.length < 5 || title.length > 200) continue;
 
-    // Collect sibling content until the next same-level or higher heading
     const headingTag = ($heading.prop("tagName") || "H2").toLowerCase();
     const sectionElements: cheerio.Element[] = [];
     let $el = $heading.next();
@@ -297,7 +387,6 @@ function parseStructuredSections($: cheerio.CheerioAPI, grants: RawGrant[]): voi
     const $section = $(sectionElements);
     const sectionText = $section.text();
 
-    // Only consider this a grant if it has grant-like fields
     if (!hasGrantFields(sectionText)) continue;
 
     const sectionHtml = sectionElements.map((el) => $.html(el)).join("");
@@ -310,31 +399,30 @@ function parseStructuredSections($: cheerio.CheerioAPI, grants: RawGrant[]): voi
       eligibility: extractLabeledField(sectionText, ["eligibility", "who can apply", "eligible", "requirements", "qualifications"]),
     };
 
-    // If no amount from label, try extracting from freeform text
     if (!grant.amount) {
       grant.amount = extractAmountFromText(sectionText);
     }
 
-    // Find apply URL — prefer external links with "apply" text
+    // Find apply URL — prefer external links with action text
     $section.find("a[href]").each((_, a) => {
       if (grant.applyUrl) return;
       const href = $(a).attr("href") || "";
       const linkText = $(a).text().toLowerCase();
       if (
         href.startsWith("http") &&
-        !href.includes("nerdwallet.com") &&
+        !href.includes(siteDomain) &&
         (linkText.includes("apply") || linkText.includes("learn more") || linkText.includes("visit"))
       ) {
         grant.applyUrl = href;
       }
     });
 
-    // Fallback: any external link in the section
+    // Fallback: any external link
     if (!grant.applyUrl) {
       $section.find("a[href]").each((_, a) => {
         if (grant.applyUrl) return;
         const href = $(a).attr("href") || "";
-        if (href.startsWith("http") && !href.includes("nerdwallet.com")) {
+        if (href.startsWith("http") && !href.includes(siteDomain)) {
           grant.applyUrl = href;
         }
       });
@@ -344,11 +432,7 @@ function parseStructuredSections($: cheerio.CheerioAPI, grants: RawGrant[]): voi
   }
 }
 
-/**
- * Fallback parser: treats each H2/H3 as a potential grant,
- * extracts amounts and links from the content below it.
- */
-function parseHeadingSections($: cheerio.CheerioAPI, grants: RawGrant[]): void {
+function parseHeadingSections($: cheerio.CheerioAPI, grants: RawGrant[], siteDomain: string): void {
   const headings = $("h2, h3").toArray();
 
   for (const heading of headings) {
@@ -358,7 +442,6 @@ function parseHeadingSections($: cheerio.CheerioAPI, grants: RawGrant[]): void {
     if (isGenericHeading(title)) continue;
     if (title.length < 5 || title.length > 200) continue;
 
-    // Collect text between this heading and the next
     let description = "";
     let applyUrl: string | undefined;
     let $el = $heading.next();
@@ -370,10 +453,9 @@ function parseHeadingSections($: cheerio.CheerioAPI, grants: RawGrant[]): void {
 
       description += $el.text().trim() + "\n";
 
-      // Look for external links
       $el.find("a[href]").each((_, a) => {
         const href = $(a).attr("href") || "";
-        if (href.startsWith("http") && !href.includes("nerdwallet.com") && !applyUrl) {
+        if (href.startsWith("http") && !href.includes(siteDomain) && !applyUrl) {
           applyUrl = href;
         }
       });
@@ -382,7 +464,6 @@ function parseHeadingSections($: cheerio.CheerioAPI, grants: RawGrant[]): void {
       collected++;
     }
 
-    // Only include if it looks like a grant entry
     const lower = description.toLowerCase();
     const isGrant =
       lower.includes("$") ||
@@ -418,13 +499,12 @@ function hasGrantFields(text: string): boolean {
 // Transform to GrantData
 // ---------------------------------------------------------------------------
 
-function toGrantData(raw: RawGrant, page: NerdWalletPage): GrantData | null {
+function toGrantData(raw: RawGrant, page: ArticleGrantPage): GrantData | null {
   if (!raw.title || raw.title.length < 3) return null;
 
   const description = raw.description || raw.title;
   const fullText = `${raw.title} ${description} ${raw.eligibility || ""}`;
 
-  // Skip grants restricted to non-Iowa states
   if (isExcludedByStateRestriction(fullText)) return null;
 
   const amounts = parseAmount(raw.amount || "");
@@ -435,19 +515,19 @@ function toGrantData(raw: RawGrant, page: NerdWalletPage): GrantData | null {
     title: raw.title,
     description,
     sourceUrl,
-    sourceName: page.name,
+    sourceName: page.sourceName,
     ...amounts,
     deadline: parseDeadlineStr(raw.deadline),
     eligibility: raw.eligibility,
-    grantType: "PRIVATE",
+    grantType: page.grantType,
     status: "OPEN",
-    businessStage: "BOTH",
+    businessStage: page.businessStage,
     gender: page.gender,
     locations: locations.length > 0 ? locations : ["Nationwide"],
     industries: [],
     categories: [],
     eligibleExpenses: [],
-    rawData: { nerdwalletPage: page.url, originalTitle: raw.title },
+    rawData: { articlePage: page.url, originalTitle: raw.title },
   };
 }
 
@@ -455,29 +535,42 @@ function toGrantData(raw: RawGrant, page: NerdWalletPage): GrantData | null {
 // Main export
 // ---------------------------------------------------------------------------
 
-export async function scrapeNerdWallet(): Promise<GrantData[]> {
+export async function scrapeArticleGrants(): Promise<GrantData[]> {
   const allGrants: GrantData[] = [];
   const seenUrls = new Set<string>();
   const seenTitles = new Set<string>();
 
-  for (const page of NERDWALLET_PAGES) {
+  let lastDomain = "";
+
+  for (const page of ARTICLE_GRANT_PAGES) {
+    const currentDomain = page.siteDomain;
+
     try {
-      console.log(`[nerdwallet] Fetching ${page.name}...`);
-      const html = await fetchPage(page.url);
+      // Polite delay: longer between same-domain requests
+      if (currentDomain === lastDomain) {
+        await new Promise((r) => setTimeout(r, 2000));
+      } else if (lastDomain) {
+        await new Promise((r) => setTimeout(r, 1000));
+      }
+      lastDomain = currentDomain;
+
+      const logPrefix = `[article-grants:${page.sourceName}]`;
+      console.log(`${logPrefix} Fetching ${page.url}...`);
+      const html = await fetchPage(page.url, logPrefix);
 
       if (!html) {
-        console.log(`[nerdwallet] Could not fetch ${page.name} (blocked or unavailable)`);
+        console.log(`${logPrefix} Could not fetch (blocked or unavailable)`);
         continue;
       }
 
-      const rawGrants = parseGrantsFromHtml(html);
+      const rawGrants = parseGrantsFromHtml(html, page.siteDomain);
       let added = 0;
 
       for (const raw of rawGrants) {
         const grant = toGrantData(raw, page);
         if (!grant) continue;
 
-        // Deduplicate by URL and normalized title across all pages
+        // Deduplicate by URL and normalized title across ALL pages/sites
         const titleKey = grant.title.toLowerCase().replace(/[^a-z0-9]/g, "");
         if (seenUrls.has(grant.sourceUrl) || seenTitles.has(titleKey)) continue;
         seenUrls.add(grant.sourceUrl);
@@ -487,18 +580,15 @@ export async function scrapeNerdWallet(): Promise<GrantData[]> {
         added++;
       }
 
-      console.log(`[nerdwallet] ${page.name}: ${rawGrants.length} parsed → ${added} new grants`);
-
-      // Polite delay between pages
-      await new Promise((r) => setTimeout(r, 2000));
+      console.log(`${logPrefix} ${rawGrants.length} parsed → ${added} new grants`);
     } catch (error) {
       console.error(
-        `[nerdwallet] Error scraping ${page.name}:`,
+        `[article-grants:${page.sourceName}] Error:`,
         error instanceof Error ? error.message : error
       );
     }
   }
 
-  console.log(`[nerdwallet] Total unique grants: ${allGrants.length}`);
+  console.log(`[article-grants] Total unique grants from ${ARTICLE_GRANT_PAGES.length} pages: ${allGrants.length}`);
   return allGrants;
 }
