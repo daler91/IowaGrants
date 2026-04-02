@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import SearchBar from "@/components/SearchBar";
 import GrantFilters from "@/components/GrantFilters";
 import GrantList from "@/components/GrantList";
+import ConfirmModal from "@/components/ConfirmModal";
 import type { GrantFilters as FilterType } from "@/lib/types";
 
 interface Grant {
@@ -36,6 +37,15 @@ export default function Dashboard() {
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
   const [loading, setLoading] = useState(true);
+
+  // Selection & delete state
+  const [selectable, setSelectable] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [deleteTarget, setDeleteTarget] = useState<{
+    ids: string[];
+    label: string;
+  } | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const fetchGrants = useCallback(async () => {
     setLoading(true);
@@ -71,6 +81,67 @@ export default function Dashboard() {
     return () => clearTimeout(debounce);
   }, [fetchGrants]);
 
+  // Clear selection when page changes
+  useEffect(() => {
+    setSelectedIds(new Set());
+  }, [filters.page]);
+
+  const handleToggleSelectable = () => {
+    setSelectable((prev: boolean) => {
+      if (prev) setSelectedIds(new Set());
+      return !prev;
+    });
+  };
+
+  const handleDeleteSelected = () => {
+    if (selectedIds.size === 0) return;
+    setDeleteTarget({
+      ids: [...selectedIds],
+      label: `${selectedIds.size} grant${selectedIds.size > 1 ? "s" : ""}`,
+    });
+  };
+
+  const handleDeleteSingle = (id: string, title: string) => {
+    setDeleteTarget({ ids: [id], label: `"${title}"` });
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    try {
+      const res = await fetch("/api/grants", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: deleteTarget.ids }),
+      });
+      if (!res.ok) throw new Error("Delete failed");
+
+      setSelectedIds((prev: Set<string>) => {
+        const next = new Set(prev);
+        deleteTarget.ids.forEach((id: string) => next.delete(id));
+        return next;
+      });
+      setDeleteTarget(null);
+
+      // Refresh and handle page overflow
+      const params = new URLSearchParams();
+      params.set("page", "1");
+      params.set("limit", (filters.limit || 20).toString());
+      const countRes = await fetch(`/api/grants?${params.toString()}`);
+      const countData: ApiResponse = await countRes.json();
+      const currentPage = filters.page || 1;
+      if (currentPage > countData.totalPages && countData.totalPages > 0) {
+        setFilters((f: FilterType) => ({ ...f, page: countData.totalPages }));
+      } else {
+        fetchGrants();
+      }
+    } catch (error) {
+      console.error("Failed to delete grants:", error);
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   return (
     <div>
       <div className="mb-8">
@@ -98,11 +169,27 @@ export default function Dashboard() {
             total={total}
             page={filters.page || 1}
             totalPages={totalPages}
-            onPageChange={(page) => setFilters((f) => ({ ...f, page }))}
+            onPageChange={(page: number) => setFilters((f: FilterType) => ({ ...f, page }))}
             loading={loading}
+            selectable={selectable}
+            selectedIds={selectedIds}
+            onSelectionChange={setSelectedIds}
+            onDeleteSelected={handleDeleteSelected}
+            onDeleteSingle={handleDeleteSingle}
+            onToggleSelectable={handleToggleSelectable}
           />
         </div>
       </div>
+
+      <ConfirmModal
+        open={deleteTarget !== null}
+        title="Delete Grants"
+        message={`Are you sure you want to delete ${deleteTarget?.label}? This cannot be undone.`}
+        confirmLabel="Delete"
+        loading={deleting}
+        onConfirm={handleConfirmDelete}
+        onCancel={() => !deleting && setDeleteTarget(null)}
+      />
     </div>
   );
 }

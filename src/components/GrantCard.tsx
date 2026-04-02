@@ -46,7 +46,21 @@ function formatDeadline(deadline: string | null | undefined): string {
   return formatted;
 }
 
-export default function GrantCard({ grant }: { grant: GrantCardGrant }) {
+interface GrantCardProps {
+  grant: GrantCardGrant;
+  selectable?: boolean;
+  selected?: boolean;
+  onSelectChange?: (id: string, selected: boolean) => void;
+  onDelete?: (id: string, title: string) => void;
+}
+
+export default function GrantCard({
+  grant,
+  selectable,
+  selected,
+  onSelectChange,
+  onDelete,
+}: GrantCardProps) {
   const deadlineStr = formatDeadline(grant.deadline);
   const isUrgent =
     grant.deadline &&
@@ -56,7 +70,36 @@ export default function GrantCard({ grant }: { grant: GrantCardGrant }) {
 
   return (
     <Link href={`/grants/${grant.id}`} className="block">
-      <div className="bg-white rounded-lg border border-[var(--border)] p-5 hover:shadow-md transition-shadow h-full flex flex-col">
+      <div className={`relative bg-white rounded-lg border p-5 hover:shadow-md transition-shadow h-full flex flex-col ${selected ? "ring-2 ring-blue-500 border-blue-300" : "border-[var(--border)]"}`}>
+        {selectable && (
+          <div className="absolute top-3 right-3 z-10 flex items-center gap-1">
+            <button
+              onClick={(e: React.MouseEvent) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onDelete?.(grant.id, grant.title);
+              }}
+              className="p-1 rounded hover:bg-red-50 text-gray-400 hover:text-red-600 transition-colors"
+              title="Delete grant"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+              </svg>
+            </button>
+            <input
+              type="checkbox"
+              checked={selected || false}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                e.stopPropagation();
+                onSelectChange?.(grant.id, e.target.checked);
+              }}
+              onClick={(e: React.MouseEvent) => {
+                e.stopPropagation();
+              }}
+              className="w-4 h-4 rounded border-gray-300 text-blue-600 cursor-pointer"
+            />
+          </div>
+        )}
         <div className="flex flex-wrap gap-2 mb-3">
           <span
             className={`px-2 py-0.5 rounded-full text-xs font-medium ${TYPE_COLORS[grant.grantType] || "bg-gray-100 text-gray-800"}`}
