@@ -1,6 +1,7 @@
 import axios from "axios";
 import * as cheerio from "cheerio";
 import type { CheerioAPI } from "cheerio";
+import type { AnyNode } from "domhandler";
 import type { GrantData } from "@/lib/types";
 import type { GenderFocus, GrantType, BusinessStage } from "@prisma/client";
 import { cleanHtmlToText, detectLocationScope, isExcludedByStateRestriction, isGenericHomepage } from "./utils";
@@ -362,7 +363,7 @@ function parseGrantsFromHtml(html: string, siteDomain: string): RawGrant[] {
   return grants;
 }
 
-function findApplyUrl($: CheerioAPI, $section: cheerio.Cheerio<cheerio.AnyNode>, siteDomain: string): string | undefined {
+function findApplyUrl($: CheerioAPI, $section: cheerio.Cheerio<AnyNode>, siteDomain: string): string | undefined {
   // Prefer external links with action text
   let applyUrl: string | undefined;
   $section.find("a[href]").each((_, a) => {
