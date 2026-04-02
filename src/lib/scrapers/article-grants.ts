@@ -393,7 +393,7 @@ function findApplyUrl($: CheerioAPI, $section: cheerio.Cheerio<AnyNode>, siteDom
   return applyUrl;
 }
 
-function collectSectionElements($: CheerioAPI, $heading: cheerio.Cheerio<cheerio.AnyNode>, headingTag: string) {
+function collectSectionElements($: CheerioAPI, $heading: cheerio.Cheerio<AnyNode>, headingTag: string) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const sectionElements: any[] = [];
   let $el = $heading.next();
@@ -427,7 +427,7 @@ function parseStructuredSections($: CheerioAPI, grants: RawGrant[], siteDomain: 
 
     if (!hasGrantFields(sectionText)) continue;
 
-    const sectionHtml = sectionElements.map((el: cheerio.AnyNode) => $.html(el)).join("");
+    const sectionHtml = sectionElements.map((el: AnyNode) => $.html(el)).join("");
 
     const grant: RawGrant = {
       title,
