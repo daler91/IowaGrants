@@ -304,6 +304,14 @@ function extractAmountFromText(text: string): string | undefined {
 // Heading classification
 // ---------------------------------------------------------------------------
 
+const EDUCATIONAL_PATTERNS = [
+  /\bvs\.?\s/,
+  /\bversus\b/,
+  /\bdiffer(?:s|ences?)?\b.*\bfrom\b/,
+  /\bdifference(?:s)?\s+between\b/,
+  /\bcompar(?:e[ds]?|ison)\b/,
+];
+
 const GENERIC_HEADINGS = [
   "table of contents", "bottom line", "frequently asked questions", "faq",
   "how to apply", "how to find", "what is", "what are", "tips for",
@@ -316,13 +324,26 @@ const GENERIC_HEADINGS = [
   "how to write", "what you need", "before you apply", "wrapping up",
   "conclusion", "in summary", "share this", "about the",
   "you may also like", "related posts", "newsletter", "subscribe",
+  // Educational / comparative headings
+  "how grants differ", "how grants work", "how do grants work",
+  "grants vs", "grant vs", "grants versus", "grant versus",
+  "loans vs", "loan vs", "loans versus", "loan versus",
+  "difference between", "differences between",
+  "understanding grants", "understanding small business",
+  "guide to", "a guide to", "your guide to", "complete guide",
+  "what you need to know", "everything you need to know",
+  "overview of", "an overview",
+  "types of grants", "types of small business",
+  "how to choose", "how to decide",
+  "are grants taxable", "do you have to pay",
 ];
 
 function isGenericHeading(text: string): boolean {
   const lower = text.toLowerCase().trim();
   return (
     lower.length < 4 ||
-    GENERIC_HEADINGS.some((g) => lower.startsWith(g) || lower === g)
+    GENERIC_HEADINGS.some((g) => lower.startsWith(g) || lower === g) ||
+    EDUCATIONAL_PATTERNS.some((p) => p.test(lower))
   );
 }
 
@@ -480,12 +501,10 @@ function parseHeadingSections($: CheerioAPI, grants: RawGrant[], siteDomain: str
     }
 
     const lower = description.toLowerCase();
-    const isGrant =
-      lower.includes("$") ||
-      lower.includes("grant") ||
-      lower.includes("award") ||
-      lower.includes("funding") ||
-      lower.includes("apply");
+    const grantSignals = ["$", "grant", "award", "funding", "apply"];
+    const positiveCount = grantSignals.filter((s) => lower.includes(s)).length;
+    const isEducational = EDUCATIONAL_PATTERNS.some((p) => p.test(lower));
+    const isGrant = positiveCount >= 2 && !isEducational;
 
     if (!isGrant) continue;
 
@@ -507,6 +526,12 @@ function hasGrantFields(text: string): boolean {
   for (const f of fields) {
     if (lower.includes(f)) found++;
   }
+
+  // Penalize educational/comparative content
+  if (EDUCATIONAL_PATTERNS.some((p) => p.test(lower))) {
+    found -= 1;
+  }
+
   return found >= 2;
 }
 
