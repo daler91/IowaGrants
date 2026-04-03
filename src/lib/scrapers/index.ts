@@ -12,7 +12,7 @@ import { scrapeArticleGrants } from "./article-grants";
 import { fetchGrantsGovApi } from "./grants-gov-api";
 import { fetchFoundationGrants } from "./foundation-grants";
 import { scrapeIowaLocalGrants } from "./iowa-local-grants";
-import { normalizeTitle, isExcludedByEligibility, validateDeadline } from "./utils";
+import { normalizeTitle, isExcludedByEligibility, isNonGrantProgram, validateDeadline } from "./utils";
 import { categorizeAll } from "@/lib/ai/categorizer";
 import { parsePdfFromUrl } from "@/lib/ai/pdf-parser";
 import { validateGrants } from "@/lib/ai/grant-validator";
@@ -304,8 +304,21 @@ export async function runFullScrape(scrapeRunId?: string): Promise<ScraperResult
     console.log(`[orchestrator] Eligibility filter: ${categorized.length} → ${eligibilityFiltered.length}`);
   }
 
+  // Step 5b2: Filter out non-grant programs (loans, revolving funds, etc.)
+  const nonGrantFiltered = eligibilityFiltered.filter((grant) => {
+    const text = `${grant.title} ${grant.description} ${grant.eligibility || ""}`;
+    if (isNonGrantProgram(text)) {
+      console.log(`[orchestrator] Filtered non-grant program: "${grant.title}"`);
+      return false;
+    }
+    return true;
+  });
+  if (eligibilityFiltered.length !== nonGrantFiltered.length) {
+    console.log(`[orchestrator] Non-grant filter: ${eligibilityFiltered.length} → ${nonGrantFiltered.length}`);
+  }
+
   // Step 5c: AI-powered validation (filters non-real grants and wrong eligibility)
-  const validated = await validateGrants(eligibilityFiltered);
+  const validated = await validateGrants(nonGrantFiltered);
 
   // Step 6 & 7: Upsert all grants and log results
   const totalNew = await upsertAndLog(validated, results);
