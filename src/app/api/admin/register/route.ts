@@ -11,12 +11,12 @@ export async function POST(request: NextRequest) {
   }
 
   const { token, password, name } = body as {
-    token?: string;
-    password?: string;
-    name?: string;
+    token?: unknown;
+    password?: unknown;
+    name?: unknown;
   };
 
-  if (!token || !password) {
+  if (!token || !password || typeof token !== "string" || typeof password !== "string") {
     return NextResponse.json(
       { error: "Token and password are required" },
       { status: 400 },
@@ -64,7 +64,7 @@ export async function POST(request: NextRequest) {
       data: {
         email: invite.email,
         passwordHash,
-        name: name || null,
+        name: typeof name === "string" ? name : null,
         invitedBy: invite.invitedBy,
       },
     }),

@@ -12,10 +12,11 @@ const NAV_LINKS = [
 export default function NavBar() {
   const pathname = usePathname();
   const router = useRouter();
-  const { isAuthenticated, loading } = useAdmin();
+  const { isAuthenticated, loading, clearAdmin } = useAdmin();
 
   const handleLogout = async () => {
     await fetch("/api/auth/logout", { method: "POST" });
+    clearAdmin();
     router.push("/");
     router.refresh();
   };

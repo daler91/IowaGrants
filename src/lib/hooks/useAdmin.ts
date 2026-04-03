@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 
 interface AdminInfo {
   id: string;
@@ -20,5 +20,7 @@ export function useAdmin() {
       .finally(() => setLoading(false));
   }, []);
 
-  return { admin, loading, isAuthenticated: admin !== null };
+  const clearAdmin = useCallback(() => setAdmin(null), []);
+
+  return { admin, loading, isAuthenticated: admin !== null, clearAdmin };
 }

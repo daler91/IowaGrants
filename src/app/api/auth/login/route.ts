@@ -10,8 +10,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
-  const { email, password } = body as { email?: string; password?: string };
-  if (!email || !password) {
+  const { email, password } = body as { email?: unknown; password?: unknown };
+  if (!email || !password || typeof email !== "string" || typeof password !== "string") {
     return NextResponse.json(
       { error: "Email and password are required" },
       { status: 400 },
