@@ -75,6 +75,16 @@ model ScrapeLog {
   completedAt DateTime?
 }
 
+model ScrapeRun {
+  id          String    @id @default(cuid())
+  status      String    @default("running")
+  startedAt   DateTime  @default(now())
+  completedAt DateTime?
+  error       String?
+  grantsFound Int       @default(0)
+  grantsNew   Int       @default(0)
+}
+
 enum GrantType {
   FEDERAL
   STATE

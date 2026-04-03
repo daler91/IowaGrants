@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import localFont from "next/font/local";
-import Link from "next/link";
+import NavBar from "@/components/NavBar";
 import "./globals.css";
 
 const geistSans = localFont({
@@ -29,31 +29,7 @@ export default function RootLayout({
         >
           Skip to main content
         </a>
-        <nav className="bg-white border-b border-[var(--border)] sticky top-0 z-50" aria-label="Main navigation">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex justify-between items-center h-16">
-              <Link href="/" className="flex items-center gap-2">
-                <span className="text-2xl font-bold text-[var(--primary)]">
-                  Iowa Grant Scanner
-                </span>
-              </Link>
-              <div className="flex gap-6">
-                <Link
-                  href="/"
-                  className="text-[var(--muted)] hover:text-[var(--foreground)] font-medium transition-colors"
-                >
-                  Dashboard
-                </Link>
-                <Link
-                  href="/calendar"
-                  className="text-[var(--muted)] hover:text-[var(--foreground)] font-medium transition-colors"
-                >
-                  Deadlines
-                </Link>
-              </div>
-            </div>
-          </div>
-        </nav>
+        <NavBar />
         <main id="main-content" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           {children}
         </main>

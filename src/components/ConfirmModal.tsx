@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useCallback } from "react";
+import { useEffect, useCallback, useRef } from "react";
 
 interface ConfirmModalProps {
   open: boolean;
@@ -21,6 +21,8 @@ export default function ConfirmModal({
   confirmLabel = "Delete",
   loading = false,
 }: Readonly<ConfirmModalProps>) {
+  const cancelRef = useRef<HTMLButtonElement>(null);
+
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
       if (e.key === "Escape" && !loading) onCancel();
@@ -31,6 +33,8 @@ export default function ConfirmModal({
   useEffect(() => {
     if (open) {
       document.addEventListener("keydown", handleKeyDown);
+      // Auto-focus Cancel button when modal opens
+      cancelRef.current?.focus();
       return () => document.removeEventListener("keydown", handleKeyDown);
     }
   }, [open, handleKeyDown]);
@@ -38,19 +42,19 @@ export default function ConfirmModal({
   if (!open) return null;
 
   return (
-    // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions
     <div
+      role="presentation"
       className="fixed inset-0 z-50 flex items-center justify-center"
       onClick={() => { if (!loading) onCancel(); }}
     >
       <div className="absolute inset-0 bg-black/40" />
-      {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */}
       <div
         role="dialog"
         aria-modal="true"
         aria-labelledby="confirm-modal-title"
         className="relative bg-white rounded-lg border border-[var(--border)] p-6 shadow-xl max-w-md w-full mx-4"
         onClick={(e: React.MouseEvent) => e.stopPropagation()}
+        onKeyDown={(e: React.KeyboardEvent) => e.stopPropagation()}
       >
         <h2 id="confirm-modal-title" className="text-lg font-semibold text-[var(--foreground)] mb-2">
           {title}
@@ -58,6 +62,7 @@ export default function ConfirmModal({
         <p className="text-sm text-[var(--muted)] mb-6">{message}</p>
         <div className="flex justify-end gap-3">
           <button
+            ref={cancelRef}
             onClick={onCancel}
             disabled={loading}
             className="px-4 py-2 rounded-lg border border-[var(--border)] text-sm font-medium hover:bg-gray-50 transition-colors disabled:opacity-50"

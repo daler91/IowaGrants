@@ -13,6 +13,7 @@ export default function SearchBar({ value, onChange }: Readonly<SearchBarProps>)
         fill="none"
         stroke="currentColor"
         viewBox="0 0 24 24"
+        aria-hidden="true"
       >
         <path
           strokeLinecap="round"
@@ -25,6 +26,7 @@ export default function SearchBar({ value, onChange }: Readonly<SearchBarProps>)
         type="text"
         value={value}
         onChange={(e) => onChange(e.target.value)}
+        aria-label="Search grants"
         placeholder="Search grants by keyword..."
         className="w-full pl-10 pr-4 py-3 rounded-lg border border-[var(--border)] bg-white focus:outline-none focus:ring-2 focus:ring-[var(--primary-light)] focus:border-transparent text-[var(--foreground)] placeholder:text-[var(--muted)]"
       />
