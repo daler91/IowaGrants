@@ -5,6 +5,8 @@ import type { GrantType } from "@prisma/client";
 import {
   fetchPageDetails,
   isGenericHomepage,
+  isActualGrantPage,
+  parseGrantAmount,
 } from "./utils";
 
 // ---------------------------------------------------------------------------
@@ -35,7 +37,7 @@ const LOCAL_SOURCES: LocalSource[] = [
     grantType: "STATE",
     keywords: [
       "grant", "fund", "financing", "capital", "loan", "incentive",
-      "program", "assist", "award", "resource",
+      "award", "tax credit",
     ],
   },
   {
@@ -47,8 +49,8 @@ const LOCAL_SOURCES: LocalSource[] = [
     ],
     grantType: "STATE",
     keywords: [
-      "grant", "fund", "loan", "credit", "incentive", "program",
-      "assist", "financing", "small business",
+      "grant", "fund", "loan", "credit", "incentive",
+      "financing", "tax credit", "award",
     ],
   },
   {
@@ -59,8 +61,8 @@ const LOCAL_SOURCES: LocalSource[] = [
     ],
     grantType: "LOCAL",
     keywords: [
-      "grant", "fund", "incentive", "financing", "loan", "program",
-      "capital", "small business", "entrepreneur",
+      "grant", "fund", "incentive", "financing", "loan",
+      "capital", "award", "tax credit",
     ],
   },
   {
@@ -72,7 +74,7 @@ const LOCAL_SOURCES: LocalSource[] = [
     grantType: "STATE",
     keywords: [
       "grant", "fund", "incentive", "financing", "loan", "tax credit",
-      "program", "award", "assist",
+      "award", "capital",
     ],
   },
   {
@@ -84,8 +86,8 @@ const LOCAL_SOURCES: LocalSource[] = [
     ],
     grantType: "LOCAL",
     keywords: [
-      "grant", "fund", "incentive", "financing", "loan", "program",
-      "small business", "facade", "revitalization",
+      "grant", "fund", "incentive", "financing", "loan",
+      "facade", "revitalization", "award", "tax credit",
     ],
   },
   {
@@ -96,8 +98,8 @@ const LOCAL_SOURCES: LocalSource[] = [
     ],
     grantType: "LOCAL",
     keywords: [
-      "grant", "fund", "program", "award", "community", "small business",
-      "economic", "development",
+      "grant", "fund", "award", "capital", "incentive",
+      "financing", "tax credit",
     ],
   },
 ];
@@ -113,6 +115,19 @@ const BROWSER_HEADERS = {
     "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
   "Accept-Language": "en-US,en;q=0.9",
 };
+
+// ---------------------------------------------------------------------------
+// Negative keywords — link text matching these is not a grant listing
+// ---------------------------------------------------------------------------
+
+const EXCLUDED_LINK_PATTERNS = [
+  "title guaranty", "title insurance", "about us", "contact us",
+  "contact", "news", "blog", "events", "calendar", "staff",
+  "board of directors", "annual report", "newsletter", "subscribe",
+  "login", "sign in", "careers", "job opening", "employment",
+  "press release", "media", "faq", "privacy policy", "terms of use",
+  "site map", "accessibility",
+];
 
 // ---------------------------------------------------------------------------
 // Scraping logic
@@ -158,6 +173,9 @@ function extractLinks(
     const lower = linkText.toLowerCase();
     const hasKeyword = keywords.some((kw) => lower.includes(kw));
     if (!hasKeyword) return;
+
+    // Reject links matching non-grant patterns
+    if (EXCLUDED_LINK_PATTERNS.some((p) => lower.includes(p))) return;
 
     // Skip generic homepage links
     if (isGenericHomepage(fullUrl)) return;
@@ -211,12 +229,24 @@ async function scrapeSource(source: LocalSource): Promise<GrantData[]> {
     try {
       const details = await fetchPageDetails(link.url);
 
+      // Skip pages that returned null (error/404 pages) or have no content
+      if (!details || !details.description) {
+        console.log(`[iowa-local:${source.sourceName}] Skipped empty/error page: ${link.title}`);
+        continue;
+      }
+
+      // Skip pages that don't look like actual grant listings
+      if (!isActualGrantPage(link.url, link.title, details.description)) {
+        console.log(`[iowa-local:${source.sourceName}] Skipped non-grant page: ${link.title}`);
+        continue;
+      }
+
       const grant: GrantData = {
         title: link.title,
-        description: details?.description || link.title,
+        description: details.description,
         sourceUrl: link.url,
         sourceName: source.sourceName,
-        deadline: details?.deadline,
+        deadline: details.deadline,
         grantType: source.grantType,
         status: "OPEN",
         businessStage: "BOTH",
@@ -228,17 +258,11 @@ async function scrapeSource(source: LocalSource): Promise<GrantData[]> {
       };
 
       // Try to extract dollar amounts from the description
-      const amountMatch = /\$\s*([\d,]+(?:\.\d+)?)\s*(?:(?:to|-|–|—)\s*\$\s*([\d,]+(?:\.\d+)?))?/.exec(
-        grant.description
-      );
-      if (amountMatch) {
-        const min = Number.parseFloat(amountMatch[1].replaceAll(",", ""));
-        const max = amountMatch[2]
-          ? Number.parseFloat(amountMatch[2].replaceAll(",", ""))
-          : min;
-        grant.amountMin = min;
-        grant.amountMax = max;
-        grant.amount = amountMatch[0];
+      const parsedAmount = parseGrantAmount(grant.description);
+      if (parsedAmount) {
+        grant.amountMin = parsedAmount.min;
+        grant.amountMax = parsedAmount.max;
+        grant.amount = parsedAmount.raw;
       }
 
       grants.push(grant);
