@@ -238,20 +238,19 @@ function refineGrantType(searchText: string, current: GrantData["grantType"]): G
 export function categorizeGrant(grant: GrantData): GrantData {
   const searchText = `${grant.title} ${grant.description} ${grant.eligibility || ""}`;
 
-  grant.gender = detectGenderFocus(searchText, grant.gender);
-  grant.businessStage = detectBusinessStage(searchText, grant.businessStage);
-
-  if (grant.eligibleExpenses.length === 0) {
-    grant.eligibleExpenses = findAllMatches(searchText, EXPENSE_KEYWORDS);
-  }
-  if (grant.industries.length === 0) {
-    grant.industries = findAllMatches(searchText, INDUSTRY_KEYWORDS);
-  }
-
-  grant.locations = enrichLocations(searchText, grant.locations);
-  grant.grantType = refineGrantType(searchText, grant.grantType);
-
-  return grant;
+  return {
+    ...grant,
+    gender: detectGenderFocus(searchText, grant.gender),
+    businessStage: detectBusinessStage(searchText, grant.businessStage),
+    eligibleExpenses: grant.eligibleExpenses.length === 0
+      ? findAllMatches(searchText, EXPENSE_KEYWORDS)
+      : grant.eligibleExpenses,
+    industries: grant.industries.length === 0
+      ? findAllMatches(searchText, INDUSTRY_KEYWORDS)
+      : grant.industries,
+    locations: enrichLocations(searchText, grant.locations),
+    grantType: refineGrantType(searchText, grant.grantType),
+  };
 }
 
 export function categorizeAll(grants: GrantData[]): GrantData[] {

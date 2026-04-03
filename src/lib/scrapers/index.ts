@@ -2,7 +2,6 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { fetchSamGov } from "./sam-gov";
 import { scrapeIEDA } from "./ieda-scraper";
-import { fetchShadowAPIs } from "./shadow-api-hunter";
 import { fetchSimplerGrants } from "./simpler-grants";
 import { scrapeUSDA } from "./usda-iowa";
 import { scrapeOpportunityIowa } from "./opportunity-iowa";
@@ -32,13 +31,15 @@ async function ensureEligibleExpenses() {
     { name: "MARKETING_EXPORT", label: "Marketing & Export" },
   ];
 
-  for (const expense of expenses) {
-    await prisma.eligibleExpense.upsert({
-      where: { name: expense.name },
-      update: { label: expense.label },
-      create: expense,
-    });
-  }
+  await Promise.all(
+    expenses.map((expense) =>
+      prisma.eligibleExpense.upsert({
+        where: { name: expense.name },
+        update: { label: expense.label },
+        create: expense,
+      })
+    )
+  );
 }
 
 async function findExistingGrant(grant: GrantData) {
@@ -175,17 +176,17 @@ async function processPdfGrants(
   }
 
   // Also parse PDFs found by scrapers
-  const pdfGrants = allGrants.filter((g) => g.pdfUrl);
-  for (const grant of pdfGrants) {
+  for (let i = 0; i < allGrants.length; i++) {
+    const grant = allGrants[i];
     if (grant.pdfUrl) {
       const parsed = await parsePdfFromUrl(grant.pdfUrl, grant.sourceName);
       if (parsed) {
-        // Merge parsed data back - prefer AI-extracted data
-        Object.assign(grant, {
+        // Replace grant with merged data (prefer AI-extracted, keep original URL/source)
+        allGrants[i] = {
           ...parsed,
-          sourceUrl: grant.sourceUrl, // keep original URL as dedup key
+          sourceUrl: grant.sourceUrl,
           sourceName: grant.sourceName,
-        });
+        };
       }
     }
   }
@@ -196,10 +197,15 @@ async function upsertAndLog(
   results: ScraperResult[],
 ): Promise<number> {
   let totalNew = 0;
+  const newCountBySource: Record<string, number> = {};
+
   for (const grant of allGrants) {
     try {
       const isNew = await upsertGrant(grant);
-      if (isNew) totalNew++;
+      if (isNew) {
+        totalNew++;
+        newCountBySource[grant.sourceName] = (newCountBySource[grant.sourceName] || 0) + 1;
+      }
     } catch (error) {
       console.error(
         `[orchestrator] Error upserting "${grant.title}":`,
@@ -214,7 +220,7 @@ async function upsertAndLog(
         source: result.source,
         status: result.error ? "error" : "success",
         grantsFound: result.grants.length,
-        grantsNew: 0, // tracked at aggregate level
+        grantsNew: newCountBySource[result.source] || 0,
         error: result.error,
         completedAt: new Date(),
       },
@@ -224,7 +230,7 @@ async function upsertAndLog(
   return totalNew;
 }
 
-export async function runFullScrape(): Promise<ScraperResult[]> {
+export async function runFullScrape(scrapeRunId?: string): Promise<ScraperResult[]> {
   console.log("[orchestrator] Starting full scrape...");
   const results: ScraperResult[] = [];
 
@@ -235,10 +241,9 @@ export async function runFullScrape(): Promise<ScraperResult[]> {
   await checkForChanges();
 
   // Step 2: Fetch from all sources in parallel
-  const [samGov, ieda, shadow, simplerGrants, usda, opportunityIowa, iowaGrantsGov, webSearch, airtableGrants, articleGrants, grantsGovApi] = await Promise.allSettled([
+  const [samGov, ieda, simplerGrants, usda, opportunityIowa, iowaGrantsGov, webSearch, airtableGrants, articleGrants, grantsGovApi] = await Promise.allSettled([
     fetchSamGov(),
     scrapeIEDA(),
-    fetchShadowAPIs(),
     fetchSimplerGrants(),
     scrapeUSDA(),
     scrapeOpportunityIowa(),
@@ -252,7 +257,6 @@ export async function runFullScrape(): Promise<ScraperResult[]> {
   const sourceResults: Array<{ name: string; result: PromiseSettledResult<GrantData[]> }> = [
     { name: "sam.gov", result: samGov },
     { name: "ieda", result: ieda },
-    { name: "shadow-api", result: shadow },
     { name: "simpler-grants", result: simplerGrants },
     { name: "usda-rd", result: usda },
     { name: "opportunity-iowa", result: opportunityIowa },
@@ -275,6 +279,14 @@ export async function runFullScrape(): Promise<ScraperResult[]> {
 
   // Step 6 & 7: Upsert all grants and log results
   const totalNew = await upsertAndLog(categorized, results);
+
+  // Update ScrapeRun record with final counts
+  if (scrapeRunId) {
+    await prisma.scrapeRun.update({
+      where: { id: scrapeRunId },
+      data: { grantsNew: totalNew, grantsFound: allGrants.length },
+    });
+  }
 
   console.log(
     `[orchestrator] Done. ${allGrants.length} total grants, ${totalNew} new.`

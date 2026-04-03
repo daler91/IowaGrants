@@ -1,18 +1,6 @@
 import Link from "next/link";
 import type { GrantListItem } from "@/lib/types";
-
-const TYPE_COLORS: Record<string, string> = {
-  FEDERAL: "bg-blue-100 text-blue-800",
-  STATE: "bg-green-100 text-green-800",
-  LOCAL: "bg-orange-100 text-orange-800",
-  PRIVATE: "bg-purple-100 text-purple-800",
-};
-
-const STATUS_COLORS: Record<string, string> = {
-  OPEN: "bg-emerald-100 text-emerald-800",
-  CLOSED: "bg-red-100 text-red-800",
-  FORECASTED: "bg-amber-100 text-amber-800",
-};
+import { TYPE_COLORS, STATUS_COLORS } from "@/lib/constants";
 
 function formatDeadline(deadline: string | null | undefined): string {
   if (!deadline) return "No deadline";
@@ -27,7 +15,6 @@ function formatDeadline(deadline: string | null | undefined): string {
   });
 
   if (diff < 0) return `Closed ${formatted}`;
-  if (diff <= 7) return `${diff}d left - ${formatted}`;
   if (diff <= 30) return `${diff}d left - ${formatted}`;
   return formatted;
 }
@@ -66,6 +53,7 @@ export default function GrantCard({
                 onDelete?.(grant.id, grant.title);
               }}
               className="p-1 rounded hover:bg-red-50 text-gray-400 hover:text-red-600 transition-colors"
+              aria-label={`Delete ${grant.title}`}
               title="Delete grant"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

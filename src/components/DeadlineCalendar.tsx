@@ -109,9 +109,10 @@ export default function DeadlineCalendar() {
         <div className="flex items-center justify-between mb-4">
           <button
             onClick={prevMonth}
+            aria-label="Previous month"
             className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
           >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
           </button>
@@ -120,9 +121,10 @@ export default function DeadlineCalendar() {
           </h2>
           <button
             onClick={nextMonth}
+            aria-label="Next month"
             className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
           >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
             </svg>
           </button>
@@ -181,6 +183,8 @@ export default function DeadlineCalendar() {
                       isSelected ? null : cell.dateStr
                     )
                   }
+                  aria-label={`${MONTH_NAMES[month - 1]} ${cell.day}${hasGrants ? `, ${dayGrants.length} grant deadline${dayGrants.length > 1 ? "s" : ""}` : ""}${isToday ? " (today)" : ""}`}
+                  aria-pressed={isSelected}
                   className={`h-20 rounded-lg p-1.5 text-left transition-all border ${getCellBorderClass(isSelected, isUrgent, isToday, hasGrants)}`}
                 >
                   <span

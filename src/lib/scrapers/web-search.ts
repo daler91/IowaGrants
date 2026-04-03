@@ -3,12 +3,13 @@ import * as cheerio from "cheerio";
 import type { GrantData } from "@/lib/types";
 import { extractDeadline, isExcludedByStateRestriction, detectLocationScope, isGenericHomepage, cleanHtmlToText } from "./utils";
 
+const currentYear = new Date().getFullYear();
 const SEARCH_QUERIES = [
-  "Iowa small business grants 2026",
+  `Iowa small business grants ${currentYear}`,
   "Iowa women veteran minority business grants",
   "Iowa startup rural small business grants",
   "Des Moines Cedar Rapids small business grants",
-  "nationwide small business grants 2026",
+  `nationwide small business grants ${currentYear}`,
   "small business grants for women entrepreneurs",
 ];
 

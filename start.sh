@@ -11,9 +11,13 @@ else
   echo "[start] DATABASE_URL is set (length: ${#DATABASE_URL})"
 fi
 
-# Run migrations with timeout (30s) - don't fail if it errors
+# Run migrations - fail fast if migrations fail to prevent inconsistent state
 echo "[start] Running Prisma migrations..."
-npx prisma migrate deploy 2>&1 || echo "[start] Migration failed, continuing anyway..."
+npx prisma migrate deploy 2>&1
+if [ $? -ne 0 ]; then
+  echo "[start] ERROR: Migration failed. Aborting startup."
+  exit 1
+fi
 
 # Copy static files for standalone mode
 echo "[start] Setting up standalone static files..."

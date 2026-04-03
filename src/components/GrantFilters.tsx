@@ -59,12 +59,14 @@ function FilterSelect({
   value: string;
   onChange: (value: string) => void;
 }>) {
+  const selectId = `filter-${label.toLowerCase().replace(/\s+/g, "-")}`;
   return (
     <div>
-      <label className="block text-sm font-medium text-[var(--muted)] mb-1">
+      <label htmlFor={selectId} className="block text-sm font-medium text-[var(--muted)] mb-1">
         {label}
       </label>
       <select
+        id={selectId}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         className="w-full px-3 py-2 rounded-lg border border-[var(--border)] bg-white text-[var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[var(--primary-light)] text-sm"

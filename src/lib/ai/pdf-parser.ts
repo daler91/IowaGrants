@@ -40,6 +40,40 @@ interface ParsedGrant {
   categories: string[];
 }
 
+function mapParsedToGrantData(
+  parsed: ParsedGrant,
+  sourceUrl: string,
+  sourceName: string,
+  pdfUrl?: string
+): GrantData {
+  return {
+    title: parsed.title,
+    description: parsed.description,
+    sourceUrl,
+    sourceName,
+    amount:
+      parsed.amountMin || parsed.amountMax
+        ? `$${(parsed.amountMin || 0).toLocaleString()} - $${(parsed.amountMax || 0).toLocaleString()}`
+        : undefined,
+    amountMin: parsed.amountMin || undefined,
+    amountMax: parsed.amountMax || undefined,
+    deadline: parsed.deadline ? new Date(parsed.deadline) : undefined,
+    eligibility: parsed.eligibility || undefined,
+    grantType: (parsed.grantType as GrantData["grantType"]) || "STATE",
+    status: "OPEN",
+    businessStage:
+      (parsed.businessStage as GrantData["businessStage"]) || "BOTH",
+    gender: (parsed.gender as GrantData["gender"]) || "ANY",
+    locations:
+      parsed.locations.length > 0 ? parsed.locations : ["Iowa"],
+    industries: parsed.industries,
+    pdfUrl,
+    rawData: parsed as unknown as Record<string, unknown>,
+    categories: parsed.categories,
+    eligibleExpenses: parsed.eligibleExpenses,
+  };
+}
+
 export async function parsePdfFromUrl(
   pdfUrl: string,
   sourceName: string
@@ -93,33 +127,7 @@ export async function parsePdfFromUrl(
     }
 
     const parsed: ParsedGrant = JSON.parse(textContent.text);
-
-    const grant: GrantData = {
-      title: parsed.title,
-      description: parsed.description,
-      sourceUrl: pdfUrl,
-      sourceName,
-      amount:
-        parsed.amountMin || parsed.amountMax
-          ? `$${(parsed.amountMin || 0).toLocaleString()} - $${(parsed.amountMax || 0).toLocaleString()}`
-          : undefined,
-      amountMin: parsed.amountMin || undefined,
-      amountMax: parsed.amountMax || undefined,
-      deadline: parsed.deadline ? new Date(parsed.deadline) : undefined,
-      eligibility: parsed.eligibility || undefined,
-      grantType: (parsed.grantType as GrantData["grantType"]) || "STATE",
-      status: "OPEN",
-      businessStage:
-        (parsed.businessStage as GrantData["businessStage"]) || "BOTH",
-      gender: (parsed.gender as GrantData["gender"]) || "ANY",
-      locations:
-        parsed.locations.length > 0 ? parsed.locations : ["Iowa"],
-      industries: parsed.industries,
-      pdfUrl,
-      rawData: parsed as unknown as Record<string, unknown>,
-      categories: parsed.categories,
-      eligibleExpenses: parsed.eligibleExpenses,
-    };
+    const grant = mapParsedToGrantData(parsed, pdfUrl, sourceName, pdfUrl);
 
     console.log(`[pdf-parser] Successfully parsed: ${grant.title}`);
     return grant;
@@ -158,32 +166,7 @@ export async function parseTextWithAI(
     if (textContent?.type !== "text") return null;
 
     const parsed: ParsedGrant = JSON.parse(textContent.text);
-
-    return {
-      title: parsed.title,
-      description: parsed.description,
-      sourceUrl,
-      sourceName,
-      amount:
-        parsed.amountMin || parsed.amountMax
-          ? `$${(parsed.amountMin || 0).toLocaleString()} - $${(parsed.amountMax || 0).toLocaleString()}`
-          : undefined,
-      amountMin: parsed.amountMin || undefined,
-      amountMax: parsed.amountMax || undefined,
-      deadline: parsed.deadline ? new Date(parsed.deadline) : undefined,
-      eligibility: parsed.eligibility || undefined,
-      grantType: (parsed.grantType as GrantData["grantType"]) || "STATE",
-      status: "OPEN",
-      businessStage:
-        (parsed.businessStage as GrantData["businessStage"]) || "BOTH",
-      gender: (parsed.gender as GrantData["gender"]) || "ANY",
-      locations:
-        parsed.locations.length > 0 ? parsed.locations : ["Iowa"],
-      industries: parsed.industries,
-      rawData: parsed as unknown as Record<string, unknown>,
-      categories: parsed.categories,
-      eligibleExpenses: parsed.eligibleExpenses,
-    };
+    return mapParsedToGrantData(parsed, sourceUrl, sourceName);
   } catch (error) {
     console.error(
       `[pdf-parser] Error parsing text from ${sourceUrl}:`,
