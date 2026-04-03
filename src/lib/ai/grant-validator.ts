@@ -144,12 +144,17 @@ export async function validateGrants(grants: GrantData[]): Promise<GrantData[]> 
       const entry = batch[result.index];
       if (!entry) continue;
 
-      // If content_type is missing or unexpected, fall back to is_real_grant (fail-open)
-      const isGrantType = !result.content_type || result.content_type === "grant_application";
+      // Fail-open: only reject on known non-grant content types. If content_type
+      // is missing, unexpected, or unrecognized, defer to is_real_grant instead
+      // of silently filtering on model format drift.
+      const KNOWN_NON_GRANT_TYPES = new Set([
+        "awardee_announcement", "news_article", "info_page", "expired_program", "other",
+      ]);
+      const isNonGrantType = KNOWN_NON_GRANT_TYPES.has(result.content_type);
       if (
         result.is_real_grant &&
         result.small_biz_eligible &&
-        isGrantType &&
+        !isNonGrantType &&
         result.confidence !== "LOW"
       ) {
         validated.push(entry.grant);
