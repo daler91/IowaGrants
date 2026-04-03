@@ -322,4 +322,13 @@ describe("isNonApplicationContent", () => {
     );
     expect(result.excluded).toBe(true);
   });
+
+  it("does NOT filter closed programs that mention an upcoming application cycle", () => {
+    const result = isNonApplicationContent(
+      "Downtown Improvement Grant",
+      "Applications closed for 2025 cycle. The next cycle opens May 2026. Apply now for the upcoming round. Eligibility requirements remain the same.",
+      "https://example.com/grants/downtown"
+    );
+    expect(result.excluded).toBe(false);
+  });
 });

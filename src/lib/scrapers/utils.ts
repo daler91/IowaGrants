@@ -485,12 +485,25 @@ export function isGenericHomepage(url: string): boolean {
 }
 
 // Patterns that indicate an application opportunity is present
-const APPLICATION_SIGNALS = [
-  "apply", "application", "how to apply", "apply now", "submit your",
-  "eligibility requirements", "eligible applicants", "who can apply",
-  "application deadline", "apply by", "applications due",
-  "request for proposals", "request for applications", "rfp", "rfa",
-  "notice of funding", "nofo",
+// Patterns that indicate an OPEN application opportunity — these must be specific
+// enough to not match closed-program language (e.g., "applications closed" should
+// NOT trigger "application" as a signal)
+const APPLICATION_SIGNAL_PATTERNS = [
+  /\bapply\s+(?:now|here|today|online|at)\b/i,
+  /\bhow\s+to\s+apply\b/i,
+  /\bsubmit\s+your\b/i,
+  /\beligibility\s+requirements\b/i,
+  /\beligible\s+applicants\b/i,
+  /\bwho\s+can\s+apply\b/i,
+  /\bapplication\s+deadline\b/i,
+  /\bapply\s+by\b/i,
+  /\bapplications?\s+due\b/i,
+  /\bapplications?\s+(?:are\s+)?(?:now\s+)?(?:open|being\s+accepted|accepted)\b/i,
+  /\brequest\s+for\s+(?:proposals|applications)\b/i,
+  /\b(?:rfp|rfa|nofo)\b/i,
+  /\bnotice\s+of\s+funding\b/i,
+  /\bnext\s+cycle\s+opens?\b/i,
+  /\bupcoming\s+(?:round|cycle|deadline)\b/i,
 ];
 
 // Patterns that indicate awardee/recipient announcements (past awards, not open applications)
@@ -554,10 +567,13 @@ export function isNonApplicationContent(
   const text = `${title} ${description}`;
   const lower = text.toLowerCase();
 
-  // Check for closed/expired programs (high confidence, no counter-check needed)
-  for (const pattern of CLOSED_PROGRAM_PATTERNS) {
-    if (pattern.test(text)) {
-      return { excluded: true, reason: `Closed/expired program: ${pattern.source}` };
+  // Check for closed/expired programs — but only if there are no signals
+  // for an open/upcoming application cycle (e.g., "closed for 2025" + "next cycle opens May 2026")
+  const hasClosedLanguage = CLOSED_PROGRAM_PATTERNS.some((p) => p.test(text));
+  if (hasClosedLanguage) {
+    const hasApplicationSignal = APPLICATION_SIGNAL_PATTERNS.some((p) => p.test(text));
+    if (!hasApplicationSignal) {
+      return { excluded: true, reason: "Closed/expired program without open application signals" };
     }
   }
 
@@ -566,7 +582,7 @@ export function isNonApplicationContent(
   if (hasAwardeeLanguage) {
     // Only exclude if there are NO application signals — some grant pages
     // mention past recipients as examples while also accepting applications
-    const hasApplicationSignal = APPLICATION_SIGNALS.some((s) => lower.includes(s));
+    const hasApplicationSignal = APPLICATION_SIGNAL_PATTERNS.some((p) => p.test(text));
     if (!hasApplicationSignal) {
       return { excluded: true, reason: "Awardee/recipient announcement without application info" };
     }
@@ -578,7 +594,7 @@ export function isNonApplicationContent(
   if (isNewsUrl) {
     const hasPressLanguage = PRESS_RELEASE_PATTERNS.some((p) => p.test(text));
     if (hasPressLanguage) {
-      const hasApplicationSignal = APPLICATION_SIGNALS.some((s) => lower.includes(s));
+      const hasApplicationSignal = APPLICATION_SIGNAL_PATTERNS.some((p) => p.test(text));
       if (!hasApplicationSignal) {
         return { excluded: true, reason: "Press release/news article about past funding" };
       }

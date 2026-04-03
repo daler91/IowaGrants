@@ -144,10 +144,12 @@ export async function validateGrants(grants: GrantData[]): Promise<GrantData[]> 
       const entry = batch[result.index];
       if (!entry) continue;
 
+      // If content_type is missing or unexpected, fall back to is_real_grant (fail-open)
+      const isGrantType = !result.content_type || result.content_type === "grant_application";
       if (
         result.is_real_grant &&
         result.small_biz_eligible &&
-        result.content_type === "grant_application" &&
+        isGrantType &&
         result.confidence !== "LOW"
       ) {
         validated.push(entry.grant);
