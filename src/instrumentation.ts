@@ -31,6 +31,9 @@ async function seedAdmin() {
       await prisma.$disconnect();
     }
   } catch (error) {
+    // Rethrow to fail startup — a silently broken admin seed leaves
+    // the app running without login capability and no retry path.
     console.error("[seed] Failed to seed admin:", error instanceof Error ? error.message : error);
+    throw error;
   }
 }
