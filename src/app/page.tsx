@@ -6,6 +6,7 @@ import SearchBar from "@/components/SearchBar";
 import GrantFilters from "@/components/GrantFilters";
 import GrantList from "@/components/GrantList";
 import ConfirmModal from "@/components/ConfirmModal";
+import { useAdmin } from "@/lib/hooks/useAdmin";
 import type { GrantFilters as FilterType, GrantListItem, PaginatedResponse } from "@/lib/types";
 
 function parseFiltersFromParams(params: URLSearchParams): { filters: FilterType; search: string } {
@@ -54,6 +55,7 @@ function DashboardSkeleton() {
 function Dashboard() {
   const searchParams = useSearchParams();
   const router = useRouter();
+  const { isAuthenticated } = useAdmin();
   const initial = parseFiltersFromParams(searchParams);
   const [filters, setFilters] = useState<FilterType>(initial.filters);
   const [search, setSearch] = useState(initial.search);
@@ -228,12 +230,12 @@ function Dashboard() {
             totalPages={totalPages}
             onPageChange={(page: number) => setFilters((f: FilterType) => ({ ...f, page }))}
             loading={loading}
-            selectable={selectable}
-            selectedIds={selectedIds}
-            onSelectionChange={setSelectedIds}
-            onDeleteSelected={handleDeleteSelected}
-            onDeleteSingle={handleDeleteSingle}
-            onToggleSelectable={handleToggleSelectable}
+            selectable={isAuthenticated ? selectable : false}
+            selectedIds={isAuthenticated ? selectedIds : undefined}
+            onSelectionChange={isAuthenticated ? setSelectedIds : undefined}
+            onDeleteSelected={isAuthenticated ? handleDeleteSelected : undefined}
+            onDeleteSingle={isAuthenticated ? handleDeleteSingle : undefined}
+            onToggleSelectable={isAuthenticated ? handleToggleSelectable : undefined}
           />
         </div>
       </div>

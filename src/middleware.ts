@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 // In-memory rate limiter. Sufficient for single-instance Railway deployment.
 // Resets on deploy/restart. Does not work across multiple instances.
 const RATE_LIMITS: Record<string, { windowMs: number; max: number }> = {
+  "/api/auth": { windowMs: 60_000, max: 10 },
   "/api/scraper": { windowMs: 60_000, max: 5 },
   "/api/grants": { windowMs: 60_000, max: 60 },
 };
@@ -59,5 +60,5 @@ export function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/api/scraper/:path*", "/api/grants/:path*"],
+  matcher: ["/api/auth/:path*", "/api/scraper/:path*", "/api/grants/:path*"],
 };

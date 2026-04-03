@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { Prisma } from "@prisma/client";
+import { requireAdmin } from "@/lib/auth";
 
 const VALID_GRANT_TYPES = ["FEDERAL", "STATE", "LOCAL", "PRIVATE"];
 const VALID_GENDER_FOCUS = ["WOMEN", "VETERAN", "MINORITY", "GENERAL", "ANY"];
@@ -113,6 +114,9 @@ export async function GET(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
+  const admin = await requireAdmin(request);
+  if (admin instanceof NextResponse) return admin;
+
   let body: unknown;
   try {
     body = await request.json();

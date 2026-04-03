@@ -205,11 +205,16 @@ async function processPdfGrants(
 async function upsertAndLog(
   allGrants: GrantData[],
   results: ScraperResult[],
+  blacklistedUrls: Set<string>,
 ): Promise<number> {
   let totalNew = 0;
   const newCountBySource: Record<string, number> = {};
 
   for (const grant of allGrants) {
+    if (blacklistedUrls.has(grant.sourceUrl)) {
+      console.log(`[orchestrator] Skipping blacklisted URL: ${grant.sourceUrl}`);
+      continue;
+    }
     try {
       const isNew = await upsertGrant(grant);
       if (isNew) {
@@ -327,8 +332,16 @@ export async function runFullScrape(scrapeRunId?: string): Promise<ScraperResult
   // Step 5c: AI-powered validation (filters non-real grants and wrong eligibility)
   const validated = await validateGrants(nonGrantFiltered);
 
-  // Step 6 & 7: Upsert all grants and log results
-  const totalNew = await upsertAndLog(validated, results);
+  // Step 6: Load blacklisted URLs
+  const blacklistedUrls = new Set(
+    (await prisma.blacklistedUrl.findMany({ select: { url: true } })).map((b) => b.url),
+  );
+  if (blacklistedUrls.size > 0) {
+    console.log(`[orchestrator] Loaded ${blacklistedUrls.size} blacklisted URLs`);
+  }
+
+  // Step 7: Upsert all grants and log results
+  const totalNew = await upsertAndLog(validated, results, blacklistedUrls);
 
   // Update ScrapeRun record with final counts
   if (scrapeRunId) {

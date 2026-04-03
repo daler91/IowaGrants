@@ -15,4 +15,7 @@ export const env = {
   get CRON_SECRET() {
     return requireEnv("CRON_SECRET");
   },
+  get JWT_SECRET() {
+    return requireEnv("JWT_SECRET");
+  },
 } as const;
