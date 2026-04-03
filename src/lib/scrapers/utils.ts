@@ -60,7 +60,7 @@ export function extractDeadline(html: string): Date | undefined {
       const dateMatch = fmt.exec(after);
       if (dateMatch?.[1]) {
         const parsed = new Date(dateMatch[1]);
-        if (!Number.isNaN(parsed.getTime()) && parsed.getFullYear() >= 2024) {
+        if (!Number.isNaN(parsed.getTime()) && parsed.getFullYear() >= new Date().getFullYear() - 1) {
           return parsed;
         }
       }

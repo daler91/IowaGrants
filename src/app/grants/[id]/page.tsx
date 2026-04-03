@@ -1,19 +1,10 @@
 import { prisma } from "@/lib/db";
 import { notFound } from "next/navigation";
 import Link from "next/link";
+import { TYPE_COLORS, STATUS_COLORS } from "@/lib/constants";
 
-const TYPE_COLORS: Record<string, string> = {
-  FEDERAL: "bg-blue-100 text-blue-800",
-  STATE: "bg-green-100 text-green-800",
-  LOCAL: "bg-orange-100 text-orange-800",
-  PRIVATE: "bg-purple-100 text-purple-800",
-};
-
-const STATUS_COLORS: Record<string, string> = {
-  OPEN: "bg-emerald-100 text-emerald-800",
-  CLOSED: "bg-red-100 text-red-800",
-  FORECASTED: "bg-amber-100 text-amber-800",
-};
+// Revalidate cached page every 5 minutes
+export const revalidate = 300;
 
 export default async function GrantDetailPage({
   params,

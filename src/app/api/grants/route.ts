@@ -94,13 +94,15 @@ export async function GET(request: NextRequest) {
       prisma.grant.count({ where }),
     ]);
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       data: grants,
       total,
       page,
       limit,
       totalPages: Math.ceil(total / limit),
     });
+    response.headers.set("Cache-Control", "public, s-maxage=60, stale-while-revalidate=300");
+    return response;
   } catch (error) {
     console.error("Failed to fetch grants:", error);
     return NextResponse.json(
@@ -111,13 +113,6 @@ export async function GET(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
-  const authHeader = request.headers.get("authorization");
-  const cronSecret = process.env.CRON_SECRET;
-
-  if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
   let body: unknown;
   try {
     body = await request.json();

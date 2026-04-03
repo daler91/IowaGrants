@@ -32,13 +32,15 @@ async function ensureEligibleExpenses() {
     { name: "MARKETING_EXPORT", label: "Marketing & Export" },
   ];
 
-  for (const expense of expenses) {
-    await prisma.eligibleExpense.upsert({
-      where: { name: expense.name },
-      update: { label: expense.label },
-      create: expense,
-    });
-  }
+  await Promise.all(
+    expenses.map((expense) =>
+      prisma.eligibleExpense.upsert({
+        where: { name: expense.name },
+        update: { label: expense.label },
+        create: expense,
+      })
+    )
+  );
 }
 
 async function findExistingGrant(grant: GrantData) {
@@ -175,17 +177,17 @@ async function processPdfGrants(
   }
 
   // Also parse PDFs found by scrapers
-  const pdfGrants = allGrants.filter((g) => g.pdfUrl);
-  for (const grant of pdfGrants) {
+  for (let i = 0; i < allGrants.length; i++) {
+    const grant = allGrants[i];
     if (grant.pdfUrl) {
       const parsed = await parsePdfFromUrl(grant.pdfUrl, grant.sourceName);
       if (parsed) {
-        // Merge parsed data back - prefer AI-extracted data
-        Object.assign(grant, {
+        // Replace grant with merged data (prefer AI-extracted, keep original URL/source)
+        allGrants[i] = {
           ...parsed,
-          sourceUrl: grant.sourceUrl, // keep original URL as dedup key
+          sourceUrl: grant.sourceUrl,
           sourceName: grant.sourceName,
-        });
+        };
       }
     }
   }
@@ -196,10 +198,15 @@ async function upsertAndLog(
   results: ScraperResult[],
 ): Promise<number> {
   let totalNew = 0;
+  const newCountBySource: Record<string, number> = {};
+
   for (const grant of allGrants) {
     try {
       const isNew = await upsertGrant(grant);
-      if (isNew) totalNew++;
+      if (isNew) {
+        totalNew++;
+        newCountBySource[grant.sourceName] = (newCountBySource[grant.sourceName] || 0) + 1;
+      }
     } catch (error) {
       console.error(
         `[orchestrator] Error upserting "${grant.title}":`,
@@ -214,7 +221,7 @@ async function upsertAndLog(
         source: result.source,
         status: result.error ? "error" : "success",
         grantsFound: result.grants.length,
-        grantsNew: 0, // tracked at aggregate level
+        grantsNew: newCountBySource[result.source] || 0,
         error: result.error,
         completedAt: new Date(),
       },

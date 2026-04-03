@@ -1,15 +1,62 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { Suspense, useState, useEffect, useCallback } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
 import SearchBar from "@/components/SearchBar";
 import GrantFilters from "@/components/GrantFilters";
 import GrantList from "@/components/GrantList";
 import ConfirmModal from "@/components/ConfirmModal";
 import type { GrantFilters as FilterType, GrantListItem, PaginatedResponse } from "@/lib/types";
 
-export default function Dashboard() {
-  const [filters, setFilters] = useState<FilterType>({ page: 1, limit: 20 });
-  const [search, setSearch] = useState("");
+function parseFiltersFromParams(params: URLSearchParams): { filters: FilterType; search: string } {
+  return {
+    search: params.get("search") || "",
+    filters: {
+      grantType: (params.get("grantType") as FilterType["grantType"]) || undefined,
+      gender: (params.get("gender") as FilterType["gender"]) || undefined,
+      businessStage: (params.get("businessStage") as FilterType["businessStage"]) || undefined,
+      status: (params.get("status") as FilterType["status"]) || undefined,
+      eligibleExpense: params.get("eligibleExpense") || undefined,
+      location: params.get("location") || undefined,
+      page: Number.parseInt(params.get("page") || "1") || 1,
+      limit: 20,
+    },
+  };
+}
+
+export default function DashboardPage() {
+  return (
+    <Suspense fallback={<DashboardSkeleton />}>
+      <Dashboard />
+    </Suspense>
+  );
+}
+
+function DashboardSkeleton() {
+  return (
+    <div>
+      <div className="mb-8">
+        <div className="h-9 w-72 bg-gray-200 rounded animate-pulse mb-2" />
+        <div className="h-5 w-96 bg-gray-200 rounded animate-pulse" />
+      </div>
+      <div className="mb-6">
+        <div className="h-12 bg-gray-200 rounded-lg animate-pulse" />
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {Array.from({ length: 4 }, (_, i) => (
+          <div key={i} className="bg-white rounded-lg border border-[var(--border)] p-5 animate-pulse h-48" />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function Dashboard() {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const initial = parseFiltersFromParams(searchParams);
+  const [filters, setFilters] = useState<FilterType>(initial.filters);
+  const [search, setSearch] = useState(initial.search);
   const [grants, setGrants] = useState<GrantListItem[]>([]);
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
@@ -56,6 +103,22 @@ export default function Dashboard() {
       setLoading(false);
     }
   }, [search, filters]);
+
+  // Sync filters to URL search params
+  useEffect(() => {
+    const params = new URLSearchParams();
+    if (search) params.set("search", search);
+    if (filters.grantType) params.set("grantType", filters.grantType);
+    if (filters.gender) params.set("gender", filters.gender);
+    if (filters.businessStage) params.set("businessStage", filters.businessStage);
+    if (filters.status) params.set("status", filters.status);
+    if (filters.eligibleExpense) params.set("eligibleExpense", filters.eligibleExpense);
+    if (filters.location) params.set("location", filters.location);
+    if (filters.page && filters.page > 1) params.set("page", filters.page.toString());
+    const paramStr = params.toString();
+    const newUrl = paramStr ? `?${paramStr}` : "/";
+    router.replace(newUrl, { scroll: false });
+  }, [search, filters, router]);
 
   useEffect(() => {
     const debounce = setTimeout(fetchGrants, 300);

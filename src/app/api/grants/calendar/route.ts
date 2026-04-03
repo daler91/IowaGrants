@@ -46,7 +46,9 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    return NextResponse.json({ year, month, grants: grouped });
+    const response = NextResponse.json({ year, month, grants: grouped });
+    response.headers.set("Cache-Control", "public, s-maxage=60, stale-while-revalidate=300");
+    return response;
   } catch (error) {
     console.error("Failed to fetch calendar grants:", error);
     return NextResponse.json(
