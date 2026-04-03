@@ -205,6 +205,75 @@ export function detectLocationScope(text: string): string[] {
 }
 
 /**
+ * Returns true if the text indicates a grant is restricted to entity types
+ * that are NOT small businesses (e.g., nonprofits only, government agencies only).
+ */
+export function isExcludedByEligibility(text: string): boolean {
+  const lower = text.toLowerCase();
+
+  const NON_SMALL_BIZ_PATTERNS = [
+    "nonprofits only",
+    "nonprofit organizations only",
+    "non-profit organizations only",
+    "501(c)(3) only",
+    "501(c)(3) organizations only",
+    "501c3 only",
+    "tax-exempt organizations only",
+    "tax-exempt only",
+    "government agencies only",
+    "state agencies only",
+    "federal agencies only",
+    "municipalities only",
+    "municipal governments only",
+    "tribal governments only",
+    "tribal nations only",
+    "universities only",
+    "colleges only",
+    "educational institutions only",
+    "academic institutions only",
+    "hospitals only",
+    "health departments only",
+    "public health agencies only",
+    "must be a nonprofit",
+    "must be a 501(c)",
+    "must be a non-profit",
+    "applicant must be a nonprofit",
+    "applicants must be nonprofit",
+    "limited to nonprofit",
+    "limited to non-profit",
+    "limited to government",
+    "restricted to nonprofit",
+    "restricted to non-profit",
+    "restricted to government",
+    "open to nonprofits only",
+    "open to non-profits only",
+    "available to nonprofits only",
+    "eligible applicants include state",
+    "eligible applicants include tribal",
+    "only open to 501(c)",
+    "only available to nonprofit",
+    "not available to for-profit",
+    "not eligible for for-profit",
+    "for-profit businesses are not eligible",
+    "for-profit organizations are not eligible",
+    "ineligible.*for-profit",
+  ];
+
+  // Check direct string patterns
+  for (const pattern of NON_SMALL_BIZ_PATTERNS) {
+    if (pattern.includes("*")) {
+      // Treat as simple regex
+      const regex = new RegExp(pattern.replaceAll("*", ".*"), "i");
+      if (regex.test(lower)) return true;
+    } else if (lower.includes(pattern)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+/**
  * Check if a scraped URL/page represents an actual grant program
  * rather than a generic landing/category page.
  */

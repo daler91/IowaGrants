@@ -10,9 +10,12 @@ import { searchWebForGrants } from "./web-search";
 import { fetchAirtableGrants } from "./airtable-grants";
 import { scrapeArticleGrants } from "./article-grants";
 import { fetchGrantsGovApi } from "./grants-gov-api";
-import { normalizeTitle } from "./utils";
+import { fetchFoundationGrants } from "./foundation-grants";
+import { scrapeIowaLocalGrants } from "./iowa-local-grants";
+import { normalizeTitle, isExcludedByEligibility } from "./utils";
 import { categorizeAll } from "@/lib/ai/categorizer";
 import { parsePdfFromUrl } from "@/lib/ai/pdf-parser";
+import { validateGrants } from "@/lib/ai/grant-validator";
 import {
   checkForChanges,
   getUrlsNeedingReparse,
@@ -241,7 +244,7 @@ export async function runFullScrape(scrapeRunId?: string): Promise<ScraperResult
   await checkForChanges();
 
   // Step 2: Fetch from all sources in parallel
-  const [samGov, ieda, simplerGrants, usda, opportunityIowa, iowaGrantsGov, webSearch, airtableGrants, articleGrants, grantsGovApi] = await Promise.allSettled([
+  const [samGov, ieda, simplerGrants, usda, opportunityIowa, iowaGrantsGov, webSearch, airtableGrants, articleGrants, grantsGovApi, foundationGrants, iowaLocalGrants] = await Promise.allSettled([
     fetchSamGov(),
     scrapeIEDA(),
     fetchSimplerGrants(),
@@ -252,6 +255,8 @@ export async function runFullScrape(scrapeRunId?: string): Promise<ScraperResult
     fetchAirtableGrants(),
     scrapeArticleGrants(),
     fetchGrantsGovApi(),
+    fetchFoundationGrants(),
+    scrapeIowaLocalGrants(),
   ]);
 
   const sourceResults: Array<{ name: string; result: PromiseSettledResult<GrantData[]> }> = [
@@ -265,6 +270,8 @@ export async function runFullScrape(scrapeRunId?: string): Promise<ScraperResult
     { name: "airtable-grants", result: airtableGrants },
     { name: "article-grants", result: articleGrants },
     { name: "grants-gov-api", result: grantsGovApi },
+    { name: "foundation-grants", result: foundationGrants },
+    { name: "iowa-local", result: iowaLocalGrants },
   ];
 
   // Step 2b: Collect results from all sources
@@ -277,8 +284,24 @@ export async function runFullScrape(scrapeRunId?: string): Promise<ScraperResult
   // Step 5: Run categorizer on all grants
   const categorized = categorizeAll(allGrants);
 
+  // Step 5b: Filter out grants with non-small-business eligibility
+  const eligibilityFiltered = categorized.filter((grant) => {
+    const text = `${grant.title} ${grant.description} ${grant.eligibility || ""}`;
+    if (isExcludedByEligibility(text)) {
+      console.log(`[orchestrator] Filtered by eligibility: "${grant.title}" (not for small businesses)`);
+      return false;
+    }
+    return true;
+  });
+  if (categorized.length !== eligibilityFiltered.length) {
+    console.log(`[orchestrator] Eligibility filter: ${categorized.length} → ${eligibilityFiltered.length}`);
+  }
+
+  // Step 5c: AI-powered validation (filters non-real grants and wrong eligibility)
+  const validated = await validateGrants(eligibilityFiltered);
+
   // Step 6 & 7: Upsert all grants and log results
-  const totalNew = await upsertAndLog(categorized, results);
+  const totalNew = await upsertAndLog(validated, results);
 
   // Update ScrapeRun record with final counts
   if (scrapeRunId) {
