@@ -111,3 +111,31 @@ enum BusinessStage {
   EXISTING
   BOTH
 }
+
+model AdminUser {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  name         String?
+  invitedBy    String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model AdminInvite {
+  id        String    @id @default(cuid())
+  email     String
+  token     String    @unique
+  invitedBy String
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+}
+
+model BlacklistedUrl {
+  id            String   @id @default(cuid())
+  url           String   @unique
+  reason        String?
+  blacklistedBy String
+  createdAt     DateTime @default(now())
+}
