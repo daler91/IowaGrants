@@ -32,6 +32,10 @@ model Grant {
 
   categories       Category[]      @relation("GrantCategories")
   eligibleExpenses EligibleExpense[] @relation("GrantExpenses")
+
+  @@index([deadline])
+  @@index([status])
+  @@index([grantType])
 }
 
 model Category {

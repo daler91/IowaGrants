@@ -1,24 +1,10 @@
 "use client";
 
 import GrantCard from "./GrantCard";
-
-interface Grant {
-  id: string;
-  title: string;
-  description: string;
-  sourceName: string;
-  grantType: string;
-  status: string;
-  gender: string;
-  businessStage: string;
-  amount?: string | null;
-  deadline?: string | null;
-  locations: string[];
-  eligibleExpenses: { name: string; label: string }[];
-}
+import type { GrantListItem } from "@/lib/types";
 
 interface GrantListProps {
-  grants: Grant[];
+  grants: GrantListItem[];
   total: number;
   page: number;
   totalPages: number;
@@ -100,6 +86,7 @@ export default function GrantList({
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
+          aria-hidden="true"
         >
           <path
             strokeLinecap="round"
@@ -139,6 +126,7 @@ export default function GrantList({
                   type="checkbox"
                   checked={allOnPageSelected}
                   onChange={handleSelectAll}
+                  aria-label="Select all grants on this page"
                   className="w-4 h-4 rounded border-gray-300 text-blue-600"
                 />{" "}
                 <span>Select all</span>

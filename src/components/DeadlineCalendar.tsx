@@ -41,18 +41,23 @@ export default function DeadlineCalendar() {
   const [grants, setGrants] = useState<Record<string, CalendarGrant[]>>({});
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     async function fetchCalendar() {
       setLoading(true);
+      setError(null);
       try {
         const res = await fetch(
           `/api/grants/calendar?year=${year}&month=${month}`
         );
+        if (!res.ok) throw new Error("Failed to load calendar data");
         const data = await res.json();
         setGrants(data.grants || {});
       } catch (error) {
         console.error("Failed to fetch calendar:", error);
+        setError("Failed to load calendar data. Please try again.");
+        setGrants({});
       } finally {
         setLoading(false);
       }
@@ -136,7 +141,11 @@ export default function DeadlineCalendar() {
         </div>
 
         {/* Calendar grid */}
-        {loading ? (
+        {error ? (
+          <div className="text-center py-12 text-sm text-red-600 bg-red-50 rounded-lg border border-red-200">
+            {error}
+          </div>
+        ) : loading ? (
           <div className="grid grid-cols-7 gap-1">
             {Array.from({ length: 35 }, (_, i) => `skeleton-${i}`).map((key) => (
               <div

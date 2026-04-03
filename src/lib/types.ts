@@ -27,6 +27,21 @@ export interface GrantData {
   eligibleExpenses: string[];
 }
 
+export interface GrantListItem {
+  id: string;
+  title: string;
+  description: string;
+  sourceName: string;
+  grantType: string;
+  status: string;
+  gender: string;
+  businessStage: string;
+  amount?: string | null;
+  deadline?: string | null;
+  locations: string[];
+  eligibleExpenses: { name: string; label: string }[];
+}
+
 export interface GrantFilters {
   search?: string;
   grantType?: GrantType;

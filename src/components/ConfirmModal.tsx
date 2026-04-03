@@ -38,21 +38,21 @@ export default function ConfirmModal({
   if (!open) return null;
 
   return (
+    // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions
     <div
-      role="button"
-      tabIndex={-1}
       className="fixed inset-0 z-50 flex items-center justify-center"
       onClick={() => { if (!loading) onCancel(); }}
-      onKeyDown={(e: React.KeyboardEvent) => { if ((e.key === "Enter" || e.key === " ") && !loading) onCancel(); }}
     >
       <div className="absolute inset-0 bg-black/40" />
+      {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */}
       <div
         role="dialog"
+        aria-modal="true"
+        aria-labelledby="confirm-modal-title"
         className="relative bg-white rounded-lg border border-[var(--border)] p-6 shadow-xl max-w-md w-full mx-4"
         onClick={(e: React.MouseEvent) => e.stopPropagation()}
-        onKeyDown={(e: React.KeyboardEvent) => e.stopPropagation()}
       >
-        <h2 className="text-lg font-semibold text-[var(--foreground)] mb-2">
+        <h2 id="confirm-modal-title" className="text-lg font-semibold text-[var(--foreground)] mb-2">
           {title}
         </h2>
         <p className="text-sm text-[var(--muted)] mb-6">{message}</p>

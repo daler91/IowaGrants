@@ -5,35 +5,12 @@ import SearchBar from "@/components/SearchBar";
 import GrantFilters from "@/components/GrantFilters";
 import GrantList from "@/components/GrantList";
 import ConfirmModal from "@/components/ConfirmModal";
-import type { GrantFilters as FilterType } from "@/lib/types";
-
-interface Grant {
-  id: string;
-  title: string;
-  description: string;
-  sourceName: string;
-  grantType: string;
-  status: string;
-  gender: string;
-  businessStage: string;
-  amount?: string | null;
-  deadline?: string | null;
-  locations: string[];
-  eligibleExpenses: { name: string; label: string }[];
-}
-
-interface ApiResponse {
-  data: Grant[];
-  total: number;
-  page: number;
-  limit: number;
-  totalPages: number;
-}
+import type { GrantFilters as FilterType, GrantListItem, PaginatedResponse } from "@/lib/types";
 
 export default function Dashboard() {
   const [filters, setFilters] = useState<FilterType>({ page: 1, limit: 20 });
   const [search, setSearch] = useState("");
-  const [grants, setGrants] = useState<Grant[]>([]);
+  const [grants, setGrants] = useState<GrantListItem[]>([]);
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -46,9 +23,11 @@ export default function Dashboard() {
     label: string;
   } | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const fetchGrants = useCallback(async () => {
     setLoading(true);
+    setError(null);
     const params = new URLSearchParams();
 
     if (search) params.set("search", search);
@@ -65,12 +44,14 @@ export default function Dashboard() {
 
     try {
       const res = await fetch(`/api/grants?${params.toString()}`);
-      const data: ApiResponse = await res.json();
+      if (!res.ok) throw new Error("Failed to load grants");
+      const data: PaginatedResponse<GrantListItem> = await res.json();
       setGrants(data.data);
       setTotal(data.total);
       setTotalPages(data.totalPages);
     } catch (error) {
       console.error("Failed to fetch grants:", error);
+      setError("Failed to load grants. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -128,7 +109,7 @@ export default function Dashboard() {
       params.set("page", "1");
       params.set("limit", (filters.limit || 20).toString());
       const countRes = await fetch(`/api/grants?${params.toString()}`);
-      const countData: ApiResponse = await countRes.json();
+      const countData: PaginatedResponse<GrantListItem> = await countRes.json();
       const currentPage = filters.page || 1;
       if (currentPage > countData.totalPages && countData.totalPages > 0) {
         setFilters((f: FilterType) => ({ ...f, page: countData.totalPages }));
@@ -137,6 +118,7 @@ export default function Dashboard() {
       }
     } catch (error) {
       console.error("Failed to delete grants:", error);
+      setError("Failed to delete grants. Please try again.");
     } finally {
       setDeleting(false);
     }
@@ -157,6 +139,18 @@ export default function Dashboard() {
       <div className="mb-6">
         <SearchBar value={search} onChange={setSearch} />
       </div>
+
+      {error && (
+        <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700 flex items-center justify-between">
+          <span>{error}</span>
+          <button
+            onClick={() => setError(null)}
+            className="ml-2 text-red-500 hover:text-red-700"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
 
       <div className="flex flex-col lg:flex-row gap-6">
         <aside className="w-full lg:w-64 flex-shrink-0">
