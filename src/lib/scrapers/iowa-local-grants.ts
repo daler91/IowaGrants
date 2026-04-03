@@ -43,7 +43,7 @@ const LOCAL_SOURCES: LocalSource[] = [
     sourceName: "iowa-finance-authority",
     urls: [
       "https://www.iowafinance.com/",
-      "https://www.iowafinance.com/programs-and-services/",
+      "https://www.iowafinance.com/programs/",
     ],
     grantType: "STATE",
     keywords: [
@@ -67,7 +67,7 @@ const LOCAL_SOURCES: LocalSource[] = [
     name: "Iowa Area Development Group",
     sourceName: "iadg",
     urls: [
-      "https://www.iadg.com/iowa-advantages/incentives-financing/",
+      "https://www.iadg.com/iowa-advantages/",
     ],
     grantType: "STATE",
     keywords: [
@@ -79,8 +79,8 @@ const LOCAL_SOURCES: LocalSource[] = [
     name: "Cedar Rapids Economic Development",
     sourceName: "cedar-rapids-econ",
     urls: [
-      "https://www.cedarrapids.org/do-business",
-      "https://www.cedarrapids.org/do-business/incentives-and-financing",
+      "https://www.cedarrapids.org/business",
+      "https://www.cedarrapids.org/business/incentives-and-financing",
     ],
     grantType: "LOCAL",
     keywords: [

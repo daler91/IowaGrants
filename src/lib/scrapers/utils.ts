@@ -60,7 +60,7 @@ export function extractDeadline(html: string): Date | undefined {
       const dateMatch = fmt.exec(after);
       if (dateMatch?.[1]) {
         const parsed = new Date(dateMatch[1]);
-        if (!Number.isNaN(parsed.getTime()) && parsed.getFullYear() >= new Date().getFullYear() - 1) {
+        if (!Number.isNaN(parsed.getTime()) && parsed.getFullYear() >= new Date().getFullYear() - 1 && parsed.getFullYear() <= new Date().getFullYear() + 10) {
           return parsed;
         }
       }
@@ -68,6 +68,18 @@ export function extractDeadline(html: string): Date | undefined {
   }
 
   return undefined;
+}
+
+/**
+ * Validate a deadline date — returns undefined if the date is invalid or has
+ * an unreasonable year (e.g. year 50315 from bad scraper data).
+ */
+export function validateDeadline(date: Date | undefined): Date | undefined {
+  if (!date || Number.isNaN(date.getTime())) return undefined;
+  const year = date.getFullYear();
+  const currentYear = new Date().getFullYear();
+  if (year < currentYear - 1 || year > currentYear + 10) return undefined;
+  return date;
 }
 
 /**

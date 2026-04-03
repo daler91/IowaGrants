@@ -1,6 +1,6 @@
 import axios from "axios";
 import type { GrantData } from "@/lib/types";
-import { isExcludedByStateRestriction } from "./utils";
+import { isExcludedByStateRestriction, validateDeadline } from "./utils";
 
 const SAM_GOV_API = "https://api.sam.gov/prod/opportunities/v2/search";
 
@@ -33,7 +33,7 @@ interface SamGovResponse {
 
 function mapToGrantData(opp: SamGovOpportunity): GrantData {
   const deadline = opp.responseDeadLine
-    ? new Date(opp.responseDeadLine)
+    ? validateDeadline(new Date(opp.responseDeadLine))
     : undefined;
   const isOpen =
     !deadline || deadline > new Date() ? "OPEN" : ("CLOSED" as const);
