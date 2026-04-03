@@ -483,3 +483,123 @@ export function isGenericHomepage(url: string): boolean {
     return false;
   }
 }
+
+// Patterns that indicate an application opportunity is present
+// Patterns that indicate an OPEN application opportunity — these must be specific
+// enough to not match closed-program language (e.g., "applications closed" should
+// NOT trigger "application" as a signal)
+const APPLICATION_SIGNAL_PATTERNS = [
+  /\bapply\s+(?:now|here|today|online|at)\b/i,
+  /\bhow\s+to\s+apply\b/i,
+  /\bsubmit\s+your\b/i,
+  /\beligibility\s+requirements\b/i,
+  /\beligible\s+applicants\b/i,
+  /\bwho\s+can\s+apply\b/i,
+  /\bapplication\s+deadline\b/i,
+  /\bapply\s+by\b/i,
+  /\bapplications?\s+due\b/i,
+  /\bapplications?\s+(?:are\s+)?(?:now\s+)?(?:open|being\s+accepted|accepted)\b/i,
+  /\brequest\s+for\s+(?:proposals|applications)\b/i,
+  /\b(?:rfp|rfa|nofo)\b/i,
+  /\bnotice\s+of\s+funding\b/i,
+  /\bnext\s+cycle\s+opens?\b/i,
+  /\bupcoming\s+(?:round|cycle|deadline)\b/i,
+];
+
+// Patterns that indicate awardee/recipient announcements (past awards, not open applications)
+const AWARDEE_PATTERNS = [
+  /\breceives?\s+(?:\$[\d,]+\s+)?grants?\b/i,
+  /\breceived\s+(?:\$[\d,]+\s+)?(?:in\s+)?(?:grant|funding)\b/i,
+  /\bawarded\s+(?:\$[\d,]+\s+)?(?:in\s+)?grants?\b/i,
+  /\bgrants?\s+awarded\s+to\b/i,
+  /\bgrant\s+recipients?\b/i,
+  /\bgrant\s+awardees?\b/i,
+  /\bselected\s+to\s+receive\b/i,
+  /\bchosen\s+to\s+receive\b/i,
+  /\bannounces?\s+grant\s+(?:winners?|recipients?)\b/i,
+  /\bgrants?\s+distributed\s+to\b/i,
+  /\breceived\s+funding\s+from\b/i,
+  /\bawarded\s+funding\b/i,
+];
+
+// Patterns that indicate press releases or news about past funding
+const PRESS_RELEASE_PATTERNS = [
+  /\bannounced\s+(?:today|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/i,
+  /\bpress\s+release\b/i,
+  /\bnews\s+release\b/i,
+  /\bhas\s+funded\b/i,
+  /\bwere\s+awarded\b/i,
+  /\bdistributed\s+\$[\d,]+/i,
+  /\bhas\s+awarded\b/i,
+  /\bhas\s+distributed\b/i,
+];
+
+// URL path segments that suggest news/press content
+const NEWS_URL_SEGMENTS = [
+  "/press-release", "/press-releases", "/pressrelease",
+  "/newsroom", "/news-room", "/media-center",
+  "/news/", "/blog/",
+];
+
+// Patterns that indicate a closed or expired program
+const CLOSED_PROGRAM_PATTERNS = [
+  /\bapplications?\s+(?:are\s+)?closed\b/i,
+  /\bno\s+longer\s+accepting\b/i,
+  /\bprogram\s+has\s+ended\b/i,
+  /\bfunding\s+(?:has\s+been\s+)?exhausted\b/i,
+  /\ball\s+funds\s+have\s+been\b/i,
+  /\bprogram\s+is\s+closed\b/i,
+  /\bdeadline\s+has\s+passed\b/i,
+  /\bapplications?\s+are\s+no\s+longer\b/i,
+  /\bthis\s+grant\s+(?:program\s+)?is\s+no\s+longer\b/i,
+];
+
+/**
+ * Returns true if the content looks grant-related but is NOT an open application.
+ * Catches awardee announcements, press releases about past funding, and closed programs.
+ * Designed to be conservative — only excludes when confidence is high.
+ */
+export function isNonApplicationContent(
+  title: string,
+  description: string,
+  url: string,
+): { excluded: boolean; reason: string } {
+  const text = `${title} ${description}`;
+  const lower = text.toLowerCase();
+
+  // Check for closed/expired programs — but only if there are no signals
+  // for an open/upcoming application cycle (e.g., "closed for 2025" + "next cycle opens May 2026")
+  const hasClosedLanguage = CLOSED_PROGRAM_PATTERNS.some((p) => p.test(text));
+  if (hasClosedLanguage) {
+    const hasApplicationSignal = APPLICATION_SIGNAL_PATTERNS.some((p) => p.test(text));
+    if (!hasApplicationSignal) {
+      return { excluded: true, reason: "Closed/expired program without open application signals" };
+    }
+  }
+
+  // Check for awardee/recipient announcements
+  const hasAwardeeLanguage = AWARDEE_PATTERNS.some((p) => p.test(text));
+  if (hasAwardeeLanguage) {
+    // Only exclude if there are NO application signals — some grant pages
+    // mention past recipients as examples while also accepting applications
+    const hasApplicationSignal = APPLICATION_SIGNAL_PATTERNS.some((p) => p.test(text));
+    if (!hasApplicationSignal) {
+      return { excluded: true, reason: "Awardee/recipient announcement without application info" };
+    }
+  }
+
+  // Check for press release / news URL paths
+  const lowerUrl = url.toLowerCase();
+  const isNewsUrl = NEWS_URL_SEGMENTS.some((seg) => lowerUrl.includes(seg));
+  if (isNewsUrl) {
+    const hasPressLanguage = PRESS_RELEASE_PATTERNS.some((p) => p.test(text));
+    if (hasPressLanguage) {
+      const hasApplicationSignal = APPLICATION_SIGNAL_PATTERNS.some((p) => p.test(text));
+      if (!hasApplicationSignal) {
+        return { excluded: true, reason: "Press release/news article about past funding" };
+      }
+    }
+  }
+
+  return { excluded: false, reason: "" };
+}

@@ -3,36 +3,11 @@ import type { GrantData } from "@/lib/types";
 
 const anthropic = new Anthropic();
 
-// Sources that are already verified and don't need AI validation
-const HIGH_TRUST_SOURCES = new Set([
-  "sam.gov",
-  "simpler-grants",
-  "grants-gov-api",
-  "usda-rd",
-  "ieda",
-  "opportunity-iowa",
-  "iowa-grants-gov",
-  "airtable-grants",
-  // Foundation grants are curated by us
-  "amber-grant",
-  "hello-alice",
-  "fedex-grant",
-  "nase",
-  "nav-grant",
-  "cartier-women",
-  "ifundwomen",
-  "visa-initiative",
-  "walmart-spark",
-  "eileen-fisher",
-  "streetshares",
-  "nbmbaa-pitch",
-  // Iowa local scrapers are validated by AI since they can produce non-grant content
-]);
-
 interface ValidationResult {
   index: number;
   is_real_grant: boolean;
   small_biz_eligible: boolean;
+  content_type: "grant_application" | "awardee_announcement" | "news_article" | "info_page" | "expired_program" | "other";
   confidence: "HIGH" | "MEDIUM" | "LOW";
   reason: string;
 }
@@ -40,18 +15,34 @@ interface ValidationResult {
 const VALIDATION_PROMPT = `You are evaluating scraped grant listings to determine if they are real, active grant programs for small businesses.
 
 For each grant below, determine:
-1. is_real_grant: Is this an actual grant program that awards money? Answer false if it's:
-   - An article, blog post, guide, advertisement, listicle, or news story
-   - A general info/resource page with no specific grant or funding opportunity
-   - A landing page, homepage, or category page
-   - A title/mortgage insurance product or commercial service
-   - A page with 404 errors, broken content, or no meaningful information
-   - A competition, incubator, or accelerator that doesn't directly award grant funds
-2. small_biz_eligible: Can small for-profit businesses apply? Answer false if it's exclusively for nonprofits, government agencies, universities, hospitals, K-12 schools, tribal governments, or other non-business entities.
-3. confidence: How confident are you? HIGH = clearly real grant or clearly not. MEDIUM = likely but some ambiguity. LOW = very uncertain.
-4. reason: Brief (1 sentence) explanation of your decision.
+1. content_type: Classify the content as one of:
+   - "grant_application": An actual grant program with an open or upcoming application process
+   - "awardee_announcement": A news story or press release about grants that were ALREADY awarded to specific recipients
+   - "news_article": A general news article, blog post, guide, listicle, or advertisement about grants
+   - "info_page": A general info/resource page, landing page, homepage, or category page with no specific grant
+   - "expired_program": A grant program that is closed, expired, or no longer accepting applications
+   - "other": Anything else that is not a grant application (commercial service, mortgage product, competition without direct funding, etc.)
 
-Return a JSON array of objects with: {index, is_real_grant, small_biz_eligible, confidence, reason}
+2. is_real_grant: Is this an actual grant program with an open or upcoming application? Answer true ONLY for content_type "grant_application". Answer false for ALL other content types, including:
+   - Articles, blog posts, guides, advertisements, listicles, or news stories
+   - Press releases or news announcements about grants that were already awarded
+   - Awardee/recipient announcements (e.g., "30 farmers received funding from the Choose Iowa program") — these describe past awards, not open applications
+   - General info/resource pages with no specific grant or funding opportunity
+   - Landing pages, homepages, or category pages
+   - Title/mortgage insurance products or commercial services
+   - Pages with 404 errors, broken content, or no meaningful information
+   - Competitions, incubators, or accelerators that don't directly award grant funds
+   - Closed or expired grant programs with no upcoming cycle
+
+   KEY DISTINCTION: A page about a grant program is only valid if it describes how to APPLY for funding. Pages that report on who RECEIVED funding (awardee lists, press releases about grant distribution, news about recipients) are NOT valid — they describe completed awards, not open opportunities.
+
+3. small_biz_eligible: Can small for-profit businesses apply? Answer false if it's exclusively for nonprofits, government agencies, universities, hospitals, K-12 schools, tribal governments, or other non-business entities.
+
+4. confidence: How confident are you? HIGH = clearly real grant or clearly not. MEDIUM = likely but some ambiguity. LOW = very uncertain.
+
+5. reason: Brief (1 sentence) explanation of your decision.
+
+Return a JSON array of objects with: {index, content_type, is_real_grant, small_biz_eligible, confidence, reason}
 Return ONLY valid JSON, no markdown code fences.`;
 
 function buildGrantSnippet(grant: GrantData, index: number): string {
@@ -61,7 +52,7 @@ function buildGrantSnippet(grant: GrantData, index: number): string {
     `URL: ${grant.sourceUrl}`,
   ];
   if (grant.description) {
-    parts.push(`Description: ${grant.description.slice(0, 300)}`);
+    parts.push(`Description: ${grant.description.slice(0, 500)}`);
   }
   if (grant.eligibility) {
     parts.push(`Eligibility: ${grant.eligibility.slice(0, 200)}`);
@@ -109,6 +100,7 @@ async function validateBatch(
       index: i,
       is_real_grant: true,
       small_biz_eligible: true,
+      content_type: "grant_application" as const,
       confidence: "MEDIUM" as const,
       reason: "Validation failed, assuming valid",
     }));
@@ -119,8 +111,8 @@ async function validateBatch(
  * Validate scraped grants using AI to filter out non-real grants and
  * grants that aren't eligible for small businesses.
  *
- * Only validates grants from low-trust sources (web search, articles).
- * High-trust sources (federal APIs, curated lists) are passed through.
+ * ALL grants are validated — heuristic pre-filters in the orchestrator
+ * reduce volume before grants reach this step.
  */
 export async function validateGrants(grants: GrantData[]): Promise<GrantData[]> {
   if (!process.env.ANTHROPIC_API_KEY) {
@@ -128,55 +120,54 @@ export async function validateGrants(grants: GrantData[]): Promise<GrantData[]> 
     return grants;
   }
 
-  const trusted: GrantData[] = [];
-  const toValidate: Array<{ grant: GrantData; originalIndex: number }> = [];
-
-  for (let i = 0; i < grants.length; i++) {
-    if (HIGH_TRUST_SOURCES.has(grants[i].sourceName)) {
-      trusted.push(grants[i]);
-    } else {
-      toValidate.push({ grant: grants[i], originalIndex: i });
-    }
-  }
-
-  if (toValidate.length === 0) {
-    console.log("[grant-validator] All grants from high-trust sources, skipping validation");
+  if (grants.length === 0) {
     return grants;
   }
 
   console.log(
-    `[grant-validator] Validating ${toValidate.length} grants from low-trust sources (${trusted.length} trusted, skipped)`
+    `[grant-validator] Validating ${grants.length} grants with AI`
   );
 
   // Process in batches of 10
   const BATCH_SIZE = 10;
-  const validated: GrantData[] = [...trusted];
+  const validated: GrantData[] = [];
   let filtered = 0;
 
-  for (let i = 0; i < toValidate.length; i += BATCH_SIZE) {
-    const batch = toValidate.slice(i, i + BATCH_SIZE);
+  for (let i = 0; i < grants.length; i += BATCH_SIZE) {
+    const batch = grants.slice(i, i + BATCH_SIZE).map((grant, idx) => ({
+      grant,
+      originalIndex: i + idx,
+    }));
     const results = await validateBatch(batch);
 
     for (const result of results) {
       const entry = batch[result.index];
       if (!entry) continue;
 
+      // Fail-open: only reject on known non-grant content types. If content_type
+      // is missing, unexpected, or unrecognized, defer to is_real_grant instead
+      // of silently filtering on model format drift.
+      const KNOWN_NON_GRANT_TYPES = new Set([
+        "awardee_announcement", "news_article", "info_page", "expired_program", "other",
+      ]);
+      const isNonGrantType = KNOWN_NON_GRANT_TYPES.has(result.content_type);
       if (
         result.is_real_grant &&
         result.small_biz_eligible &&
+        !isNonGrantType &&
         result.confidence !== "LOW"
       ) {
         validated.push(entry.grant);
       } else {
         filtered++;
         console.log(
-          `[grant-validator] Filtered: "${entry.grant.title}" — ${result.reason} (real=${result.is_real_grant}, eligible=${result.small_biz_eligible}, confidence=${result.confidence})`
+          `[grant-validator] Filtered: "${entry.grant.title}" — ${result.reason} (type=${result.content_type}, real=${result.is_real_grant}, eligible=${result.small_biz_eligible}, confidence=${result.confidence})`
         );
       }
     }
 
     // Brief delay between API calls
-    if (i + BATCH_SIZE < toValidate.length) {
+    if (i + BATCH_SIZE < grants.length) {
       await new Promise((r) => setTimeout(r, 500));
     }
   }

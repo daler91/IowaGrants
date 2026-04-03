@@ -8,6 +8,7 @@ import {
   isActualGrantPage,
   isGenericHomepage,
   isNonGrantProgram,
+  isNonApplicationContent,
 } from "../utils";
 
 describe("normalizeTitle", () => {
@@ -234,5 +235,100 @@ describe("isNonGrantProgram", () => {
   it("is case-insensitive", () => {
     expect(isNonGrantProgram("STATE REVOLVING FUND")).toBe(true);
     expect(isNonGrantProgram("Loan Program for Agriculture")).toBe(true);
+  });
+});
+
+describe("isNonApplicationContent", () => {
+  it("filters awardee announcements without application info", () => {
+    const result = isNonApplicationContent(
+      "Iowa farms, businesses receive Choose Iowa grants",
+      "DES MOINES, Iowa (IOWA CAPITAL DISPATCH) – Iowa Secretary of Agriculture Mike Naig announced Monday that 30 farmers, small businesses and organizations across the state received funding from the Choose Iowa-Value Added Grants Program administered by the Iowa Department of Agriculture and Land Stewardship.",
+      "https://iowacapitaldispatch.com/2026/03/31/iowa-farms-businesses-receive-choose-iowa-grants/"
+    );
+    expect(result.excluded).toBe(true);
+    expect(result.reason).toContain("Awardee");
+  });
+
+  it("filters grants awarded to recipients", () => {
+    const result = isNonApplicationContent(
+      "City announces grant winners for downtown revitalization",
+      "The city has awarded $500,000 in grants to 15 local businesses for downtown improvements. Recipients were selected from a pool of 50 applicants.",
+      "https://example.com/news/grant-winners"
+    );
+    expect(result.excluded).toBe(true);
+  });
+
+  it("filters press releases about past funding", () => {
+    const result = isNonApplicationContent(
+      "USDA announces $10 million in rural development grants",
+      "USDA announced today that $10 million has been distributed to rural communities across Iowa. The funding was awarded to 25 organizations.",
+      "https://usda.gov/press-releases/rural-grants-2026"
+    );
+    expect(result.excluded).toBe(true);
+    expect(result.reason).toContain("Press release");
+  });
+
+  it("filters closed/expired programs", () => {
+    const result = isNonApplicationContent(
+      "Small Business Innovation Grant",
+      "This grant program has ended. Applications are no longer being accepted. Thank you for your interest.",
+      "https://example.com/grants/innovation"
+    );
+    expect(result.excluded).toBe(true);
+    expect(result.reason).toContain("Closed");
+  });
+
+  it("does NOT filter legitimate grant applications", () => {
+    const result = isNonApplicationContent(
+      "Small Business Innovation Research (SBIR) Grant",
+      "The SBIR program provides funding to small businesses to engage in R&D. Eligible applicants may apply for up to $250,000. Application deadline is June 30, 2026.",
+      "https://example.com/grants/sbir-2026"
+    );
+    expect(result.excluded).toBe(false);
+  });
+
+  it("does NOT filter grants that mention past recipients AND have application info", () => {
+    const result = isNonApplicationContent(
+      "Amber Grant for Women",
+      "The Amber Grant awards $10,000 monthly to women-owned businesses. Past recipients include XYZ Corp who received grant funding in 2025. Apply now for the next cycle. Application deadline is the last day of each month.",
+      "https://ambergrant.com/apply"
+    );
+    expect(result.excluded).toBe(false);
+  });
+
+  it("does NOT filter grants from federal API sources", () => {
+    const result = isNonApplicationContent(
+      "Community Development Block Grant",
+      "This funding opportunity provides grants to communities for economic development.",
+      "https://sam.gov/opportunities/12345"
+    );
+    expect(result.excluded).toBe(false);
+  });
+
+  it("filters 'applications closed' content", () => {
+    const result = isNonApplicationContent(
+      "Downtown Improvement Grant",
+      "Applications are closed for the 2026 cycle. All funds have been allocated.",
+      "https://example.com/grants/downtown"
+    );
+    expect(result.excluded).toBe(true);
+  });
+
+  it("filters content with 'no longer accepting' language", () => {
+    const result = isNonApplicationContent(
+      "Equipment Purchase Grant",
+      "We are no longer accepting applications for this program.",
+      "https://example.com/grants/equipment"
+    );
+    expect(result.excluded).toBe(true);
+  });
+
+  it("does NOT filter closed programs that mention an upcoming application cycle", () => {
+    const result = isNonApplicationContent(
+      "Downtown Improvement Grant",
+      "Applications closed for 2025 cycle. The next cycle opens May 2026. Apply now for the upcoming round. Eligibility requirements remain the same.",
+      "https://example.com/grants/downtown"
+    );
+    expect(result.excluded).toBe(false);
   });
 });

@@ -12,7 +12,7 @@ import { scrapeArticleGrants } from "./article-grants";
 import { fetchGrantsGovApi } from "./grants-gov-api";
 import { fetchFoundationGrants } from "./foundation-grants";
 import { scrapeIowaLocalGrants } from "./iowa-local-grants";
-import { normalizeTitle, isExcludedByEligibility, isNonGrantProgram, validateDeadline, cleanHtmlToText } from "./utils";
+import { normalizeTitle, isExcludedByEligibility, isNonGrantProgram, isNonApplicationContent, validateDeadline, cleanHtmlToText } from "./utils";
 import { categorizeAll } from "@/lib/ai/categorizer";
 import { parsePdfFromUrl } from "@/lib/ai/pdf-parser";
 import { validateGrants } from "@/lib/ai/grant-validator";
@@ -329,8 +329,21 @@ export async function runFullScrape(scrapeRunId?: string): Promise<ScraperResult
     console.log(`[orchestrator] Non-grant filter: ${eligibilityFiltered.length} → ${nonGrantFiltered.length}`);
   }
 
-  // Step 5c: AI-powered validation (filters non-real grants and wrong eligibility)
-  const validated = await validateGrants(nonGrantFiltered);
+  // Step 5b3: Filter out non-application content (awardee announcements, press releases, closed programs)
+  const applicationFiltered = nonGrantFiltered.filter((grant) => {
+    const result = isNonApplicationContent(grant.title, grant.description, grant.sourceUrl);
+    if (result.excluded) {
+      console.log(`[orchestrator] Filtered non-application content: "${grant.title}" — ${result.reason}`);
+      return false;
+    }
+    return true;
+  });
+  if (nonGrantFiltered.length !== applicationFiltered.length) {
+    console.log(`[orchestrator] Non-application filter: ${nonGrantFiltered.length} → ${applicationFiltered.length}`);
+  }
+
+  // Step 5c: AI-powered validation for ALL grants (filters non-real grants and wrong eligibility)
+  const validated = await validateGrants(applicationFiltered);
 
   // Step 6: Load blacklisted URLs
   const blacklistedUrls = new Set(
