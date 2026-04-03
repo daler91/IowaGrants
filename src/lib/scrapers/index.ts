@@ -12,7 +12,7 @@ import { scrapeArticleGrants } from "./article-grants";
 import { fetchGrantsGovApi } from "./grants-gov-api";
 import { fetchFoundationGrants } from "./foundation-grants";
 import { scrapeIowaLocalGrants } from "./iowa-local-grants";
-import { normalizeTitle, isExcludedByEligibility, isNonGrantProgram, validateDeadline } from "./utils";
+import { normalizeTitle, isExcludedByEligibility, isNonGrantProgram, validateDeadline, cleanHtmlToText } from "./utils";
 import { categorizeAll } from "@/lib/ai/categorizer";
 import { parsePdfFromUrl } from "@/lib/ai/pdf-parser";
 import { validateGrants } from "@/lib/ai/grant-validator";
@@ -283,6 +283,13 @@ export async function runFullScrape(scrapeRunId?: string): Promise<ScraperResult
 
   // Step 2b: Collect results from all sources
   const allGrants = collectSourceResults(sourceResults, results);
+
+  // Step 2c: Sanitize descriptions that contain HTML artifacts
+  for (const grant of allGrants) {
+    if (/<[a-z][\s\S]*>/i.test(grant.description)) {
+      grant.description = cleanHtmlToText(grant.description);
+    }
+  }
 
   // Step 3 & 4: Parse PDFs (reparsing + scraper-found)
   const urlsToReparse = await getUrlsNeedingReparse();

@@ -26,13 +26,7 @@ const HIGH_TRUST_SOURCES = new Set([
   "eileen-fisher",
   "streetshares",
   "nbmbaa-pitch",
-  // Iowa local scrapers are trusted state/local sources
-  "iowa-sbdc",
-  "iowa-finance-authority",
-  "dsm-partnership",
-  "iadg",
-  "cedar-rapids-econ",
-  "cfgdm",
+  // Iowa local scrapers are validated by AI since they can produce non-grant content
 ]);
 
 interface ValidationResult {
@@ -46,7 +40,13 @@ interface ValidationResult {
 const VALIDATION_PROMPT = `You are evaluating scraped grant listings to determine if they are real, active grant programs for small businesses.
 
 For each grant below, determine:
-1. is_real_grant: Is this an actual grant program that awards money? Answer false if it's an article, blog post, guide, advertisement, listicle, general info page, news story, or landing page with no specific grant.
+1. is_real_grant: Is this an actual grant program that awards money? Answer false if it's:
+   - An article, blog post, guide, advertisement, listicle, or news story
+   - A general info/resource page with no specific grant or funding opportunity
+   - A landing page, homepage, or category page
+   - A title/mortgage insurance product or commercial service
+   - A page with 404 errors, broken content, or no meaningful information
+   - A competition, incubator, or accelerator that doesn't directly award grant funds
 2. small_biz_eligible: Can small for-profit businesses apply? Answer false if it's exclusively for nonprofits, government agencies, universities, hospitals, K-12 schools, tribal governments, or other non-business entities.
 3. confidence: How confident are you? HIGH = clearly real grant or clearly not. MEDIUM = likely but some ambiguity. LOW = very uncertain.
 4. reason: Brief (1 sentence) explanation of your decision.

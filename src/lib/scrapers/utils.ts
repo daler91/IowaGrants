@@ -112,20 +112,23 @@ export async function fetchPageDetails(
 
     const $ = cheerio.load(response.data);
 
-    // Remove nav, footer, scripts
-    $("nav, footer, script, style, header").remove();
-
-    const bodyText = $("main, article, .content, .entry-content, body")
+    // Extract the main content area HTML and clean it properly
+    const contentHtml = $("main, article, .content, .entry-content, body")
       .first()
-      .text()
-      .replaceAll(/\s+/g, " ")
-      .trim()
-      .slice(0, 1000);
+      .html() || "";
+
+    const description = cleanHtmlToText(contentHtml, 1000);
+
+    // Reject error/404 pages
+    if (isErrorPage(description)) {
+      console.log(`[fetchPageDetails] Skipping error page: ${url}`);
+      return null;
+    }
 
     const deadline = extractDeadline(response.data);
 
     return {
-      description: bodyText || "",
+      description: description || "",
       deadline,
     };
   } catch {
@@ -362,6 +365,92 @@ export function isActualGrantPage(url: string, title: string, pageText: string):
   ];
 
   return grantSignals.some((pattern) => pattern.test(lower));
+}
+
+/**
+ * Returns true if the page text looks like an error page (404, 500, etc.)
+ * or contains too little content to be a real grant listing.
+ */
+export function isErrorPage(text: string): boolean {
+  const lower = text.toLowerCase();
+
+  const ERROR_PATTERNS = [
+    "page not found",
+    "404 error",
+    "404 not found",
+    "we couldn't find that page",
+    "this page doesn't exist",
+    "this page is no longer available",
+    "no longer available",
+    "page has been removed",
+    "page has moved",
+    "page may have been moved",
+    "500 internal server error",
+    "internal server error",
+    "503 service unavailable",
+    "403 forbidden",
+    "access denied",
+    "uh oh! it looks like what you're searching for is not there anymore",
+    "the page you are looking for cannot be found",
+    "this page could not be found",
+  ];
+
+  if (ERROR_PATTERNS.some((p) => lower.includes(p))) return true;
+
+  // Too short to be a real grant page
+  const cleaned = text.replaceAll(/\s+/g, " ").trim();
+  if (cleaned.length < 50) return true;
+
+  return false;
+}
+
+/**
+ * Parse grant dollar amounts from text, handling magnitude suffixes
+ * like $12.68M, $50K, and ranges like "$5,000 to $50,000".
+ * Returns null if no valid amount found or amount is suspiciously low (<$100).
+ */
+export function parseGrantAmount(text: string): { raw: string; min: number; max: number } | null {
+  // Match dollar amounts with optional magnitude suffixes
+  const amountPattern = /\$\s*([\d,]+(?:\.\d+)?)\s*([KkMmBb](?:illion|illion)?|[Kk]|[Mm]illion|[Bb]illion)?/g;
+
+  const amounts: Array<{ value: number; raw: string }> = [];
+  let match;
+
+  while ((match = amountPattern.exec(text)) !== null) {
+    const numStr = match[1].replaceAll(",", "");
+    let value = Number.parseFloat(numStr);
+    const suffix = match[2]?.toLowerCase();
+
+    if (suffix) {
+      if (suffix.startsWith("k")) value *= 1_000;
+      else if (suffix.startsWith("m")) value *= 1_000_000;
+      else if (suffix.startsWith("b")) value *= 1_000_000_000;
+    }
+
+    // Reject amounts below $100 (likely parsing errors like "$12.68" from "$12.68M" text)
+    if (value < 100 && !suffix) continue;
+
+    amounts.push({ value, raw: match[0].trim() });
+  }
+
+  if (amounts.length === 0) return null;
+
+  // Check for range patterns in original text
+  const rangePattern = /\$\s*[\d,]+(?:\.\d+)?\s*[KkMmBb]?\w*\s*(?:to|-|–|—)\s*\$\s*[\d,]+(?:\.\d+)?\s*[KkMmBb]?\w*/;
+  const hasRange = rangePattern.test(text);
+
+  if (hasRange && amounts.length >= 2) {
+    const sorted = [...amounts].sort((a, b) => a.value - b.value);
+    return {
+      raw: `$${sorted[0].value.toLocaleString()} - $${sorted[sorted.length - 1].value.toLocaleString()}`,
+      min: sorted[0].value,
+      max: sorted[sorted.length - 1].value,
+    };
+  }
+
+  // Single amount
+  const best = amounts[0];
+  return { raw: best.raw, min: best.value, max: best.value };
 }
 
 /**
