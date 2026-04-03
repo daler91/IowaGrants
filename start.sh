@@ -13,7 +13,7 @@ fi
 
 # Run migrations - fail fast if migrations fail to prevent inconsistent state
 echo "[start] Running Prisma migrations..."
-npx prisma migrate deploy 2>&1
+npx --yes prisma migrate deploy 2>&1
 if [ $? -ne 0 ]; then
   echo "[start] ERROR: Migration failed. Aborting startup."
   exit 1

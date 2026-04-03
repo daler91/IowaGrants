@@ -12,7 +12,7 @@ import { scrapeArticleGrants } from "./article-grants";
 import { fetchGrantsGovApi } from "./grants-gov-api";
 import { fetchFoundationGrants } from "./foundation-grants";
 import { scrapeIowaLocalGrants } from "./iowa-local-grants";
-import { normalizeTitle, isExcludedByEligibility } from "./utils";
+import { normalizeTitle, isExcludedByEligibility, validateDeadline } from "./utils";
 import { categorizeAll } from "@/lib/ai/categorizer";
 import { parsePdfFromUrl } from "@/lib/ai/pdf-parser";
 import { validateGrants } from "@/lib/ai/grant-validator";
@@ -62,6 +62,13 @@ async function findExistingGrant(grant: GrantData) {
 }
 
 async function upsertGrant(grant: GrantData): Promise<boolean> {
+  // Sanitize deadline before DB write — catches wildly invalid years (e.g. 50315)
+  const sanitizedDeadline = validateDeadline(grant.deadline);
+  if (grant.deadline && !sanitizedDeadline) {
+    console.warn(`[orchestrator] Dropped invalid deadline for "${grant.title}": ${grant.deadline.toISOString()}`);
+  }
+  grant.deadline = sanitizedDeadline;
+
   const categoryConnections = grant.categories.length > 0
     ? {
         connectOrCreate: grant.categories.map((name) => ({

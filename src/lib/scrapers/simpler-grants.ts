@@ -1,6 +1,6 @@
 import axios from "axios";
 import type { GrantData } from "@/lib/types";
-import { isExcludedByStateRestriction, detectLocationScope } from "./utils";
+import { isExcludedByStateRestriction, detectLocationScope, validateDeadline } from "./utils";
 
 const SIMPLER_GRANTS_API = "https://api.simpler.grants.gov/v1/opportunities/search";
 
@@ -74,7 +74,7 @@ function isEligibleOpportunity(opp: SimplerOpportunity): boolean {
 }
 
 function mapToGrantData(opp: SimplerOpportunity): GrantData {
-  const deadline = opp.close_date ? new Date(opp.close_date) : undefined;
+  const deadline = opp.close_date ? validateDeadline(new Date(opp.close_date)) : undefined;
   const isOpen = !deadline || deadline > new Date() ? "OPEN" : ("CLOSED" as const);
 
   return {

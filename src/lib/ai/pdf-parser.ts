@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import axios from "axios";
 import type { GrantData } from "@/lib/types";
+import { validateDeadline } from "@/lib/scrapers/utils";
 
 const anthropic = new Anthropic();
 
@@ -57,7 +58,7 @@ function mapParsedToGrantData(
         : undefined,
     amountMin: parsed.amountMin || undefined,
     amountMax: parsed.amountMax || undefined,
-    deadline: parsed.deadline ? new Date(parsed.deadline) : undefined,
+    deadline: parsed.deadline ? validateDeadline(new Date(parsed.deadline)) : undefined,
     eligibility: parsed.eligibility || undefined,
     grantType: (parsed.grantType as GrantData["grantType"]) || "STATE",
     status: "OPEN",
