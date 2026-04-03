@@ -7,6 +7,7 @@ import {
   detectLocationScope,
   isActualGrantPage,
   isGenericHomepage,
+  isNonGrantProgram,
 } from "../utils";
 
 describe("normalizeTitle", () => {
@@ -201,5 +202,37 @@ describe("isGenericHomepage", () => {
 
   it("handles invalid URLs gracefully", () => {
     expect(isGenericHomepage("not a url")).toBe(false);
+  });
+});
+
+describe("isNonGrantProgram", () => {
+  it("detects loan programs", () => {
+    expect(isNonGrantProgram("Small Business Loan Program")).toBe(true);
+    expect(isNonGrantProgram("Low-interest loan for equipment")).toBe(true);
+  });
+
+  it("detects revolving funds", () => {
+    expect(
+      isNonGrantProgram(
+        "Water Quality Iowa Finance Authority State Revolving Fund to provide low-cost funds"
+      )
+    ).toBe(true);
+    expect(isNonGrantProgram("Clean Water Revolving Loan Fund")).toBe(true);
+  });
+
+  it("does not filter actual grant programs", () => {
+    expect(isNonGrantProgram("Small Business Innovation Grant")).toBe(false);
+    expect(isNonGrantProgram("Equipment funding for startups")).toBe(false);
+    expect(isNonGrantProgram("Federal grant for clean water projects")).toBe(false);
+  });
+
+  it("does not false-positive on 'fund' or 'funding' alone", () => {
+    expect(isNonGrantProgram("Community Development Fund grant")).toBe(false);
+    expect(isNonGrantProgram("Funding opportunity for Iowa businesses")).toBe(false);
+  });
+
+  it("is case-insensitive", () => {
+    expect(isNonGrantProgram("STATE REVOLVING FUND")).toBe(true);
+    expect(isNonGrantProgram("Loan Program for Agriculture")).toBe(true);
   });
 });

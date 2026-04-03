@@ -286,6 +286,38 @@ export function isExcludedByEligibility(text: string): boolean {
 }
 
 /**
+ * Returns true if the text indicates a loan program or other non-grant
+ * funding mechanism (e.g., revolving funds, low-interest loans).
+ */
+export function isNonGrantProgram(text: string): boolean {
+  const lower = text.toLowerCase();
+
+  const NON_GRANT_PATTERNS = [
+    "loan program",
+    "loan application",
+    "loan repayment",
+    "loan forgiveness program",
+    "revolving fund",
+    "revolving loan",
+    "state revolving fund",
+    "low-cost funds",
+    "low-interest loan",
+    "loan interest rate",
+    "loan-based",
+    "not a grant",
+    "this is a loan",
+    "repayable loan",
+    "loan disbursement",
+    "loan servicing",
+  ];
+
+  for (const pattern of NON_GRANT_PATTERNS) {
+    if (lower.includes(pattern)) return true;
+  }
+  return false;
+}
+
+/**
  * Check if a scraped URL/page represents an actual grant program
  * rather than a generic landing/category page.
  */
