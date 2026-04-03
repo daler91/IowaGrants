@@ -1,19 +1,5 @@
 import Link from "next/link";
-
-interface GrantCardGrant {
-  id: string;
-  title: string;
-  description: string;
-  sourceName: string;
-  grantType: string;
-  status: string;
-  gender: string;
-  businessStage: string;
-  amount?: string | null;
-  deadline?: string | null;
-  locations: string[];
-  eligibleExpenses: { name: string; label: string }[];
-}
+import type { GrantListItem } from "@/lib/types";
 
 const TYPE_COLORS: Record<string, string> = {
   FEDERAL: "bg-blue-100 text-blue-800",
@@ -47,7 +33,7 @@ function formatDeadline(deadline: string | null | undefined): string {
 }
 
 interface GrantCardProps {
-  grant: GrantCardGrant;
+  grant: GrantListItem;
   selectable?: boolean;
   selected?: boolean;
   onSelectChange?: (id: string, selected: boolean) => void;
