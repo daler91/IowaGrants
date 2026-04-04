@@ -80,7 +80,7 @@ export async function POST(request: NextRequest) {
         data: {
           status: "failed",
           completedAt: new Date(),
-          error: error instanceof Error ? error.message : "Unknown error",
+          error: (error instanceof Error ? error.message : "Unknown error").slice(0, 500),
         },
       });
     });

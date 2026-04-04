@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { randomBytes } from "crypto";
+import { randomBytes, createHash } from "crypto";
 import { prisma } from "@/lib/db";
 import { requireAdmin } from "@/lib/auth";
+
+function hashToken(token: string): string {
+  return createHash("sha256").update(token).digest("hex");
+}
 
 export async function GET(request: NextRequest) {
   const admin = await requireAdmin(request);
@@ -34,8 +38,9 @@ export async function POST(request: NextRequest) {
   }
 
   const { email } = body as { email?: string };
-  if (!email || typeof email !== "string") {
-    return NextResponse.json({ error: "Email is required" }, { status: 400 });
+  const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!email || typeof email !== "string" || !EMAIL_REGEX.test(email.trim())) {
+    return NextResponse.json({ error: "A valid email address is required" }, { status: 400 });
   }
 
   const existing = await prisma.adminUser.findUnique({ where: { email } });
@@ -46,23 +51,25 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const token = randomBytes(32).toString("hex");
+  const rawToken = randomBytes(32).toString("hex");
+  const tokenHash = hashToken(rawToken);
   const expiresAt = new Date(Date.now() + 72 * 60 * 60 * 1000); // 72 hours
 
   const invite = await prisma.adminInvite.create({
     data: {
       email,
-      token,
+      token: tokenHash,
       invitedBy: admin.email,
       expiresAt,
     },
   });
 
+  // Return raw token only once — it is stored as a SHA-256 hash
   return NextResponse.json({
     invite: {
       id: invite.id,
       email: invite.email,
-      token: invite.token,
+      token: rawToken,
       expiresAt: invite.expiresAt,
     },
   });

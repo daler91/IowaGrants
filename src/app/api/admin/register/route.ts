@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
+import { createHash } from "crypto";
 import { prisma } from "@/lib/db";
 import { hashPassword, signToken, setAuthCookie } from "@/lib/auth";
+
+function hashInviteToken(token: string): string {
+  return createHash("sha256").update(token).digest("hex");
+}
 
 export async function POST(request: NextRequest) {
   let body: unknown;
@@ -30,7 +35,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const invite = await prisma.adminInvite.findUnique({ where: { token } });
+  const invite = await prisma.adminInvite.findUnique({ where: { token: hashInviteToken(token) } });
   if (!invite) {
     return NextResponse.json({ error: "Invalid invite token" }, { status: 400 });
   }
@@ -74,7 +79,7 @@ export async function POST(request: NextRequest) {
     }),
   ]);
 
-  const jwt = await signToken({ sub: admin.id, email: admin.email });
+  const jwt = await signToken({ sub: admin.id, email: admin.email, tokenVersion: admin.tokenVersion });
   const response = NextResponse.json({
     success: true,
     admin: { id: admin.id, email: admin.email, name: admin.name },
