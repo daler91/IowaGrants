@@ -7,6 +7,7 @@ export default function Error({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
+  console.error(error);
   return (
     <div className="text-center py-16">
       <svg
@@ -27,7 +28,7 @@ export default function Error({
         Something went wrong
       </h2>
       <p className="mt-2 text-sm text-[var(--muted)] max-w-md mx-auto">
-        {error.message || "An unexpected error occurred. Please try again."}
+        An unexpected error occurred. Please try again.
       </p>
       <button
         onClick={reset}

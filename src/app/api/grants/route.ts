@@ -129,10 +129,11 @@ export async function DELETE(request: NextRequest) {
   if (
     !Array.isArray(ids) ||
     ids.length === 0 ||
+    ids.length > 100 ||
     !ids.every((id) => typeof id === "string")
   ) {
     return NextResponse.json(
-      { error: "ids must be a non-empty array of strings" },
+      { error: "ids must be a non-empty array of strings (max 100)" },
       { status: 400 },
     );
   }
