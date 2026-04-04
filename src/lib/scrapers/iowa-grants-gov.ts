@@ -1,17 +1,13 @@
 import axios from "axios";
 import * as cheerio from "cheerio";
 import type { GrantData } from "@/lib/types";
+import { BROWSER_USER_AGENT } from "./config";
 import { fetchPageDetails } from "./utils";
+import { log, logError } from "@/lib/errors";
 
-const IOWA_GRANTS_GOV_URLS = [
-  "https://www.iowagrants.gov/",
-];
+const IOWA_GRANTS_GOV_URLS = ["https://www.iowagrants.gov/"];
 
-function mapToGrantData(
-  title: string,
-  url: string,
-  description: string
-): GrantData {
+function mapToGrantData(title: string, url: string, description: string): GrantData {
   return {
     title,
     description,
@@ -36,8 +32,7 @@ export async function scrapeIowaGrantsGov(): Promise<GrantData[]> {
     try {
       const response = await axios.get(pageUrl, {
         headers: {
-          "User-Agent":
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+          "User-Agent": BROWSER_USER_AGENT,
           Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
         },
         timeout: 20000,
@@ -102,20 +97,14 @@ export async function scrapeIowaGrantsGov(): Promise<GrantData[]> {
           }
 
           seenUrls.add(fullUrl);
-          const description =
-            $el.parent().text().trim().slice(0, 500) || title;
+          const description = $el.parent().text().trim().slice(0, 500) || title;
           allGrants.push(mapToGrantData(title, fullUrl, description));
         });
       }
 
-      console.log(
-        `[iowa-grants-gov] Scraped ${allGrants.length} programs from ${pageUrl}`
-      );
+      log("iowa-grants-gov", `Scraped ${allGrants.length} programs`, { url: pageUrl });
     } catch (error) {
-      console.error(
-        `[iowa-grants-gov] Error scraping ${pageUrl}:`,
-        error instanceof Error ? error.message : error
-      );
+      logError("iowa-grants-gov", `Error scraping ${pageUrl}`, error);
     }
   }
 
@@ -126,14 +115,11 @@ export async function scrapeIowaGrantsGov(): Promise<GrantData[]> {
     if (details?.deadline) {
       grant.deadline = details.deadline;
     }
-    if (
-      details?.description &&
-      details.description.length > grant.description.length
-    ) {
+    if (details?.description && details.description.length > grant.description.length) {
       grant.description = details.description;
     }
   }
 
-  console.log(`[iowa-grants-gov] Total unique grants: ${allGrants.length}`);
+  log("iowa-grants-gov", "Total unique grants", { count: allGrants.length });
   return allGrants;
 }

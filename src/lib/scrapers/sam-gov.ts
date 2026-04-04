@@ -1,6 +1,8 @@
 import axios from "axios";
 import type { GrantData } from "@/lib/types";
+import { env } from "@/lib/env";
 import { isExcludedByStateRestriction, validateDeadline } from "./utils";
+import { log, logError, logWarn } from "@/lib/errors";
 
 const SAM_GOV_API = "https://api.sam.gov/prod/opportunities/v2/search";
 
@@ -35,8 +37,7 @@ function mapToGrantData(opp: SamGovOpportunity): GrantData {
   const deadline = opp.responseDeadLine
     ? validateDeadline(new Date(opp.responseDeadLine))
     : undefined;
-  const isOpen =
-    !deadline || deadline > new Date() ? "OPEN" : ("CLOSED" as const);
+  const isOpen = !deadline || deadline > new Date() ? "OPEN" : ("CLOSED" as const);
 
   const locations: string[] = [];
   const perfState = opp.placeOfPerformance?.state?.name?.toLowerCase();
@@ -52,15 +53,11 @@ function mapToGrantData(opp: SamGovOpportunity): GrantData {
   return {
     title: opp.title,
     description: opp.description || opp.title,
-    sourceUrl:
-      opp.uiLink ||
-      `https://sam.gov/opp/${opp.noticeId}/view`,
+    sourceUrl: opp.uiLink || `https://sam.gov/opp/${opp.noticeId}/view`,
     sourceName: "sam.gov",
     amountMin: opp.award?.amount || undefined,
     amountMax: opp.award?.amount || undefined,
-    amount: opp.award?.amount
-      ? `$${opp.award.amount.toLocaleString()}`
-      : undefined,
+    amount: opp.award?.amount ? `$${opp.award.amount.toLocaleString()}` : undefined,
     deadline,
     grantType: "FEDERAL",
     status: isOpen,
@@ -75,12 +72,10 @@ function mapToGrantData(opp: SamGovOpportunity): GrantData {
 }
 
 export async function fetchSamGov(): Promise<GrantData[]> {
-  const apiKey = process.env.SAM_GOV_API_KEY;
+  const apiKey = env.SAM_GOV_API_KEY;
 
   if (!apiKey) {
-    console.warn(
-      "[sam.gov] SAM_GOV_API_KEY not set — skipping SAM.gov fetch"
-    );
+    logWarn("sam-gov", "SAM_GOV_API_KEY not set — skipping SAM.gov fetch");
     return [];
   }
 
@@ -127,17 +122,12 @@ export async function fetchSamGov(): Promise<GrantData[]> {
         allGrants.push(mapToGrantData(opp));
       }
 
-      console.log(
-        `[sam.gov] Fetched ${opportunities.length} results for "${keyword}"`
-      );
+      log("sam-gov", `Fetched ${opportunities.length} results for "${keyword}"`);
     } catch (error) {
-      console.error(
-        `[sam.gov] Error for "${keyword}":`,
-        error instanceof Error ? error.message : error
-      );
+      logError("sam-gov", `Error for "${keyword}"`, error);
     }
   }
 
-  console.log(`[sam.gov] Total unique grants: ${allGrants.length}`);
+  log("sam-gov", "Total unique grants", { count: allGrants.length });
   return allGrants;
 }

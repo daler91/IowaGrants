@@ -1,7 +1,9 @@
 import axios from "axios";
 import * as cheerio from "cheerio";
 import type { GrantData } from "@/lib/types";
+import { SCRAPER_USER_AGENT } from "./config";
 import { fetchPageDetails } from "./utils";
+import { log, logError } from "@/lib/errors";
 
 const OPPORTUNITY_IOWA_URLS = [
   "https://opportunityiowa.gov/business/financial-assistance/grants-funding",
@@ -33,7 +35,7 @@ export async function scrapeOpportunityIowa(): Promise<GrantData[]> {
     try {
       const response = await axios.get(pageUrl, {
         headers: {
-          "User-Agent": "IowaGrantScanner/1.0 (educational research project)",
+          "User-Agent": SCRAPER_USER_AGENT,
         },
         timeout: 15000,
       });
@@ -58,9 +60,7 @@ export async function scrapeOpportunityIowa(): Promise<GrantData[]> {
 
           if (!href || !title || title.length < 5) return;
 
-          const fullUrl = href.startsWith("http")
-            ? href
-            : `https://opportunityiowa.gov${href}`;
+          const fullUrl = href.startsWith("http") ? href : `https://opportunityiowa.gov${href}`;
 
           if (seenUrls.has(fullUrl)) return;
 
@@ -99,14 +99,9 @@ export async function scrapeOpportunityIowa(): Promise<GrantData[]> {
         });
       }
 
-      console.log(
-        `[opportunity-iowa] Scraped ${allGrants.length} programs from ${pageUrl}`
-      );
+      log("opportunity-iowa", `Scraped ${allGrants.length} programs`, { url: pageUrl });
     } catch (error) {
-      console.error(
-        `[opportunity-iowa] Error scraping ${pageUrl}:`,
-        error instanceof Error ? error.message : error
-      );
+      logError("opportunity-iowa", `Error scraping ${pageUrl}`, error);
     }
   }
 
@@ -122,6 +117,6 @@ export async function scrapeOpportunityIowa(): Promise<GrantData[]> {
     }
   }
 
-  console.log(`[opportunity-iowa] Total unique grants: ${allGrants.length}`);
+  log("opportunity-iowa", "Total unique grants", { count: allGrants.length });
   return allGrants;
 }

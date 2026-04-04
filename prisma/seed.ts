@@ -12,6 +12,11 @@ async function main() {
     process.exit(1);
   }
 
+  if (password.length < 12) {
+    console.error("ADMIN_PASSWORD must be at least 12 characters long.");
+    process.exit(1);
+  }
+
   const passwordHash = await bcrypt.hash(password, 12);
 
   const admin = await prisma.adminUser.upsert({

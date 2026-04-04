@@ -1,12 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { Prisma } from "@prisma/client";
-import { requireAdmin } from "@/lib/auth";
-
-const VALID_GRANT_TYPES = ["FEDERAL", "STATE", "LOCAL", "PRIVATE"];
-const VALID_GENDER_FOCUS = ["WOMEN", "VETERAN", "MINORITY", "GENERAL", "ANY"];
-const VALID_BUSINESS_STAGE = ["STARTUP", "EXISTING", "BOTH"];
-const VALID_GRANT_STATUS = ["OPEN", "CLOSED", "FORECASTED"];
+import { requireAdminOrResponse } from "@/lib/auth";
+import {
+  VALID_GRANT_TYPES,
+  VALID_GENDER_FOCUS,
+  VALID_BUSINESS_STAGE,
+  VALID_GRANT_STATUS,
+  GRANT_INCLUDE,
+} from "@/lib/constants";
+import { parsePagination, parseOptionalInt } from "@/lib/api-utils";
+import { logError } from "@/lib/errors";
 
 export async function GET(request: NextRequest) {
   try {
@@ -20,16 +24,9 @@ export async function GET(request: NextRequest) {
     const industry = params.get("industry") || undefined;
     const status = params.get("status") || undefined;
     const eligibleExpense = params.get("eligibleExpense") || undefined;
-    const amountMinParam = params.get("amountMin");
-    const amountMin = amountMinParam
-      ? Number.parseInt(amountMinParam)
-      : undefined;
-    const amountMaxParam = params.get("amountMax");
-    const amountMax = amountMaxParam
-      ? Number.parseInt(amountMaxParam)
-      : undefined;
-    const page = Math.max(1, Number.parseInt(params.get("page") || "1"));
-    const limit = Math.min(100, Math.max(1, Number.parseInt(params.get("limit") || "20")));
+    const amountMin = parseOptionalInt(params, "amountMin");
+    const amountMax = parseOptionalInt(params, "amountMax");
+    const { page, limit, skip } = parsePagination(params);
 
     const where: Prisma.GrantWhereInput = {};
 
@@ -81,15 +78,9 @@ export async function GET(request: NextRequest) {
     const [grants, total] = await Promise.all([
       prisma.grant.findMany({
         where,
-        include: {
-          categories: true,
-          eligibleExpenses: true,
-        },
-        orderBy: [
-          { deadline: { sort: "asc", nulls: "last" } },
-          { createdAt: "desc" },
-        ],
-        skip: (page - 1) * limit,
+        include: GRANT_INCLUDE,
+        orderBy: [{ deadline: { sort: "asc", nulls: "last" } }, { createdAt: "desc" }],
+        skip,
         take: limit,
       }),
       prisma.grant.count({ where }),
@@ -105,16 +96,13 @@ export async function GET(request: NextRequest) {
     response.headers.set("Cache-Control", "public, s-maxage=60, stale-while-revalidate=300");
     return response;
   } catch (error) {
-    console.error("Failed to fetch grants:", error);
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 },
-    );
+    logError("grants-api", "Failed to fetch grants", error);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
 
 export async function DELETE(request: NextRequest) {
-  const admin = await requireAdmin(request);
+  const admin = await requireAdminOrResponse(request);
   if (admin instanceof NextResponse) return admin;
 
   let body: unknown;
@@ -145,10 +133,7 @@ export async function DELETE(request: NextRequest) {
 
     return NextResponse.json({ deleted: result.count });
   } catch (error) {
-    console.error("Failed to delete grants:", error);
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 },
-    );
+    logError("grants-api", "Failed to delete grants", error);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

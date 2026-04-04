@@ -1,16 +1,11 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { GrantData } from "@/lib/types";
+import { env } from "@/lib/env";
+import { VALIDATION_BATCH_SIZE, AI_CALL_DELAY_MS } from "@/lib/scrapers/config";
+import { log, logError, logWarn } from "@/lib/errors";
+import { ValidationResultArraySchema, type ValidationResult } from "./schemas";
 
 const anthropic = new Anthropic();
-
-interface ValidationResult {
-  index: number;
-  is_real_grant: boolean;
-  small_biz_eligible: boolean;
-  content_type: "grant_application" | "awardee_announcement" | "news_article" | "info_page" | "expired_program" | "other";
-  confidence: "HIGH" | "MEDIUM" | "LOW";
-  reason: string;
-}
 
 const VALIDATION_PROMPT = `You are evaluating scraped grant listings to determine if they are real, active grant programs for small businesses.
 
@@ -63,48 +58,55 @@ function buildGrantSnippet(grant: GrantData, index: number): string {
   return parts.join("\n");
 }
 
+const MAX_RETRIES = 3;
+const INITIAL_RETRY_DELAY_MS = 1000;
+
 async function validateBatch(
-  grants: Array<{ grant: GrantData; originalIndex: number }>
-): Promise<ValidationResult[]> {
-  const snippets = grants.map(({ grant }, i) =>
-    buildGrantSnippet(grant, i)
-  );
+  grants: Array<{ grant: GrantData; originalIndex: number }>,
+): Promise<ValidationResult[] | null> {
+  const snippets = grants.map(({ grant }, i) => buildGrantSnippet(grant, i));
 
   const message = `${VALIDATION_PROMPT}\n\n---\n\n${snippets.join("\n\n---\n\n")}`;
 
-  try {
-    const response = await anthropic.messages.create({
-      model: "claude-haiku-4-5-20251001",
-      max_tokens: 2000,
-      messages: [{ role: "user", content: message }],
-    });
+  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+    try {
+      const response = await anthropic.messages.create({
+        model: "claude-haiku-4-5-20251001",
+        max_tokens: 2000,
+        messages: [{ role: "user", content: message }],
+      });
 
-    const text =
-      response.content[0].type === "text" ? response.content[0].text : "";
+      const text = response.content[0].type === "text" ? response.content[0].text : "";
 
-    // Strip markdown fences if present
-    const cleaned = text
-      .replace(/^```(?:json)?\s*/m, "")
-      .replace(/\s*```\s*$/m, "")
-      .trim();
+      // Strip markdown fences if present
+      const cleaned = text
+        .replace(/^```(?:json)?\s*/m, "")
+        .replace(/\s*```\s*$/m, "")
+        .trim();
 
-    const results: ValidationResult[] = JSON.parse(cleaned);
-    return results;
-  } catch (error) {
-    console.error(
-      "[grant-validator] Batch validation failed:",
-      error instanceof Error ? error.message : error
-    );
-    // On failure, assume all grants are valid (fail-open)
-    return grants.map((_, i) => ({
-      index: i,
-      is_real_grant: true,
-      small_biz_eligible: true,
-      content_type: "grant_application" as const,
-      confidence: "MEDIUM" as const,
-      reason: "Validation failed, assuming valid",
-    }));
+      const raw = JSON.parse(cleaned);
+      const results = ValidationResultArraySchema.parse(raw);
+      return results;
+    } catch (error) {
+      logError(
+        "grant-validator",
+        `Batch validation attempt ${attempt + 1}/${MAX_RETRIES} failed`,
+        error,
+      );
+
+      if (attempt < MAX_RETRIES - 1) {
+        const delay = INITIAL_RETRY_DELAY_MS * 2 ** attempt;
+        await new Promise((r) => setTimeout(r, delay));
+      }
+    }
   }
+
+  // Fail closed: return null to signal the batch should be rejected
+  logError("grant-validator", "All attempts failed — rejecting batch (fail-closed)", undefined, {
+    attempts: MAX_RETRIES,
+    batchSize: grants.length,
+  });
+  return null;
 }
 
 /**
@@ -115,8 +117,8 @@ async function validateBatch(
  * reduce volume before grants reach this step.
  */
 export async function validateGrants(grants: GrantData[]): Promise<GrantData[]> {
-  if (!process.env.ANTHROPIC_API_KEY) {
-    console.log("[grant-validator] ANTHROPIC_API_KEY not set — skipping validation");
+  if (!env.ANTHROPIC_API_KEY) {
+    log("grant-validator", "ANTHROPIC_API_KEY not set — skipping validation");
     return grants;
   }
 
@@ -124,12 +126,9 @@ export async function validateGrants(grants: GrantData[]): Promise<GrantData[]> 
     return grants;
   }
 
-  console.log(
-    `[grant-validator] Validating ${grants.length} grants with AI`
-  );
+  log("grant-validator", `Validating ${grants.length} grants with AI`);
 
-  // Process in batches of 10
-  const BATCH_SIZE = 10;
+  const BATCH_SIZE = VALIDATION_BATCH_SIZE;
   const validated: GrantData[] = [];
   let filtered = 0;
 
@@ -140,6 +139,15 @@ export async function validateGrants(grants: GrantData[]): Promise<GrantData[]> 
     }));
     const results = await validateBatch(batch);
 
+    // Fail-closed: if validation failed after retries, skip this batch entirely
+    if (results === null) {
+      filtered += batch.length;
+      logWarn("grant-validator", "Dropped batch due to validation failure", {
+        batchSize: batch.length,
+      });
+      continue;
+    }
+
     for (const result of results) {
       const entry = batch[result.index];
       if (!entry) continue;
@@ -148,7 +156,11 @@ export async function validateGrants(grants: GrantData[]): Promise<GrantData[]> 
       // is missing, unexpected, or unrecognized, defer to is_real_grant instead
       // of silently filtering on model format drift.
       const KNOWN_NON_GRANT_TYPES = new Set([
-        "awardee_announcement", "news_article", "info_page", "expired_program", "other",
+        "awardee_announcement",
+        "news_article",
+        "info_page",
+        "expired_program",
+        "other",
       ]);
       const isNonGrantType = KNOWN_NON_GRANT_TYPES.has(result.content_type);
       if (
@@ -160,20 +172,22 @@ export async function validateGrants(grants: GrantData[]): Promise<GrantData[]> 
         validated.push(entry.grant);
       } else {
         filtered++;
-        console.log(
-          `[grant-validator] Filtered: "${entry.grant.title}" — ${result.reason} (type=${result.content_type}, real=${result.is_real_grant}, eligible=${result.small_biz_eligible}, confidence=${result.confidence})`
-        );
+        log("grant-validator", `Filtered: "${entry.grant.title}"`, {
+          reason: result.reason,
+          contentType: result.content_type,
+          isRealGrant: result.is_real_grant,
+          eligible: result.small_biz_eligible,
+          confidence: result.confidence,
+        });
       }
     }
 
     // Brief delay between API calls
     if (i + BATCH_SIZE < grants.length) {
-      await new Promise((r) => setTimeout(r, 500));
+      await new Promise((r) => setTimeout(r, AI_CALL_DELAY_MS));
     }
   }
 
-  console.log(
-    `[grant-validator] Done. Kept ${validated.length}, filtered ${filtered}`
-  );
+  log("grant-validator", "Validation complete", { kept: validated.length, filtered });
   return validated;
 }

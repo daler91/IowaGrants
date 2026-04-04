@@ -1,7 +1,16 @@
 import axios from "axios";
 import * as cheerio from "cheerio";
 import type { GrantData } from "@/lib/types";
-import { extractDeadline, isExcludedByStateRestriction, detectLocationScope, isGenericHomepage, cleanHtmlToText } from "./utils";
+import { env } from "@/lib/env";
+import { BROWSER_USER_AGENT } from "./config";
+import {
+  extractDeadline,
+  isExcludedByStateRestriction,
+  detectLocationScope,
+  isGenericHomepage,
+  cleanHtmlToText,
+} from "./utils";
+import { log, logError } from "@/lib/errors";
 
 const currentYear = new Date().getFullYear();
 const SEARCH_QUERIES = [
@@ -83,10 +92,23 @@ function isListPage($: cheerio.CheerioAPI, pageTitle: string): boolean {
   // Count grant-themed H2/H3 headings
   const grantKeywords = ["grant", "fund", "program", "award", "foundation", "$"];
   const genericPrefixes = [
-    "table of contents", "faq", "frequently asked", "how to apply",
-    "how to find", "what is", "what are", "tips for", "methodology",
-    "about the author", "conclusion", "summary", "bottom line",
-    "key takeaways", "related", "next steps", "subscribe",
+    "table of contents",
+    "faq",
+    "frequently asked",
+    "how to apply",
+    "how to find",
+    "what is",
+    "what are",
+    "tips for",
+    "methodology",
+    "about the author",
+    "conclusion",
+    "summary",
+    "bottom line",
+    "key takeaways",
+    "related",
+    "next steps",
+    "subscribe",
   ];
 
   let grantHeadingCount = 0;
@@ -113,10 +135,7 @@ function isListPage($: cheerio.CheerioAPI, pageTitle: string): boolean {
 // List page link extraction — harvest grant URLs from aggregator pages
 // ---------------------------------------------------------------------------
 
-function extractGrantLinksFromListPage(
-  $: cheerio.CheerioAPI,
-  pageUrl: string,
-): string[] {
+function extractGrantLinksFromListPage($: cheerio.CheerioAPI, pageUrl: string): string[] {
   let pageDomain: string;
   try {
     pageDomain = new URL(pageUrl).hostname.replace("www.", "");
@@ -138,7 +157,9 @@ function extractGrantLinksFromListPage(
         seen.add(canonical);
         links.push(href);
       }
-    } catch { /* invalid URL */ }
+    } catch {
+      /* invalid URL */
+    }
   }
 
   // Extract external links from H2/H3 headings
@@ -164,7 +185,8 @@ function extractGrantLinksFromListPage(
           !linkText.includes("visit") &&
           !linkText.includes("official") &&
           !linkText.includes("website")
-        ) return;
+        )
+          return;
         addLink(href);
       });
       $el = $el.next();
@@ -175,10 +197,7 @@ function extractGrantLinksFromListPage(
   return links;
 }
 
-type ScrapeResult =
-  | { type: "grant"; grant: GrantData }
-  | { type: "list"; links: string[] }
-  | null;
+type ScrapeResult = { type: "grant"; grant: GrantData } | { type: "list"; links: string[] } | null;
 
 type SearchResult = { title: string; url: string; snippet: string };
 
@@ -191,7 +210,7 @@ interface BraveWebResults {
 }
 
 async function searchBrave(query: string): Promise<SearchResult[]> {
-  const apiKey = process.env.BRAVE_SEARCH_API_KEY;
+  const apiKey = env.BRAVE_SEARCH_API_KEY;
   if (!apiKey) return [];
 
   try {
@@ -205,7 +224,7 @@ async function searchBrave(query: string): Promise<SearchResult[]> {
           "X-Subscription-Token": apiKey,
         },
         timeout: 15000,
-      }
+      },
     );
 
     return (response.data?.web?.results || [])
@@ -213,8 +232,7 @@ async function searchBrave(query: string): Promise<SearchResult[]> {
       .slice(0, 8)
       .map((r) => ({ title: r.title, url: r.url, snippet: r.description || "" }));
   } catch (error) {
-    const msg = error instanceof Error ? error.message : String(error);
-    console.error(`[web-search] Brave search failed for "${query}": ${msg}`);
+    logError("web-search", `Brave search failed for "${query}"`, error);
     return [];
   }
 }
@@ -234,30 +252,26 @@ interface SerpApiResponse {
 }
 
 async function searchSerpApi(query: string): Promise<SearchResult[]> {
-  const apiKey = process.env.SERPAPI_API_KEY;
+  const apiKey = env.SERPAPI_API_KEY;
   if (!apiKey) return [];
 
   try {
-    const response = await axios.get<SerpApiResponse>(
-      "https://serpapi.com/search.json",
-      {
-        params: {
-          q: query,
-          engine: "google",
-          num: 10,
-          api_key: apiKey,
-        },
-        timeout: 15000,
-      }
-    );
+    const response = await axios.get<SerpApiResponse>("https://serpapi.com/search.json", {
+      params: {
+        q: query,
+        engine: "google",
+        num: 10,
+        api_key: apiKey,
+      },
+      timeout: 15000,
+    });
 
     return (response.data?.organic_results || [])
       .filter((r) => r.link && r.title && !shouldSkipUrl(r.link))
       .slice(0, 8)
       .map((r) => ({ title: r.title!, url: r.link!, snippet: r.snippet || "" }));
   } catch (error) {
-    const msg = error instanceof Error ? error.message : String(error);
-    console.error(`[web-search] SerpAPI search failed for "${query}": ${msg}`);
+    logError("web-search", `SerpAPI search failed for "${query}"`, error);
     return [];
   }
 }
@@ -272,10 +286,7 @@ async function searchSerpApi(query: string): Promise<SearchResult[]> {
  * - SerpAPI is used as a fallback when Brave returns no results,
  *   or for a subset of queries to get different result diversity.
  */
-async function searchWeb(
-  query: string,
-  useSerpApiFallback: boolean
-): Promise<SearchResult[]> {
+async function searchWeb(query: string, useSerpApiFallback: boolean): Promise<SearchResult[]> {
   const braveResults = await searchBrave(query);
   if (braveResults.length > 0) return braveResults;
 
@@ -294,13 +305,12 @@ async function searchWeb(
 async function scrapeGrantPage(
   url: string,
   searchTitle: string,
-  searchSnippet: string
+  searchSnippet: string,
 ): Promise<ScrapeResult> {
   try {
     const response = await axios.get(url, {
       headers: {
-        "User-Agent":
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "User-Agent": BROWSER_USER_AGENT,
       },
       timeout: 10000,
       maxRedirects: 3,
@@ -313,13 +323,12 @@ async function scrapeGrantPage(
     $("[role='navigation'], [role='banner'], [class*='sidebar'], [class*='cookie']").remove();
 
     // Extract title early for list page detection
-    const pageTitle =
-      $("h1").first().text().trim() || $("title").text().trim() || searchTitle;
+    const pageTitle = $("h1").first().text().trim() || $("title").text().trim() || searchTitle;
 
     // Extract grant links from list/aggregator pages instead of skipping them
     if (isListPage($, pageTitle)) {
       const extractedLinks = extractGrantLinksFromListPage($, url);
-      console.log(`[web-search] List page: ${url} — extracted ${extractedLinks.length} grant links`);
+      log("web-search", "List page — extracted grant links", { url, count: extractedLinks.length });
       if (extractedLinks.length > 0) {
         return { type: "list", links: extractedLinks };
       }
@@ -427,18 +436,21 @@ async function processSearchResults(
 // ---------------------------------------------------------------------------
 
 export async function searchWebForGrants(): Promise<GrantData[]> {
-  const hasBrave = !!process.env.BRAVE_SEARCH_API_KEY;
-  const hasSerpApi = !!process.env.SERPAPI_API_KEY;
+  const hasBrave = !!env.BRAVE_SEARCH_API_KEY;
+  const hasSerpApi = !!env.SERPAPI_API_KEY;
 
   if (!hasBrave && !hasSerpApi) {
-    console.log("[web-search] No search API keys set (BRAVE_SEARCH_API_KEY, SERPAPI_API_KEY) — skipping web search");
+    log(
+      "web-search",
+      "No search API keys set (BRAVE_SEARCH_API_KEY, SERPAPI_API_KEY) — skipping web search",
+    );
     return [];
   }
 
   const providers: string[] = [];
   if (hasBrave) providers.push("Brave");
   if (hasSerpApi) providers.push("SerpAPI");
-  console.log(`[web-search] Starting web search discovery (providers: ${providers.join(", ")})...`);
+  log("web-search", "Starting web search discovery", { providers: providers.join(", ") });
 
   const allGrants: GrantData[] = [];
   const seenUrls = new Set<string>();
@@ -460,16 +472,12 @@ export async function searchWebForGrants(): Promise<GrantData[]> {
     } else {
       provider = hasBrave ? "brave" : "serpapi";
     }
-    console.log(
-      `[web-search] "${query}" → ${results.length} results [${provider}]`
-    );
+    log("web-search", `"${query}" → ${results.length} results`, { provider });
 
     const grants = await processSearchResults(results, seenUrls);
     allGrants.push(...grants);
   }
 
-  console.log(
-    `[web-search] Found ${allGrants.length} grants from web search`
-  );
+  log("web-search", "Found grants from web search", { count: allGrants.length });
   return allGrants;
 }

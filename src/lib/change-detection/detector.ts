@@ -2,6 +2,8 @@ import { createHash } from "node:crypto";
 import axios from "axios";
 import { prisma } from "@/lib/db";
 import { isSafeUrl } from "@/lib/scrapers/utils";
+import { CHANGE_DETECTION_TIMEOUT_MS, SCRAPER_USER_AGENT } from "@/lib/scrapers/config";
+import { log, logError, logWarn } from "@/lib/errors";
 
 function computeHash(content: string): string {
   // Strip dynamic elements (timestamps, session tokens) before hashing
@@ -18,24 +20,23 @@ function computeHash(content: string): string {
 export async function checkForChanges(): Promise<string[]> {
   const urls = await prisma.monitoredUrl.findMany();
   const changedUrls: string[] = [];
+  const updateOps: ReturnType<typeof prisma.monitoredUrl.update>[] = [];
 
   for (const monitored of urls) {
     try {
       // SSRF protection: skip internal/private URLs
       if (!isSafeUrl(monitored.url)) {
-        console.warn(`[change-detection] Blocked unsafe URL: ${monitored.url}`);
+        logWarn("change-detection", "Blocked unsafe URL", { url: monitored.url });
         continue;
       }
 
       const response = await axios.get(monitored.url, {
-        timeout: 15000,
+        timeout: CHANGE_DETECTION_TIMEOUT_MS,
         headers: {
-          "User-Agent": "IowaGrantScanner/1.0 (educational research project)",
+          "User-Agent": SCRAPER_USER_AGENT,
         },
         // For PDFs, get binary data
-        responseType: monitored.url.endsWith(".pdf")
-          ? "arraybuffer"
-          : "text",
+        responseType: monitored.url.endsWith(".pdf") ? "arraybuffer" : "text",
       });
 
       const content =
@@ -46,34 +47,35 @@ export async function checkForChanges(): Promise<string[]> {
       const newHash = computeHash(content);
       const hasChanged = monitored.contentHash !== newHash;
 
-      await prisma.monitoredUrl.update({
-        where: { id: monitored.id },
-        data: {
-          contentHash: newHash,
-          lastChecked: new Date(),
-          ...(hasChanged
-            ? { lastChanged: new Date(), needsReparse: true }
-            : {}),
-        },
-      });
+      // Collect update operations for batching
+      updateOps.push(
+        prisma.monitoredUrl.update({
+          where: { id: monitored.id },
+          data: {
+            contentHash: newHash,
+            lastChecked: new Date(),
+            ...(hasChanged ? { lastChanged: new Date(), needsReparse: true } : {}),
+          },
+        }),
+      );
 
       if (hasChanged) {
         changedUrls.push(monitored.url);
-        console.log(`[change-detection] Changed: ${monitored.url}`);
+        log("change-detection", "Changed", { url: monitored.url });
       } else {
-        console.log(`[change-detection] Unchanged: ${monitored.url}`);
+        log("change-detection", "Unchanged", { url: monitored.url });
       }
     } catch (error) {
-      console.error(
-        `[change-detection] Error checking ${monitored.url}:`,
-        error instanceof Error ? error.message : error
-      );
+      logError("change-detection", `Error checking ${monitored.url}`, error);
     }
   }
 
-  console.log(
-    `[change-detection] ${changedUrls.length} of ${urls.length} URLs changed`
-  );
+  // Batch all DB updates in a single transaction
+  if (updateOps.length > 0) {
+    await prisma.$transaction(updateOps);
+  }
+
+  log("change-detection", "Check complete", { changed: changedUrls.length, total: urls.length });
   return changedUrls;
 }
 
@@ -91,10 +93,7 @@ export async function markReparsed(url: string): Promise<void> {
   });
 }
 
-export async function addMonitoredUrl(
-  url: string,
-  sourceName: string
-): Promise<void> {
+export async function addMonitoredUrl(url: string, sourceName: string): Promise<void> {
   await prisma.monitoredUrl.upsert({
     where: { url },
     update: { sourceName },

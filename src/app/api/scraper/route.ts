@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { timingSafeEqual } from "crypto";
 import { prisma } from "@/lib/db";
-import { requireAdmin } from "@/lib/auth";
+import { env } from "@/lib/env";
+import { requireAdminOrResponse } from "@/lib/auth";
 import { runFullScrape } from "@/lib/scrapers";
+import { log, logError } from "@/lib/errors";
 
 function safeCompare(a: string, b: string): boolean {
   const bufA = Buffer.from(a);
@@ -16,7 +18,7 @@ export const maxDuration = 300; // 5 minute timeout for this route
 const STALE_LOCK_MS = 10 * 60 * 1000; // 10 minutes
 
 export async function GET(request: NextRequest) {
-  const admin = await requireAdmin(request);
+  const admin = await requireAdminOrResponse(request);
   if (admin instanceof NextResponse) return admin;
 
   const latest = await prisma.scrapeRun.findFirst({
@@ -27,7 +29,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   const authHeader = request.headers.get("authorization");
-  const cronSecret = process.env.CRON_SECRET;
+  const cronSecret = env.CRON_SECRET;
 
   const expected = `Bearer ${cronSecret}`;
   if (!cronSecret || !safeCompare(authHeader || "", expected)) {
@@ -45,7 +47,7 @@ export async function POST(request: NextRequest) {
     if (age < STALE_LOCK_MS) {
       return NextResponse.json(
         { error: "Scrape already in progress", scrapeId: running.id },
-        { status: 409 }
+        { status: 409 },
       );
     }
     // Stale lock — mark as failed
@@ -67,14 +69,14 @@ export async function POST(request: NextRequest) {
         grantsFound: r.grants.length,
         error: r.error || null,
       }));
-      console.log("[scraper-api] Scrape completed:", JSON.stringify(summary));
+      log("scraper-api", "Scrape completed", { summary });
       await prisma.scrapeRun.update({
         where: { id: scrapeRun.id },
         data: { status: "completed", completedAt: new Date(), grantsFound },
       });
     })
     .catch(async (error) => {
-      console.error("[scraper-api] Scrape failed:", error);
+      logError("scraper-api", "Scrape failed", error);
       await prisma.scrapeRun.update({
         where: { id: scrapeRun.id },
         data: {

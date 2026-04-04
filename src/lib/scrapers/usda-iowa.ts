@@ -1,6 +1,8 @@
 import axios from "axios";
 import * as cheerio from "cheerio";
 import type { GrantData } from "@/lib/types";
+import { BROWSER_USER_AGENT } from "./config";
+import { log, logError, logWarn } from "@/lib/errors";
 
 const USDA_URL = "https://www.rd.usda.gov/programs-services/all-programs/ia";
 
@@ -26,15 +28,14 @@ async function fetchWithRetry(url: string, retries = 2): Promise<import("axios")
     try {
       return await axios.get(url, {
         headers: {
-          "User-Agent":
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+          "User-Agent": BROWSER_USER_AGENT,
           Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
         },
         timeout: 60000,
       });
     } catch (error) {
       if (attempt < retries) {
-        console.warn(`[usda-rd] Attempt ${attempt + 1} failed, retrying in 5s...`);
+        logWarn("usda-iowa", `Attempt ${attempt + 1} failed, retrying in 5s...`);
         await new Promise((r) => setTimeout(r, 5000));
         continue;
       }
@@ -72,9 +73,7 @@ export async function scrapeUSDA(): Promise<GrantData[]> {
 
         if (!href || !title || title.length < 5) return;
 
-        const fullUrl = href.startsWith("http")
-          ? href
-          : `https://www.rd.usda.gov${href}`;
+        const fullUrl = href.startsWith("http") ? href : `https://www.rd.usda.gov${href}`;
 
         if (seenUrls.has(fullUrl)) return;
 
@@ -105,12 +104,9 @@ export async function scrapeUSDA(): Promise<GrantData[]> {
       });
     }
 
-    console.log(`[usda-rd] Scraped ${allGrants.length} programs from ${USDA_URL}`);
+    log("usda-iowa", "Scraped programs", { count: allGrants.length, url: USDA_URL });
   } catch (error) {
-    console.error(
-      `[usda-rd] Error scraping:`,
-      error instanceof Error ? error.message : error
-    );
+    logError("usda-iowa", "Error scraping", error);
   }
 
   return allGrants;

@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 
 // In-memory rate limiter. Sufficient for single-instance Railway deployment.
-// Resets on deploy/restart. Does not work across multiple instances.
+// Resets on deploy/restart. Does NOT work across multiple instances.
+// If scaling to multiple instances, migrate to Redis-backed rate limiting
+// (e.g. @upstash/ratelimit or ioredis with a sliding window).
 const RATE_LIMITS: Record<string, { windowMs: number; max: number }> = {
   "/api/auth": { windowMs: 60_000, max: 10 },
   "/api/scraper": { windowMs: 60_000, max: 5 },

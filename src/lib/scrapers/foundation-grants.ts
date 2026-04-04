@@ -2,11 +2,9 @@ import axios from "axios";
 import * as cheerio from "cheerio";
 import type { GrantData } from "@/lib/types";
 import type { GenderFocus, GrantType, BusinessStage } from "@prisma/client";
-import {
-  isExcludedByStateRestriction,
-  detectLocationScope,
-  extractDeadline,
-} from "./utils";
+import { BROWSER_HEADERS } from "./config";
+import { isExcludedByStateRestriction, detectLocationScope, extractDeadline } from "./utils";
+import { log, logError } from "@/lib/errors";
 
 // ---------------------------------------------------------------------------
 // Curated private foundation grant programs for small businesses
@@ -192,24 +190,14 @@ const FOUNDATION_GRANTS: FoundationGrant[] = [
   },
 ];
 
-// ---------------------------------------------------------------------------
-// Browser-like headers
-// ---------------------------------------------------------------------------
-
-const BROWSER_HEADERS = {
-  "User-Agent":
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-  Accept:
-    "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-  "Accept-Language": "en-US,en;q=0.9",
-};
+// Browser-like headers imported from ./config
 
 // ---------------------------------------------------------------------------
 // Enrichment: try to scrape current deadline and updated description
 // ---------------------------------------------------------------------------
 
 async function enrichFromPage(
-  grant: FoundationGrant
+  grant: FoundationGrant,
 ): Promise<{ deadline?: Date; liveDescription?: string }> {
   try {
     const response = await axios.get(grant.url, {
@@ -259,9 +247,7 @@ export async function fetchFoundationGrants(): Promise<GrantData[]> {
 
       // Skip if restricted to a non-Iowa state
       if (isExcludedByStateRestriction(fullText)) {
-        console.log(
-          `[foundation-grants] Skipping state-restricted: ${foundation.name}`
-        );
+        log("foundation-grants", "Skipping state-restricted", { name: foundation.name });
         continue;
       }
 
@@ -300,15 +286,13 @@ export async function fetchFoundationGrants(): Promise<GrantData[]> {
       // Polite delay between requests
       await new Promise((r) => setTimeout(r, 1500));
     } catch (error) {
-      console.error(
-        `[foundation-grants] Error processing ${foundation.name}:`,
-        error instanceof Error ? error.message : error
-      );
+      logError("foundation-grants", `Error processing ${foundation.name}`, error);
     }
   }
 
-  console.log(
-    `[foundation-grants] Total grants: ${allGrants.length} from ${FOUNDATION_GRANTS.length} curated sources`
-  );
+  log("foundation-grants", "Total grants", {
+    count: allGrants.length,
+    sources: FOUNDATION_GRANTS.length,
+  });
   return allGrants;
 }

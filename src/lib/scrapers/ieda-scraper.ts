@@ -1,12 +1,11 @@
 import axios from "axios";
 import * as cheerio from "cheerio";
 import type { GrantData } from "@/lib/types";
+import { SCRAPER_USER_AGENT } from "./config";
 import { fetchPageDetails } from "./utils";
+import { log, logError } from "@/lib/errors";
 
-const IEDA_URLS = [
-  "https://www.iowaeda.com/small-business/",
-  "https://www.iowaeda.com/programs/",
-];
+const IEDA_URLS = ["https://www.iowaeda.com/small-business/", "https://www.iowaeda.com/programs/"];
 
 interface ScrapedProgram {
   title: string;
@@ -15,10 +14,7 @@ interface ScrapedProgram {
   pdfUrl?: string;
 }
 
-function scrapePageForPrograms(
-  html: string,
-  baseUrl: string
-): ScrapedProgram[] {
+function scrapePageForPrograms(html: string, baseUrl: string): ScrapedProgram[] {
   const $ = cheerio.load(html);
   const programs: ScrapedProgram[] = [];
 
@@ -43,9 +39,7 @@ function scrapePageForPrograms(
 
       if (!href || !title || title.length < 5) return;
 
-      const fullUrl = href.startsWith("http")
-        ? href
-        : new URL(href, baseUrl).toString();
+      const fullUrl = href.startsWith("http") ? href : new URL(href, baseUrl).toString();
 
       if (seenUrls.has(fullUrl)) return;
       seenUrls.add(fullUrl);
@@ -127,8 +121,7 @@ export async function scrapeIEDA(): Promise<GrantData[]> {
     try {
       const response = await axios.get(url, {
         headers: {
-          "User-Agent":
-            "IowaGrantScanner/1.0 (educational research project)",
+          "User-Agent": SCRAPER_USER_AGENT,
         },
         timeout: 15000,
       });
@@ -143,20 +136,15 @@ export async function scrapeIEDA(): Promise<GrantData[]> {
         }
       }
 
-      console.log(
-        `[ieda] Scraped ${programs.length} programs from ${url}`
-      );
+      log("ieda-scraper", `Scraped ${programs.length} programs`, { url });
     } catch (error) {
-      console.error(
-        `[ieda] Error scraping ${url}:`,
-        error instanceof Error ? error.message : error
-      );
+      logError("ieda-scraper", `Error scraping ${url}`, error);
     }
   }
 
   // Fetch deadline details from individual pages (limit to first 10 to avoid slowdown)
   await enrichGrantsWithDetails(allGrants);
 
-  console.log(`[ieda] Total unique grants: ${allGrants.length}`);
+  log("ieda-scraper", "Total unique grants", { count: allGrants.length });
   return allGrants;
 }

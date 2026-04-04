@@ -1,18 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { requireAdmin } from "@/lib/auth";
+import { requireAdminOrResponse } from "@/lib/auth";
+import { parsePagination } from "@/lib/api-utils";
 
 export async function GET(request: NextRequest) {
-  const admin = await requireAdmin(request);
+  const admin = await requireAdminOrResponse(request);
   if (admin instanceof NextResponse) return admin;
 
-  const page = Math.max(1, Number(request.nextUrl.searchParams.get("page")) || 1);
-  const limit = Math.min(100, Math.max(1, Number(request.nextUrl.searchParams.get("limit")) || 50));
+  const { page, limit, skip } = parsePagination(request.nextUrl.searchParams, { limit: 50 });
 
   const [urls, total] = await Promise.all([
     prisma.blacklistedUrl.findMany({
       orderBy: { createdAt: "desc" },
-      skip: (page - 1) * limit,
+      skip,
       take: limit,
     }),
     prisma.blacklistedUrl.count(),
@@ -28,7 +28,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const admin = await requireAdmin(request);
+  const admin = await requireAdminOrResponse(request);
   if (admin instanceof NextResponse) return admin;
 
   let body: unknown;
@@ -65,7 +65,7 @@ export async function POST(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
-  const admin = await requireAdmin(request);
+  const admin = await requireAdminOrResponse(request);
   if (admin instanceof NextResponse) return admin;
 
   let body: unknown;
