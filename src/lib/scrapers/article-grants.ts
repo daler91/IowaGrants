@@ -219,6 +219,80 @@ const ARTICLE_GRANT_PAGES: ArticleGrantPage[] = [
     grantType: "FEDERAL",
     businessStage: "BOTH",
   },
+
+  // ── QuickBooks/Intuit ──────────────────────────────────────────────────
+  {
+    url: "https://quickbooks.intuit.com/r/funding/small-business-grants/",
+    sourceName: "quickbooks",
+    siteDomain: "intuit.com",
+    gender: "ANY",
+    grantType: "PRIVATE",
+    businessStage: "BOTH",
+  },
+
+  // ── LendingTree ────────────────────────────────────────────────────────
+  {
+    url: "https://www.lendingtree.com/business/grant/",
+    sourceName: "lendingtree",
+    siteDomain: "lendingtree.com",
+    gender: "ANY",
+    grantType: "PRIVATE",
+    businessStage: "BOTH",
+  },
+
+  // ── FitSmallBusiness ───────────────────────────────────────────────────
+  {
+    url: "https://fitsmallbusiness.com/best-small-business-grants/",
+    sourceName: "fitsmallbusiness",
+    siteDomain: "fitsmallbusiness.com",
+    gender: "ANY",
+    grantType: "PRIVATE",
+    businessStage: "BOTH",
+  },
+  {
+    url: "https://fitsmallbusiness.com/best-women-owned-business-grants/",
+    sourceName: "fitsmallbusiness",
+    siteDomain: "fitsmallbusiness.com",
+    gender: "WOMEN",
+    grantType: "PRIVATE",
+    businessStage: "BOTH",
+  },
+  {
+    url: "https://fitsmallbusiness.com/minority-small-business-grants/",
+    sourceName: "fitsmallbusiness",
+    siteDomain: "fitsmallbusiness.com",
+    gender: "MINORITY",
+    grantType: "PRIVATE",
+    businessStage: "BOTH",
+  },
+
+  // ── Lendio ─────────────────────────────────────────────────────────────
+  {
+    url: "https://www.lendio.com/blog/where-to-find-small-business-sba-grants/",
+    sourceName: "lendio",
+    siteDomain: "lendio.com",
+    gender: "ANY",
+    grantType: "FEDERAL",
+    businessStage: "BOTH",
+  },
+  {
+    url: "https://www.lendio.com/blog/grants-minority-small-business-owners",
+    sourceName: "lendio",
+    siteDomain: "lendio.com",
+    gender: "MINORITY",
+    grantType: "PRIVATE",
+    businessStage: "BOTH",
+  },
+
+  // ── Credibly ───────────────────────────────────────────────────────────
+  {
+    url: "https://www.credibly.com/small-business-grants/",
+    sourceName: "credibly",
+    siteDomain: "credibly.com",
+    gender: "ANY",
+    grantType: "PRIVATE",
+    businessStage: "BOTH",
+  },
 ];
 
 // ---------------------------------------------------------------------------

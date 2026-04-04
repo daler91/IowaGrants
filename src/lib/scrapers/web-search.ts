@@ -11,6 +11,12 @@ const SEARCH_QUERIES = [
   "Des Moines Cedar Rapids small business grants",
   `nationwide small business grants ${currentYear}`,
   "small business grants for women entrepreneurs",
+  `small business grants for veterans ${currentYear}`,
+  `small business grants for minorities ${currentYear}`,
+  `Black owned small business grants ${currentYear}`,
+  `LGBTQ small business grants ${currentYear}`,
+  `rural small business grants Iowa USDA ${currentYear}`,
+  `technology small business grants SBIR STTR ${currentYear}`,
 ];
 
 // URLs to skip (aggregators we already scrape, or non-grant sites)
@@ -35,6 +41,11 @@ const SKIP_DOMAINS = [
   "nav.com",
   "inc.com",
   "businessnewsdaily.com",
+  "intuit.com",
+  "lendingtree.com",
+  "fitsmallbusiness.com",
+  "lendio.com",
+  "credibly.com",
   "facebook.com",
   "twitter.com",
   "youtube.com",
@@ -97,6 +108,77 @@ function isListPage($: cheerio.CheerioAPI, pageTitle: string): boolean {
 
   return false;
 }
+
+// ---------------------------------------------------------------------------
+// List page link extraction — harvest grant URLs from aggregator pages
+// ---------------------------------------------------------------------------
+
+function extractGrantLinksFromListPage(
+  $: cheerio.CheerioAPI,
+  pageUrl: string,
+): string[] {
+  let pageDomain: string;
+  try {
+    pageDomain = new URL(pageUrl).hostname.replace("www.", "");
+  } catch {
+    return [];
+  }
+
+  const seen = new Set<string>();
+  const links: string[] = [];
+
+  function addLink(href: string): void {
+    try {
+      const linkDomain = new URL(href).hostname.replace("www.", "");
+      if (linkDomain === pageDomain) return;
+      if (shouldSkipUrl(href)) return;
+      if (isGenericHomepage(href)) return;
+      const canonical = href.split("?")[0].split("#")[0];
+      if (!seen.has(canonical)) {
+        seen.add(canonical);
+        links.push(href);
+      }
+    } catch { /* invalid URL */ }
+  }
+
+  // Extract external links from H2/H3 headings
+  $("h2 a[href], h3 a[href]").each((_, el) => {
+    const href = $(el).attr("href");
+    if (href && href.startsWith("http")) addLink(href);
+  });
+
+  // Extract action-oriented links following headings
+  $("h2, h3").each((_, heading) => {
+    let $el = $(heading).next();
+    let count = 0;
+    while ($el.length && count < 5) {
+      const tag = ($el.prop("tagName") || "").toLowerCase();
+      if (tag === "h2" || tag === "h3") break;
+      $el.find("a[href]").each((_, a) => {
+        const href = $(a).attr("href");
+        if (!href || !href.startsWith("http")) return;
+        const linkText = $(a).text().toLowerCase();
+        if (
+          !linkText.includes("apply") &&
+          !linkText.includes("learn more") &&
+          !linkText.includes("visit") &&
+          !linkText.includes("official") &&
+          !linkText.includes("website")
+        ) return;
+        addLink(href);
+      });
+      $el = $el.next();
+      count++;
+    }
+  });
+
+  return links;
+}
+
+type ScrapeResult =
+  | { type: "grant"; grant: GrantData }
+  | { type: "list"; links: string[] }
+  | null;
 
 type SearchResult = { title: string; url: string; snippet: string };
 
@@ -213,7 +295,7 @@ async function scrapeGrantPage(
   url: string,
   searchTitle: string,
   searchSnippet: string
-): Promise<GrantData | null> {
+): Promise<ScrapeResult> {
   try {
     const response = await axios.get(url, {
       headers: {
@@ -234,9 +316,13 @@ async function scrapeGrantPage(
     const pageTitle =
       $("h1").first().text().trim() || $("title").text().trim() || searchTitle;
 
-    // Skip list/aggregator pages — these should be handled by article-grants
+    // Extract grant links from list/aggregator pages instead of skipping them
     if (isListPage($, pageTitle)) {
-      console.log(`[web-search] Skipping list/aggregator page: ${url} ("${pageTitle}")`);
+      const extractedLinks = extractGrantLinksFromListPage($, url);
+      console.log(`[web-search] List page: ${url} — extracted ${extractedLinks.length} grant links`);
+      if (extractedLinks.length > 0) {
+        return { type: "list", links: extractedLinks };
+      }
       return null;
     }
 
@@ -276,19 +362,22 @@ async function scrapeGrantPage(
     const isIowaSpecific = locations.includes("Iowa") && !locations.includes("Nationwide");
 
     return {
-      title: pageTitle,
-      description,
-      sourceUrl: url,
-      sourceName: "web-search",
-      grantType: isIowaSpecific ? "STATE" : "PRIVATE",
-      status: deadline && deadline < new Date() ? "CLOSED" : "OPEN",
-      businessStage: "BOTH",
-      gender: "ANY",
-      locations,
-      industries: [],
-      deadline,
-      categories: [],
-      eligibleExpenses: [],
+      type: "grant",
+      grant: {
+        title: pageTitle,
+        description,
+        sourceUrl: url,
+        sourceName: "web-search",
+        grantType: isIowaSpecific ? "STATE" : "PRIVATE",
+        status: deadline && deadline < new Date() ? "CLOSED" : "OPEN",
+        businessStage: "BOTH",
+        gender: "ANY",
+        locations,
+        industries: [],
+        deadline,
+        categories: [],
+        eligibleExpenses: [],
+      },
     };
   } catch {
     return null;
@@ -301,14 +390,34 @@ async function scrapeGrantPage(
 
 async function processSearchResults(
   results: SearchResult[],
-  seenUrls: Set<string>
+  seenUrls: Set<string>,
+  depth: number = 0,
 ): Promise<GrantData[]> {
   const grants: GrantData[] = [];
+
   for (const result of results) {
     if (seenUrls.has(result.url)) continue;
     seenUrls.add(result.url);
-    const grant = await scrapeGrantPage(result.url, result.title, result.snippet);
-    if (grant) grants.push(grant);
+
+    // Polite delay when scraping links extracted from list pages
+    if (depth > 0) await delay(1500);
+
+    const scrapeResult = await scrapeGrantPage(result.url, result.title, result.snippet);
+    if (!scrapeResult) continue;
+
+    if (scrapeResult.type === "grant") {
+      grants.push(scrapeResult.grant);
+    } else if (scrapeResult.type === "list" && depth < 1) {
+      // Follow links extracted from list pages (one level deep, max 15 links)
+      const listResults: SearchResult[] = scrapeResult.links.slice(0, 15).map((link) => ({
+        title: "",
+        url: link,
+        snippet: "",
+      }));
+      await delay(1000);
+      const listGrants = await processSearchResults(listResults, seenUrls, depth + 1);
+      grants.push(...listGrants);
+    }
   }
   return grants;
 }
