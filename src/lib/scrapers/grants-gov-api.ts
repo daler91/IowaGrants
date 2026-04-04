@@ -3,6 +3,7 @@ import type { GrantData } from "@/lib/types";
 import { env } from "@/lib/env";
 import { SCRAPER_USER_AGENT } from "./config";
 import { detectLocationScope, isExcludedByStateRestriction } from "./utils";
+import { log, logError } from "@/lib/errors";
 
 /**
  * Grants.gov Search API Scraper
@@ -13,8 +14,7 @@ import { detectLocationScope, isExcludedByStateRestriction } from "./utils";
  * API docs: https://grants.gov/api/api-guide
  */
 
-const GRANTS_GOV_API_URL =
-  env.GRANTS_GOV_API_URL || "https://api.grants.gov/v1/api/search2";
+const GRANTS_GOV_API_URL = env.GRANTS_GOV_API_URL || "https://api.grants.gov/v1/api/search2";
 
 // Search queries targeting small business grants
 const SEARCH_QUERIES = [
@@ -84,7 +84,7 @@ async function searchGrantsGov(keyword: string): Promise<GrantsGovHit[]> {
           "User-Agent": SCRAPER_USER_AGENT,
         },
         timeout: 20000,
-      }
+      },
     );
 
     const body = response.data as GrantsGovResponse;
@@ -93,10 +93,7 @@ async function searchGrantsGov(keyword: string): Promise<GrantsGovHit[]> {
     const hits = body.oppHits || body.data?.oppHits || [];
     return hits;
   } catch (error) {
-    console.error(
-      `[grants-gov-api] Search failed for "${keyword}":`,
-      error instanceof Error ? error.message : error
-    );
+    logError("grants-gov-api", `Search failed for "${keyword}"`, error);
     return [];
   }
 }
@@ -105,7 +102,11 @@ async function searchGrantsGov(keyword: string): Promise<GrantsGovHit[]> {
 // Transform to GrantData
 // ---------------------------------------------------------------------------
 
-function parseHitAmounts(hit: GrantsGovHit): { amount?: string; amountMin?: number; amountMax?: number } {
+function parseHitAmounts(hit: GrantsGovHit): {
+  amount?: string;
+  amountMin?: number;
+  amountMax?: number;
+} {
   if (hit.awardFloor || hit.awardCeiling) {
     const amountMin = hit.awardFloor || undefined;
     const amountMax = hit.awardCeiling || undefined;
@@ -155,13 +156,14 @@ function hitToGrantData(hit: GrantsGovHit): GrantData | null {
   }
 
   // Determine status
-  const status = hit.oppStatus === "forecasted" ? "FORECASTED" as const : "OPEN" as const;
+  const status = hit.oppStatus === "forecasted" ? ("FORECASTED" as const) : ("OPEN" as const);
 
   // Build eligibility string
-  const eligibility = [hit.eligibleApplicants, hit.additionalEligibilityInfo]
-    .filter(Boolean)
-    .join(". ")
-    .slice(0, 1000) || undefined;
+  const eligibility =
+    [hit.eligibleApplicants, hit.additionalEligibilityInfo]
+      .filter(Boolean)
+      .join(". ")
+      .slice(0, 1000) || undefined;
 
   const locations = detectLocationScope(fullText);
 
@@ -201,7 +203,7 @@ export async function fetchGrantsGovApi(): Promise<GrantData[]> {
   const seenUrls = new Set<string>();
 
   for (const keyword of SEARCH_QUERIES) {
-    console.log(`[grants-gov-api] Searching: "${keyword}"...`);
+    log("grants-gov-api", `Searching: "${keyword}"...`);
     const hits = await searchGrantsGov(keyword);
 
     let added = 0;
@@ -216,12 +218,12 @@ export async function fetchGrantsGovApi(): Promise<GrantData[]> {
       added++;
     }
 
-    console.log(`[grants-gov-api] "${keyword}": ${hits.length} hits → ${added} new grants`);
+    log("grants-gov-api", `"${keyword}": ${hits.length} hits → ${added} new grants`);
 
     // Small delay between API calls (be polite)
     await new Promise((r) => setTimeout(r, 500));
   }
 
-  console.log(`[grants-gov-api] Total unique grants: ${allGrants.length}`);
+  log("grants-gov-api", "Total unique grants", { count: allGrants.length });
   return allGrants;
 }

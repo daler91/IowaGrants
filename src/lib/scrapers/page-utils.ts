@@ -2,6 +2,7 @@ import axios from "axios";
 import * as cheerio from "cheerio";
 import { cleanHtmlToText, extractDeadline } from "./parsing-utils";
 import { SCRAPER_USER_AGENT } from "./config";
+import { log } from "@/lib/errors";
 
 /**
  * Returns true if the page text looks like an error page (404, 500, etc.)
@@ -50,7 +51,16 @@ export function isActualGrantPage(url: string, title: string, pageText: string):
     const pathname = new URL(url).pathname.replace(/\/+$/, "");
     const segments = pathname.split("/").filter(Boolean);
     if (segments.length <= 1) {
-      const genericPaths = ["business", "programs", "grants", "funding", "resources", "services", "about", "help"];
+      const genericPaths = [
+        "business",
+        "programs",
+        "grants",
+        "funding",
+        "resources",
+        "services",
+        "about",
+        "help",
+      ];
       if (segments.length === 0 || genericPaths.includes(segments[0].toLowerCase())) {
         return false;
       }
@@ -61,9 +71,19 @@ export function isActualGrantPage(url: string, title: string, pageText: string):
 
   // Reject very generic titles
   const genericTitles = [
-    "business", "programs", "grants", "funding", "financial assistance",
-    "resources", "services", "home", "about", "contact", "help",
-    "small business", "entrepreneurs",
+    "business",
+    "programs",
+    "grants",
+    "funding",
+    "financial assistance",
+    "resources",
+    "services",
+    "home",
+    "about",
+    "contact",
+    "help",
+    "small business",
+    "entrepreneurs",
   ];
   if (genericTitles.includes(title.toLowerCase().trim())) {
     return false;
@@ -72,9 +92,9 @@ export function isActualGrantPage(url: string, title: string, pageText: string):
   // Require at least one grant-specific content signal in the page text
   const lower = pageText.toLowerCase();
   const grantSignals = [
-    /\$[\d,]+/,                          // Dollar amounts like $5,000
+    /\$[\d,]+/, // Dollar amounts like $5,000
     /deadline/i,
-    /eligib/i,                           // eligible, eligibility
+    /eligib/i, // eligible, eligibility
     /how to apply/i,
     /application/i,
     /award amount/i,
@@ -92,7 +112,7 @@ export function isActualGrantPage(url: string, title: string, pageText: string):
  * Used by web scrapers to visit individual grant pages.
  */
 export async function fetchPageDetails(
-  url: string
+  url: string,
 ): Promise<{ description: string; deadline?: Date } | null> {
   try {
     const response = await axios.get(url, {
@@ -106,15 +126,13 @@ export async function fetchPageDetails(
     const $ = cheerio.load(response.data);
 
     // Extract the main content area HTML and clean it properly
-    const contentHtml = $("main, article, .content, .entry-content, body")
-      .first()
-      .html() || "";
+    const contentHtml = $("main, article, .content, .entry-content, body").first().html() || "";
 
     const description = cleanHtmlToText(contentHtml, 1000);
 
     // Reject error/404 pages
     if (isErrorPage(description)) {
-      console.log(`[fetchPageDetails] Skipping error page: ${url}`);
+      log("page-utils", "Skipping error page", { url });
       return null;
     }
 

@@ -3,12 +3,8 @@ import * as cheerio from "cheerio";
 import type { GrantData } from "@/lib/types";
 import type { GrantType } from "@prisma/client";
 import { BROWSER_HEADERS } from "./config";
-import {
-  fetchPageDetails,
-  isGenericHomepage,
-  isActualGrantPage,
-  parseGrantAmount,
-} from "./utils";
+import { fetchPageDetails, isGenericHomepage, isActualGrantPage, parseGrantAmount } from "./utils";
+import { log, logError } from "@/lib/errors";
 
 // ---------------------------------------------------------------------------
 // Iowa local & regional economic development program sources
@@ -31,99 +27,68 @@ const LOCAL_SOURCES: LocalSource[] = [
   {
     name: "Iowa SBDC",
     sourceName: "iowa-sbdc",
-    urls: [
-      "https://iowasbdc.org/",
-      "https://iowasbdc.org/resources/",
-    ],
+    urls: ["https://iowasbdc.org/", "https://iowasbdc.org/resources/"],
     grantType: "STATE",
-    keywords: [
-      "grant", "fund", "financing", "capital", "loan", "incentive",
-      "award", "tax credit",
-    ],
+    keywords: ["grant", "fund", "financing", "capital", "loan", "incentive", "award", "tax credit"],
   },
   {
     name: "Iowa Finance Authority",
     sourceName: "iowa-finance-authority",
-    urls: [
-      "https://www.iowafinance.com/",
-      "https://www.iowafinance.com/programs/",
-    ],
+    urls: ["https://www.iowafinance.com/", "https://www.iowafinance.com/programs/"],
     grantType: "STATE",
-    keywords: [
-      "grant", "fund", "loan", "credit", "incentive",
-      "financing", "tax credit", "award",
-    ],
+    keywords: ["grant", "fund", "loan", "credit", "incentive", "financing", "tax credit", "award"],
   },
   {
     name: "Greater Des Moines Partnership",
     sourceName: "dsm-partnership",
-    urls: [
-      "https://www.dsmpartnership.com/growing-business-here/business-resources",
-    ],
+    urls: ["https://www.dsmpartnership.com/growing-business-here/business-resources"],
     grantType: "LOCAL",
-    keywords: [
-      "grant", "fund", "incentive", "financing", "loan",
-      "capital", "award", "tax credit",
-    ],
+    keywords: ["grant", "fund", "incentive", "financing", "loan", "capital", "award", "tax credit"],
   },
   {
     name: "Cedar Rapids Economic Development",
     sourceName: "cedar-rapids-econ",
-    urls: [
-      "https://www.economicdevelopmentcr.com/incentives-government/",
-    ],
+    urls: ["https://www.economicdevelopmentcr.com/incentives-government/"],
     grantType: "LOCAL",
     keywords: [
-      "grant", "fund", "incentive", "financing", "loan",
-      "facade", "revitalization", "award", "tax credit",
+      "grant",
+      "fund",
+      "incentive",
+      "financing",
+      "loan",
+      "facade",
+      "revitalization",
+      "award",
+      "tax credit",
     ],
   },
   {
     name: "Community Foundation of Greater Des Moines",
     sourceName: "cfgdm",
-    urls: [
-      "https://www.desmoinesfoundation.org/grants/",
-    ],
+    urls: ["https://www.desmoinesfoundation.org/grants/"],
     grantType: "LOCAL",
-    keywords: [
-      "grant", "fund", "award", "capital", "incentive",
-      "financing", "tax credit",
-    ],
+    keywords: ["grant", "fund", "award", "capital", "incentive", "financing", "tax credit"],
   },
   {
     name: "Choose Iowa",
     sourceName: "choose-iowa",
-    urls: [
-      "https://www.chooseiowa.com/grants",
-    ],
+    urls: ["https://www.chooseiowa.com/grants"],
     grantType: "STATE",
-    keywords: [
-      "grant", "fund", "award", "incentive", "value-added",
-    ],
+    keywords: ["grant", "fund", "award", "incentive", "value-added"],
   },
   {
     name: "Iowa DAS Targeted Small Business",
     sourceName: "iowa-das-tsb",
-    urls: [
-      "https://das.iowa.gov/vendors/targeted-small-business-program",
-    ],
+    urls: ["https://das.iowa.gov/vendors/targeted-small-business-program"],
     grantType: "STATE",
-    keywords: [
-      "grant", "fund", "certification", "procurement", "contract",
-      "incentive", "award",
-    ],
+    keywords: ["grant", "fund", "certification", "procurement", "contract", "incentive", "award"],
   },
   {
     name: "Midwest Partnership",
     sourceName: "midwest-partnership",
-    urls: [
-      "https://www.midwestpartnership.com/small-business-development/",
-    ],
+    urls: ["https://www.midwestpartnership.com/small-business-development/"],
     grantType: "LOCAL",
-    keywords: [
-      "grant", "fund", "incentive", "financing", "loan",
-      "capital", "award",
-    ],
+    keywords: ["grant", "fund", "incentive", "financing", "loan", "capital", "award"],
   },
 ];
 
@@ -134,12 +99,32 @@ const LOCAL_SOURCES: LocalSource[] = [
 // ---------------------------------------------------------------------------
 
 const EXCLUDED_LINK_PATTERNS = [
-  "title guaranty", "title insurance", "about us", "contact us",
-  "contact", "news", "blog", "events", "calendar", "staff",
-  "board of directors", "annual report", "newsletter", "subscribe",
-  "login", "sign in", "careers", "job opening", "employment",
-  "press release", "media", "faq", "privacy policy", "terms of use",
-  "site map", "accessibility",
+  "title guaranty",
+  "title insurance",
+  "about us",
+  "contact us",
+  "contact",
+  "news",
+  "blog",
+  "events",
+  "calendar",
+  "staff",
+  "board of directors",
+  "annual report",
+  "newsletter",
+  "subscribe",
+  "login",
+  "sign in",
+  "careers",
+  "job opening",
+  "employment",
+  "press release",
+  "media",
+  "faq",
+  "privacy policy",
+  "terms of use",
+  "site map",
+  "accessibility",
 ];
 
 // ---------------------------------------------------------------------------
@@ -151,11 +136,7 @@ interface RawLink {
   url: string;
 }
 
-function extractLinks(
-  html: string,
-  baseUrl: string,
-  keywords: string[]
-): RawLink[] {
+function extractLinks(html: string, baseUrl: string, keywords: string[]): RawLink[] {
   const $ = cheerio.load(html);
   const links: RawLink[] = [];
   const seen = new Set<string>();
@@ -224,10 +205,10 @@ async function scrapeSource(source: LocalSource): Promise<GrantData[]> {
         }
       }
     } catch (error) {
-      console.log(
-        `[iowa-local:${source.sourceName}] Failed to fetch ${url}:`,
-        error instanceof Error ? error.message : error
-      );
+      log("iowa-local-grants", `Failed to fetch ${url}`, {
+        source: source.sourceName,
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
 
     // Polite delay between pages on same source
@@ -244,13 +225,19 @@ async function scrapeSource(source: LocalSource): Promise<GrantData[]> {
 
       // Skip pages that returned null (error/404 pages) or have no content
       if (!details || !details.description) {
-        console.log(`[iowa-local:${source.sourceName}] Skipped empty/error page: ${link.title}`);
+        log("iowa-local-grants", "Skipped empty/error page", {
+          source: source.sourceName,
+          title: link.title,
+        });
         continue;
       }
 
       // Skip pages that don't look like actual grant listings
       if (!isActualGrantPage(link.url, link.title, details.description)) {
-        console.log(`[iowa-local:${source.sourceName}] Skipped non-grant page: ${link.title}`);
+        log("iowa-local-grants", "Skipped non-grant page", {
+          source: source.sourceName,
+          title: link.title,
+        });
         continue;
       }
 
@@ -283,10 +270,10 @@ async function scrapeSource(source: LocalSource): Promise<GrantData[]> {
       // Polite delay
       await new Promise((r) => setTimeout(r, 1500));
     } catch (error) {
-      console.log(
-        `[iowa-local:${source.sourceName}] Failed to enrich ${link.url}:`,
-        error instanceof Error ? error.message : error
-      );
+      log("iowa-local-grants", `Failed to enrich ${link.url}`, {
+        source: source.sourceName,
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
   }
 
@@ -303,9 +290,7 @@ export async function scrapeIowaLocalGrants(): Promise<GrantData[]> {
 
   for (const source of LOCAL_SOURCES) {
     try {
-      console.log(
-        `[iowa-local] Scraping ${source.name} (${source.urls.length} pages)...`
-      );
+      log("iowa-local-grants", `Scraping ${source.name}`, { pages: source.urls.length });
       const grants = await scrapeSource(source);
 
       for (const grant of grants) {
@@ -315,19 +300,15 @@ export async function scrapeIowaLocalGrants(): Promise<GrantData[]> {
         }
       }
 
-      console.log(
-        `[iowa-local:${source.sourceName}] Found ${grants.length} grants`
-      );
+      log("iowa-local-grants", `Found ${grants.length} grants`, { source: source.sourceName });
     } catch (error) {
-      console.error(
-        `[iowa-local:${source.sourceName}] Error:`,
-        error instanceof Error ? error.message : error
-      );
+      logError("iowa-local-grants", `Error scraping ${source.sourceName}`, error);
     }
   }
 
-  console.log(
-    `[iowa-local] Total unique grants: ${allGrants.length} from ${LOCAL_SOURCES.length} sources`
-  );
+  log("iowa-local-grants", "Total unique grants", {
+    count: allGrants.length,
+    sources: LOCAL_SOURCES.length,
+  });
   return allGrants;
 }

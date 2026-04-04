@@ -2,6 +2,7 @@ import { prisma } from "@/lib/db";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { TYPE_COLORS, STATUS_COLORS } from "@/lib/constants";
+import { parseRawData } from "@/lib/ai/schemas";
 import AdminEditButton from "@/components/AdminEditButton";
 
 /** Only allow http(s) links to prevent javascript: XSS via stored URLs. */
@@ -9,7 +10,9 @@ function safeHref(url: string): string | undefined {
   try {
     const parsed = new URL(url);
     if (parsed.protocol === "http:" || parsed.protocol === "https:") return parsed.href;
-  } catch { /* invalid URL */ }
+  } catch {
+    /* invalid URL */
+  }
   return undefined;
 }
 
@@ -75,17 +78,13 @@ export default async function GrantDetailPage({
           )}
           {grant.businessStage !== "BOTH" && (
             <span className="px-3 py-1 rounded-full text-sm font-medium bg-indigo-100 text-indigo-800">
-              {grant.businessStage === "STARTUP"
-                ? "For Startups"
-                : "For Existing Businesses"}
+              {grant.businessStage === "STARTUP" ? "For Startups" : "For Existing Businesses"}
             </span>
           )}
         </div>
 
         <div className="flex items-start justify-between gap-4 mb-4">
-          <h1 className="text-2xl font-bold text-[var(--foreground)]">
-            {grant.title}
-          </h1>
+          <h1 className="text-2xl font-bold text-[var(--foreground)]">{grant.title}</h1>
           <AdminEditButton grantId={id} />
         </div>
 
@@ -93,14 +92,10 @@ export default async function GrantDetailPage({
           {grant.amount && (
             <div className="bg-emerald-50 rounded-lg p-4">
               <p className="text-sm text-[var(--muted)] mb-1">Award Amount</p>
-              <p className="text-xl font-bold text-[var(--success)]">
-                {grant.amount}
-              </p>
+              <p className="text-xl font-bold text-[var(--success)]">{grant.amount}</p>
             </div>
           )}
-          <div
-            className={`rounded-lg p-4 ${isUrgent ? "bg-red-50" : "bg-gray-50"}`}
-          >
+          <div className={`rounded-lg p-4 ${isUrgent ? "bg-red-50" : "bg-gray-50"}`}>
             <p className="text-sm text-[var(--muted)] mb-1">Deadline</p>
             <p
               className={`text-lg font-semibold ${isUrgent ? "text-red-600" : "text-[var(--foreground)]"}`}
@@ -110,17 +105,13 @@ export default async function GrantDetailPage({
           </div>
           <div className="bg-gray-50 rounded-lg p-4">
             <p className="text-sm text-[var(--muted)] mb-1">Source</p>
-            <p className="text-lg font-semibold text-[var(--foreground)]">
-              {grant.sourceName}
-            </p>
+            <p className="text-lg font-semibold text-[var(--foreground)]">{grant.sourceName}</p>
           </div>
         </div>
 
         <div className="space-y-6">
           <div>
-            <h2 className="text-lg font-semibold text-[var(--foreground)] mb-2">
-              Description
-            </h2>
+            <h2 className="text-lg font-semibold text-[var(--foreground)] mb-2">Description</h2>
             <p className="text-[var(--muted)] leading-relaxed whitespace-pre-wrap">
               {grant.description}
             </p>
@@ -128,9 +119,7 @@ export default async function GrantDetailPage({
 
           {grant.eligibility && (
             <div>
-              <h2 className="text-lg font-semibold text-[var(--foreground)] mb-2">
-                Eligibility
-              </h2>
+              <h2 className="text-lg font-semibold text-[var(--foreground)] mb-2">Eligibility</h2>
               <p className="text-[var(--muted)] leading-relaxed whitespace-pre-wrap">
                 {grant.eligibility}
               </p>
@@ -157,9 +146,7 @@ export default async function GrantDetailPage({
 
           {grant.locations.length > 0 && (
             <div>
-              <h2 className="text-lg font-semibold text-[var(--foreground)] mb-2">
-                Locations
-              </h2>
+              <h2 className="text-lg font-semibold text-[var(--foreground)] mb-2">Locations</h2>
               <div className="flex flex-wrap gap-2">
                 {grant.locations.map((loc) => (
                   <span
@@ -175,9 +162,7 @@ export default async function GrantDetailPage({
 
           {grant.industries.length > 0 && (
             <div>
-              <h2 className="text-lg font-semibold text-[var(--foreground)] mb-2">
-                Industries
-              </h2>
+              <h2 className="text-lg font-semibold text-[var(--foreground)] mb-2">Industries</h2>
               <div className="flex flex-wrap gap-2">
                 {grant.industries.map((ind) => (
                   <span
@@ -213,8 +198,8 @@ export default async function GrantDetailPage({
               </a>
             )}
             {(() => {
-              const rawData = grant.rawData as Record<string, unknown> | null;
-              const articlePage = rawData?.articlePage as string | undefined;
+              const rawData = parseRawData(grant.rawData);
+              const articlePage = rawData?.articlePage;
               const safeArticleHref = articlePage ? safeHref(articlePage) : undefined;
               if (safeArticleHref && articlePage !== grant.sourceUrl) {
                 return (

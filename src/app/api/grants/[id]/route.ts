@@ -2,12 +2,16 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { Prisma } from "@prisma/client";
 import { requireAdminOrResponse } from "@/lib/auth";
-import { VALID_GRANT_TYPES, VALID_GENDER_FOCUS, VALID_BUSINESS_STAGE, VALID_GRANT_STATUS, GRANT_INCLUDE } from "@/lib/constants";
+import {
+  VALID_GRANT_TYPES,
+  VALID_GENDER_FOCUS,
+  VALID_BUSINESS_STAGE,
+  VALID_GRANT_STATUS,
+  GRANT_INCLUDE,
+} from "@/lib/constants";
+import { logError } from "@/lib/errors";
 
-export async function GET(
-  _request: NextRequest,
-  { params }: { params: Promise<{ id: string }> },
-) {
+export async function GET(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
 
@@ -22,18 +26,12 @@ export async function GET(
 
     return NextResponse.json(grant);
   } catch (error) {
-    console.error("Failed to fetch grant:", error);
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 },
-    );
+    logError("grants-api", "Failed to fetch grant", error);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
 
-export async function PUT(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> },
-) {
+export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const admin = await requireAdminOrResponse(request);
   if (admin instanceof NextResponse) return admin;
 
@@ -130,7 +128,8 @@ export async function PUT(
 
   if ("businessStage" in body) {
     if (VALID_BUSINESS_STAGE.includes(body.businessStage as string)) {
-      data.businessStage = body.businessStage as Prisma.EnumBusinessStageFieldUpdateOperationsInput["set"];
+      data.businessStage =
+        body.businessStage as Prisma.EnumBusinessStageFieldUpdateOperationsInput["set"];
     } else {
       errors.push(`businessStage must be one of: ${VALID_BUSINESS_STAGE.join(", ")}`);
     }
@@ -149,7 +148,9 @@ export async function PUT(
     if (field in body) {
       const val = body[field];
       if (Array.isArray(val) && val.every((v) => typeof v === "string")) {
-        (data as Record<string, unknown>)[field] = val.map((v: string) => v.trim()).filter((v: string) => v.length > 0);
+        (data as Record<string, unknown>)[field] = val
+          .map((v: string) => v.trim())
+          .filter((v: string) => v.length > 0);
       } else {
         errors.push(`${field} must be an array of strings`);
       }
@@ -179,10 +180,7 @@ export async function PUT(
         { status: 409 },
       );
     }
-    console.error("Failed to update grant:", error);
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 },
-    );
+    logError("grants-api", "Failed to update grant", error);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

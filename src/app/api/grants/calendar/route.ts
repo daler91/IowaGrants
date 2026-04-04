@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { logError } from "@/lib/errors";
 
 export async function GET(request: NextRequest) {
   try {
@@ -7,11 +8,15 @@ export async function GET(request: NextRequest) {
     const year = Number.parseInt(params.get("year") || new Date().getFullYear().toString());
     const month = Number.parseInt(params.get("month") || (new Date().getMonth() + 1).toString());
 
-    if (Number.isNaN(year) || Number.isNaN(month) || month < 1 || month > 12 || year < 2000 || year > 2100) {
-      return NextResponse.json(
-        { error: "Invalid year or month parameter" },
-        { status: 400 },
-      );
+    if (
+      Number.isNaN(year) ||
+      Number.isNaN(month) ||
+      month < 1 ||
+      month > 12 ||
+      year < 2000 ||
+      year > 2100
+    ) {
+      return NextResponse.json({ error: "Invalid year or month parameter" }, { status: 400 });
     }
 
     const startDate = new Date(year, month - 1, 1);
@@ -50,10 +55,7 @@ export async function GET(request: NextRequest) {
     response.headers.set("Cache-Control", "public, s-maxage=60, stale-while-revalidate=300");
     return response;
   } catch (error) {
-    console.error("Failed to fetch calendar grants:", error);
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 },
-    );
+    logError("calendar-api", "Failed to fetch calendar grants", error);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

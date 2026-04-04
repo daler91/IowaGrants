@@ -4,77 +4,14 @@ import type { CheerioAPI } from "cheerio";
 import type { GrantData } from "@/lib/types";
 import { env } from "@/lib/env";
 import { SCRAPER_USER_AGENT, BROWSER_HEADERS } from "./config";
-import { cleanHtmlToText, detectLocationScope, isExcludedByStateRestriction, isGenericHomepage } from "./utils";
-
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
-interface AirtableFieldMapping {
-  /** Possible column names for the grant title */
-  title: string[];
-  /** Possible column names for the description */
-  description: string[];
-  /** Possible column names for the grant URL / link */
-  sourceUrl: string[];
-  /** Possible column names for the dollar amount */
-  amount: string[];
-  /** Possible column names for the deadline */
-  deadline: string[];
-  /** Possible column names for eligibility info */
-  eligibility: string[];
-}
-
-interface AirtableSource {
-  name: string;
-  sourceName: string;
-  baseId: string;
-  tableId: string;
-  sharedViewId: string;
-  sourcePageUrl: string;
-  fieldMapping: AirtableFieldMapping;
-  defaults: Pick<GrantData, "grantType" | "status" | "businessStage" | "gender" | "locations" | "industries" | "categories" | "eligibleExpenses">;
-}
-
-interface AirtableRecord {
-  id: string;
-  fields: Record<string, unknown>;
-}
-
-// ---------------------------------------------------------------------------
-// Source configuration
-// ---------------------------------------------------------------------------
-
-const DEFAULT_FIELD_MAPPING: AirtableFieldMapping = {
-  title: ["Name", "Grant Name", "Title", "Grant", "Program Name", "Organization"],
-  description: ["Description", "Details", "About", "Summary", "Notes", "Info"],
-  sourceUrl: ["Link", "URL", "Website", "Apply Link", "Application Link", "Apply", "Grant Link"],
-  amount: ["Amount", "Award", "Award Amount", "Grant Amount", "Funding", "Prize", "Max Award"],
-  deadline: ["Deadline", "Due Date", "Close Date", "Closing Date", "End Date", "Expires", "Application Deadline"],
-  eligibility: ["Eligibility", "Who Can Apply", "Requirements", "Eligible", "Qualifications", "Who is Eligible"],
-};
-
-const AIRTABLE_SOURCES: AirtableSource[] = [
-  {
-    name: "ladies-who-launch",
-    sourceName: "ladies-who-launch",
-    baseId: env.LWL_AIRTABLE_BASE_ID,
-    tableId: env.LWL_AIRTABLE_TABLE_NAME,
-    sharedViewId: env.LWL_AIRTABLE_VIEW_ID,
-    sourcePageUrl: "https://www.ladieswholaunch.org/small-business-grants",
-    fieldMapping: DEFAULT_FIELD_MAPPING,
-    defaults: {
-      grantType: "PRIVATE",
-      status: "OPEN",
-      businessStage: "BOTH",
-      gender: "WOMEN",
-      locations: ["Nationwide"],
-      industries: [],
-      categories: [],
-      eligibleExpenses: [],
-    },
-  },
-];
+import {
+  cleanHtmlToText,
+  detectLocationScope,
+  isExcludedByStateRestriction,
+  isGenericHomepage,
+} from "./utils";
+import { log, logError } from "@/lib/errors";
+import { AIRTABLE_SOURCES, type AirtableSource, type AirtableRecord } from "./airtable-sources";
 
 // ---------------------------------------------------------------------------
 // Field matching helpers
@@ -94,7 +31,9 @@ function findField(fields: Record<string, unknown>, candidates: string[]): unkno
   // Try partial match (column name contains candidate or vice versa)
   for (const name of candidates) {
     const found = lower.find(
-      ([k]) => k.toLowerCase().includes(name.toLowerCase()) || name.toLowerCase().includes(k.toLowerCase())
+      ([k]) =>
+        k.toLowerCase().includes(name.toLowerCase()) ||
+        name.toLowerCase().includes(k.toLowerCase()),
     );
     if (found) return found[1];
   }
@@ -106,7 +45,8 @@ function fieldToString(value: unknown): string {
   if (typeof value === "string") return value;
   if (Array.isArray(value)) return value.map(fieldToString).join(", ");
   if (typeof value === "object") return JSON.stringify(value);
-  if (typeof value === "number" || typeof value === "boolean" || typeof value === "bigint") return String(value);
+  if (typeof value === "number" || typeof value === "boolean" || typeof value === "bigint")
+    return String(value);
   return JSON.stringify(value);
 }
 
@@ -123,7 +63,11 @@ const RANGE_PATTERN = /\$?([\d.]+)\s*[kK]?\s*[-\u2013\u2014to]+\s*\$?([\d.]+)\s*
 const UP_TO_PATTERN = /up\s+to\s+\$?([\d.]+)\s*[kK]?/i;
 const SINGLE_AMOUNT_PATTERN = /\$?([\d.]+)\s*[kK]?/;
 
-function parseAmounts(amountStr: string): { amount?: string; amountMin?: number; amountMax?: number } {
+function parseAmounts(amountStr: string): {
+  amount?: string;
+  amountMin?: number;
+  amountMax?: number;
+} {
   if (!amountStr) return {};
 
   const cleaned = amountStr.replaceAll(",", "");
@@ -190,15 +134,15 @@ function transformRecord(record: AirtableRecord, source: AirtableSource): GrantD
   // If URL is an array of URLs (Airtable can return arrays), take the first
   // Skip generic homepages — use the source page URL instead
   const extractedUrl = rawUrl.startsWith("http") ? rawUrl.split(/[,\s]/)[0] : "";
-  const sourceUrl = (extractedUrl && !isGenericHomepage(extractedUrl))
-    ? extractedUrl
-    : source.sourcePageUrl;
+  const sourceUrl =
+    extractedUrl && !isGenericHomepage(extractedUrl) ? extractedUrl : source.sourcePageUrl;
 
   const rawAmount = fieldToString(findField(fields, fieldMapping.amount));
   const amounts = parseAmounts(rawAmount);
 
   const deadline = parseDeadline(findField(fields, fieldMapping.deadline));
-  const eligibility = cleanHtmlToText(fieldToString(findField(fields, fieldMapping.eligibility)), 1000) || undefined;
+  const eligibility =
+    cleanHtmlToText(fieldToString(findField(fields, fieldMapping.eligibility)), 1000) || undefined;
 
   // Check for state restrictions in description + eligibility
   const fullText = `${description} ${eligibility || ""}`;
@@ -244,7 +188,7 @@ async function fetchViaApi(source: AirtableSource): Promise<AirtableRecord[]> {
         },
         params,
         timeout: 20000,
-      }
+      },
     );
 
     const data = response.data as { records: AirtableRecord[]; offset?: string };
@@ -385,7 +329,11 @@ function extractFromDataPayload(data: Record<string, unknown>): AirtableRecord[]
   // Nested under .data.rows with column definitions
   if (data.rows && Array.isArray(data.rows) && data.columns && Array.isArray(data.columns)) {
     const columns = data.columns as Array<{ id?: string; name?: string; label?: string }>;
-    const rows = data.rows as Array<{ id?: string; cellValues?: Record<string, unknown>; cells?: Record<string, unknown> }>;
+    const rows = data.rows as Array<{
+      id?: string;
+      cellValues?: Record<string, unknown>;
+      cells?: Record<string, unknown>;
+    }>;
 
     return rows.map((row) => {
       const fields: Record<string, unknown> = {};
@@ -435,16 +383,20 @@ function extractFromHtmlTable($: CheerioAPI): AirtableRecord[] {
     if (i === 0 && $(tr).find("th").length > 0) return; // skip header row
 
     const fields: Record<string, unknown> = {};
-    $(tr).find("td").each((j, td) => {
-      if (j < headers.length) {
-        // Preserve links from anchor tags
-        const link = $(td).find("a").first().attr("href");
-        const text = $(td).text().trim();
-        fields[headers[j]] = link && (headers[j].toLowerCase().includes("link") || headers[j].toLowerCase().includes("url"))
-          ? link
-          : text;
-      }
-    });
+    $(tr)
+      .find("td")
+      .each((j, td) => {
+        if (j < headers.length) {
+          // Preserve links from anchor tags
+          const link = $(td).find("a").first().attr("href");
+          const text = $(td).text().trim();
+          fields[headers[j]] =
+            link &&
+            (headers[j].toLowerCase().includes("link") || headers[j].toLowerCase().includes("url"))
+              ? link
+              : text;
+        }
+      });
 
     if (Object.keys(fields).length > 0) {
       records.push({ id: `row-${i}`, fields });
@@ -462,19 +414,16 @@ async function fetchRecordsForSource(source: AirtableSource): Promise<AirtableRe
   let records: AirtableRecord[] = [];
 
   if (env.AIRTABLE_API_KEY) {
-    console.log(`[airtable:${source.name}] Fetching via official API...`);
+    log("airtable-grants", "Fetching via official API...", { source: source.name });
     records = await fetchViaApi(source);
   }
 
   if (records.length === 0 && source.sharedViewId) {
-    console.log(`[airtable:${source.name}] Fetching via shared view...`);
+    log("airtable-grants", "Fetching via shared view...", { source: source.name });
     try {
       records = await fetchViaSharedView(source);
     } catch (error) {
-      console.error(
-        `[airtable:${source.name}] Shared view fetch failed:`,
-        error instanceof Error ? error.message : error
-      );
+      logError("airtable-grants", "Shared view fetch failed", error, { source: source.name });
     }
   }
 
@@ -483,9 +432,10 @@ async function fetchRecordsForSource(source: AirtableSource): Promise<AirtableRe
 
 function deduplicateAndTransform(records: AirtableRecord[], source: AirtableSource): GrantData[] {
   if (records[0]?.fields) {
-    console.log(
-      `[airtable:${source.name}] Fields found: ${Object.keys(records[0].fields).join(", ")}`
-    );
+    log("airtable-grants", "Fields found", {
+      source: source.name,
+      fields: Object.keys(records[0].fields).join(", "),
+    });
   }
 
   const seenUrls = new Set<string>();
@@ -507,7 +457,9 @@ export async function fetchAirtableGrants(): Promise<GrantData[]> {
 
   for (const source of AIRTABLE_SOURCES) {
     if (!source.baseId && !source.sharedViewId) {
-      console.log(`[airtable:${source.name}] Skipping — no base ID or shared view ID configured`);
+      log("airtable-grants", "Skipping — no base ID or shared view ID configured", {
+        source: source.name,
+      });
       continue;
     }
 
@@ -515,24 +467,21 @@ export async function fetchAirtableGrants(): Promise<GrantData[]> {
       const records = await fetchRecordsForSource(source);
 
       if (records.length === 0) {
-        console.log(`[airtable:${source.name}] No records found`);
+        log("airtable-grants", "No records found", { source: source.name });
         continue;
       }
 
       const grants = deduplicateAndTransform(records, source);
       allGrants.push(...grants);
 
-      console.log(
-        `[airtable:${source.name}] ${records.length} records → ${grants.length} grants`
-      );
+      log("airtable-grants", `${records.length} records → ${grants.length} grants`, {
+        source: source.name,
+      });
     } catch (error) {
-      console.error(
-        `[airtable:${source.name}] Error:`,
-        error instanceof Error ? error.message : error
-      );
+      logError("airtable-grants", `Error processing source ${source.name}`, error);
     }
   }
 
-  console.log(`[airtable] Total grants from all sources: ${allGrants.length}`);
+  log("airtable-grants", "Total grants from all sources", { count: allGrants.length });
   return allGrants;
 }

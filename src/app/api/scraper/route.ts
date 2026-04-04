@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import { env } from "@/lib/env";
 import { requireAdminOrResponse } from "@/lib/auth";
 import { runFullScrape } from "@/lib/scrapers";
+import { log, logError } from "@/lib/errors";
 
 function safeCompare(a: string, b: string): boolean {
   const bufA = Buffer.from(a);
@@ -46,7 +47,7 @@ export async function POST(request: NextRequest) {
     if (age < STALE_LOCK_MS) {
       return NextResponse.json(
         { error: "Scrape already in progress", scrapeId: running.id },
-        { status: 409 }
+        { status: 409 },
       );
     }
     // Stale lock — mark as failed
@@ -68,14 +69,14 @@ export async function POST(request: NextRequest) {
         grantsFound: r.grants.length,
         error: r.error || null,
       }));
-      console.log("[scraper-api] Scrape completed:", JSON.stringify(summary));
+      log("scraper-api", "Scrape completed", { summary });
       await prisma.scrapeRun.update({
         where: { id: scrapeRun.id },
         data: { status: "completed", completedAt: new Date(), grantsFound },
       });
     })
     .catch(async (error) => {
-      console.error("[scraper-api] Scrape failed:", error);
+      logError("scraper-api", "Scrape failed", error);
       await prisma.scrapeRun.update({
         where: { id: scrapeRun.id },
         data: {

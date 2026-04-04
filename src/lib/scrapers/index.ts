@@ -1,5 +1,6 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
+import { log, logError, logWarn } from "@/lib/errors";
 import { fetchSamGov } from "./sam-gov";
 import { scrapeIEDA } from "./ieda-scraper";
 import { fetchSimplerGrants } from "./simpler-grants";
@@ -12,7 +13,14 @@ import { scrapeArticleGrants } from "./article-grants";
 import { fetchGrantsGovApi } from "./grants-gov-api";
 import { fetchFoundationGrants } from "./foundation-grants";
 import { scrapeIowaLocalGrants } from "./iowa-local-grants";
-import { normalizeTitle, isExcludedByEligibility, isNonGrantProgram, isNonApplicationContent, validateDeadline, cleanHtmlToText } from "./utils";
+import {
+  normalizeTitle,
+  isExcludedByEligibility,
+  isNonGrantProgram,
+  isNonApplicationContent,
+  validateDeadline,
+  cleanHtmlToText,
+} from "./utils";
 import { categorizeAll } from "@/lib/ai/categorizer";
 import { parsePdfFromUrl } from "@/lib/ai/pdf-parser";
 import { validateGrants } from "@/lib/ai/grant-validator";
@@ -40,8 +48,8 @@ async function ensureEligibleExpenses() {
         where: { name: expense.name },
         update: { label: expense.label },
         create: expense,
-      })
-    )
+      }),
+    ),
   );
 }
 
@@ -65,30 +73,37 @@ async function upsertGrant(grant: GrantData): Promise<boolean> {
   // Sanitize deadline before DB write — catches wildly invalid years (e.g. 50315)
   const sanitizedDeadline = validateDeadline(grant.deadline);
   if (grant.deadline && !sanitizedDeadline) {
-    console.warn(`[orchestrator] Dropped invalid deadline for "${grant.title}": ${grant.deadline.toISOString()}`);
+    logWarn("orchestrator", `Dropped invalid deadline for "${grant.title}"`, {
+      deadline: grant.deadline.toISOString(),
+    });
   }
   grant.deadline = sanitizedDeadline;
 
-  const categoryConnections = grant.categories.length > 0
-    ? {
-        connectOrCreate: grant.categories.map((name) => ({
-          where: { name },
-          create: { name },
-        })),
-      }
-    : undefined;
+  const categoryConnections =
+    grant.categories.length > 0
+      ? {
+          connectOrCreate: grant.categories.map((name) => ({
+            where: { name },
+            create: { name },
+          })),
+        }
+      : undefined;
 
-  const expenseConnections = grant.eligibleExpenses.length > 0
-    ? {
-        connect: grant.eligibleExpenses.map((name) => ({ name })),
-      }
-    : undefined;
+  const expenseConnections =
+    grant.eligibleExpenses.length > 0
+      ? {
+          connect: grant.eligibleExpenses.map((name) => ({ name })),
+        }
+      : undefined;
 
   const existing = await findExistingGrant(grant);
 
   // Title-only duplicate (no matching sourceUrl) — skip entirely
   if (existing && existing.sourceUrl !== grant.sourceUrl) {
-    console.log(`[orchestrator] Skipping title duplicate: "${grant.title}" (already from ${existing.sourceName})`);
+    log("orchestrator", "Skipping title duplicate", {
+      title: grant.title,
+      existingSource: existing.sourceName,
+    });
     return false;
   }
 
@@ -112,12 +127,8 @@ async function upsertGrant(grant: GrantData): Promise<boolean> {
         pdfUrl: grant.pdfUrl,
         rawData: grant.rawData ? (grant.rawData as Prisma.InputJsonValue) : undefined,
         lastVerified: new Date(),
-        categories: categoryConnections
-          ? { set: [], ...categoryConnections }
-          : undefined,
-        eligibleExpenses: expenseConnections
-          ? { set: [], ...expenseConnections }
-          : undefined,
+        categories: categoryConnections ? { set: [], ...categoryConnections } : undefined,
+        eligibleExpenses: expenseConnections ? { set: [], ...expenseConnections } : undefined,
       },
     });
     return false; // updated, not new
@@ -159,7 +170,7 @@ function collectSourceResults(
       allGrants.push(...result.value);
       results.push({ source: name, grants: result.value });
     } else {
-      console.error(`[orchestrator] ${name} failed:`, result.reason);
+      logError("orchestrator", `${name} failed`, result.reason);
       results.push({
         source: name,
         grants: [],
@@ -170,10 +181,7 @@ function collectSourceResults(
   return allGrants;
 }
 
-async function processPdfGrants(
-  allGrants: GrantData[],
-  urlsToReparse: string[],
-): Promise<void> {
+async function processPdfGrants(allGrants: GrantData[], urlsToReparse: string[]): Promise<void> {
   // Parse any PDFs that need reparsing
   for (const url of urlsToReparse) {
     if (url.endsWith(".pdf")) {
@@ -212,7 +220,7 @@ async function upsertAndLog(
 
   for (const grant of allGrants) {
     if (blacklistedUrls.has(grant.sourceUrl)) {
-      console.log(`[orchestrator] Skipping blacklisted URL: ${grant.sourceUrl}`);
+      log("orchestrator", "Skipping blacklisted URL", { url: grant.sourceUrl });
       continue;
     }
     try {
@@ -222,10 +230,7 @@ async function upsertAndLog(
         newCountBySource[grant.sourceName] = (newCountBySource[grant.sourceName] || 0) + 1;
       }
     } catch (error) {
-      console.error(
-        `[orchestrator] Error upserting "${grant.title}":`,
-        error instanceof Error ? error.message : error
-      );
+      logError("orchestrator", `Error upserting "${grant.title}"`, error);
     }
   }
 
@@ -246,7 +251,7 @@ async function upsertAndLog(
 }
 
 export async function runFullScrape(scrapeRunId?: string): Promise<ScraperResult[]> {
-  console.log("[orchestrator] Starting full scrape...");
+  log("orchestrator", "Starting full scrape...");
   const results: ScraperResult[] = [];
 
   // Ensure eligible expense categories exist
@@ -256,7 +261,20 @@ export async function runFullScrape(scrapeRunId?: string): Promise<ScraperResult
   await checkForChanges();
 
   // Step 2: Fetch from all sources in parallel
-  const [samGov, ieda, simplerGrants, usda, opportunityIowa, iowaGrantsGov, webSearch, airtableGrants, articleGrants, grantsGovApi, foundationGrants, iowaLocalGrants] = await Promise.allSettled([
+  const [
+    samGov,
+    ieda,
+    simplerGrants,
+    usda,
+    opportunityIowa,
+    iowaGrantsGov,
+    webSearch,
+    airtableGrants,
+    articleGrants,
+    grantsGovApi,
+    foundationGrants,
+    iowaLocalGrants,
+  ] = await Promise.allSettled([
     fetchSamGov(),
     scrapeIEDA(),
     fetchSimplerGrants(),
@@ -337,12 +355,12 @@ export async function runFullScrape(scrapeRunId?: string): Promise<ScraperResult
     applicationFiltered = applicationFiltered.filter((grant) => {
       const passes = filter.test(grant);
       if (!passes) {
-        console.log(`[orchestrator] Filtered by ${filter.name}: "${grant.title}"`);
+        log("orchestrator", `Filtered by ${filter.name}`, { title: grant.title });
       }
       return passes;
     });
     if (before !== applicationFiltered.length) {
-      console.log(`[orchestrator] ${filter.name} filter: ${before} → ${applicationFiltered.length}`);
+      log("orchestrator", `${filter.name} filter: ${before} → ${applicationFiltered.length}`);
     }
   }
 
@@ -354,7 +372,7 @@ export async function runFullScrape(scrapeRunId?: string): Promise<ScraperResult
     (await prisma.blacklistedUrl.findMany({ select: { url: true } })).map((b) => b.url),
   );
   if (blacklistedUrls.size > 0) {
-    console.log(`[orchestrator] Loaded ${blacklistedUrls.size} blacklisted URLs`);
+    log("orchestrator", "Loaded blacklisted URLs", { count: blacklistedUrls.size });
   }
 
   // Step 7: Upsert all grants and log results
@@ -368,8 +386,6 @@ export async function runFullScrape(scrapeRunId?: string): Promise<ScraperResult
     });
   }
 
-  console.log(
-    `[orchestrator] Done. ${allGrants.length} total grants, ${totalNew} new.`
-  );
+  log("orchestrator", "Done", { totalGrants: allGrants.length, newGrants: totalNew });
   return results;
 }

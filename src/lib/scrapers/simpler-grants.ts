@@ -2,6 +2,7 @@ import axios from "axios";
 import type { GrantData } from "@/lib/types";
 import { env } from "@/lib/env";
 import { isExcludedByStateRestriction, detectLocationScope, validateDeadline } from "./utils";
+import { log, logError } from "@/lib/errors";
 
 const SIMPLER_GRANTS_API = "https://api.simpler.grants.gov/v1/opportunities/search";
 
@@ -24,34 +25,58 @@ interface SimplerResponse {
 
 // Specific small-business keywords — no overly broad terms like "business" or "company"
 const SMALL_BUSINESS_KEYWORDS = [
-  "small business", "sba", "sbir", "sttr",
-  "microenterprise", "micro-enterprise",
-  "women-owned", "woman-owned", "veteran-owned", "minority-owned",
-  "small firm", "small company", "small enterprise",
-  "rural business", "disadvantaged business",
-  "entrepreneur", "startup", "start-up",
+  "small business",
+  "sba",
+  "sbir",
+  "sttr",
+  "microenterprise",
+  "micro-enterprise",
+  "women-owned",
+  "woman-owned",
+  "veteran-owned",
+  "minority-owned",
+  "small firm",
+  "small company",
+  "small enterprise",
+  "rural business",
+  "disadvantaged business",
+  "entrepreneur",
+  "startup",
+  "start-up",
 ];
 
 // Grants mentioning these are likely NOT for small businesses
 const EXCLUSION_KEYWORDS = [
-  "university", "universities", "college", "collegiate",
-  "k-12", "school district", "educational institution",
-  "hospital", "health department", "public health",
-  "tribal government", "tribal nation", "indian tribe",
-  "state government", "state agency", "municipality",
-  "county government", "city government",
-  "non-profit organization", "nonprofit organization",
-  "law enforcement", "fire department",
-  "research institution", "academic research",
-  "housing authority", "transit authority",
+  "university",
+  "universities",
+  "college",
+  "collegiate",
+  "k-12",
+  "school district",
+  "educational institution",
+  "hospital",
+  "health department",
+  "public health",
+  "tribal government",
+  "tribal nation",
+  "indian tribe",
+  "state government",
+  "state agency",
+  "municipality",
+  "county government",
+  "city government",
+  "non-profit organization",
+  "nonprofit organization",
+  "law enforcement",
+  "fire department",
+  "research institution",
+  "academic research",
+  "housing authority",
+  "transit authority",
 ];
 
 function isEligibleOpportunity(opp: SimplerOpportunity): boolean {
-  const text = [
-    opp.opportunity_title,
-    opp.summary?.summary_description,
-    opp.agency,
-  ]
+  const text = [opp.opportunity_title, opp.summary?.summary_description, opp.agency]
     .filter(Boolean)
     .join(" ");
 
@@ -95,7 +120,7 @@ function mapToGrantData(opp: SimplerOpportunity): GrantData {
     businessStage: "BOTH",
     gender: "ANY",
     locations: detectLocationScope(
-      `${opp.opportunity_title || ""} ${opp.summary?.summary_description || ""}`
+      `${opp.opportunity_title || ""} ${opp.summary?.summary_description || ""}`,
     ),
     industries: [],
     rawData: opp as unknown as Record<string, unknown>,
@@ -107,7 +132,7 @@ function mapToGrantData(opp: SimplerOpportunity): GrantData {
 export async function fetchSimplerGrants(): Promise<GrantData[]> {
   const apiKey = env.SIMPLER_GRANTS_API_KEY;
   if (!apiKey) {
-    console.log("[simpler-grants] SIMPLER_GRANTS_API_KEY not set — skipping");
+    log("simpler-grants", "SIMPLER_GRANTS_API_KEY not set — skipping");
     return [];
   }
 
@@ -147,7 +172,7 @@ export async function fetchSimplerGrants(): Promise<GrantData[]> {
             "X-API-Key": apiKey,
           },
           timeout: 30000,
-        }
+        },
       );
 
       const opportunities = response.data?.data || [];
@@ -163,17 +188,18 @@ export async function fetchSimplerGrants(): Promise<GrantData[]> {
         }
       }
 
-      console.log(
-        `[simpler-grants] Fetched ${opportunities.length} results for "${query}", ${eligibleOpps.length} eligible`
-      );
+      log("simpler-grants", `Fetched ${opportunities.length} results for "${query}"`, {
+        eligible: eligibleOpps.length,
+      });
     } catch (error) {
-      console.error(
-        `[simpler-grants] Error fetching for "${query}":`,
-        error instanceof Error ? error.message : error
-      );
+      logError("simpler-grants", `Error fetching for "${query}"`, error);
     }
   }
 
-  console.log(`[simpler-grants] Total unique grants: ${allGrants.length} (fetched ${totalFetched}, filtered out ${totalFiltered})`);
+  log("simpler-grants", "Total unique grants", {
+    count: allGrants.length,
+    fetched: totalFetched,
+    filtered: totalFiltered,
+  });
   return allGrants;
 }

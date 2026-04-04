@@ -45,3 +45,26 @@ export const ParsedGrantSchema = z.object({
 });
 
 export type ParsedGrant = z.infer<typeof ParsedGrantSchema>;
+
+/**
+ * Schema for the rawData JSON field stored on Grant records.
+ * Different scrapers store different shapes; this schema is permissive
+ * but extracts known fields safely.
+ */
+export const RawDataSchema = z
+  .object({
+    articlePage: z.string().optional(),
+    originalTitle: z.string().optional(),
+    candidateUrls: z.array(z.string()).optional(),
+  })
+  .passthrough();
+
+/**
+ * Safely extract typed fields from the untyped rawData JSON column.
+ * Returns null if rawData is null/undefined or doesn't match the expected shape.
+ */
+export function parseRawData(rawData: unknown): z.infer<typeof RawDataSchema> | null {
+  if (!rawData || typeof rawData !== "object") return null;
+  const result = RawDataSchema.safeParse(rawData);
+  return result.success ? result.data : null;
+}

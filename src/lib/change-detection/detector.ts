@@ -3,6 +3,7 @@ import axios from "axios";
 import { prisma } from "@/lib/db";
 import { isSafeUrl } from "@/lib/scrapers/utils";
 import { CHANGE_DETECTION_TIMEOUT_MS, SCRAPER_USER_AGENT } from "@/lib/scrapers/config";
+import { log, logError, logWarn } from "@/lib/errors";
 
 function computeHash(content: string): string {
   // Strip dynamic elements (timestamps, session tokens) before hashing
@@ -25,7 +26,7 @@ export async function checkForChanges(): Promise<string[]> {
     try {
       // SSRF protection: skip internal/private URLs
       if (!isSafeUrl(monitored.url)) {
-        console.warn(`[change-detection] Blocked unsafe URL: ${monitored.url}`);
+        logWarn("change-detection", "Blocked unsafe URL", { url: monitored.url });
         continue;
       }
 
@@ -35,9 +36,7 @@ export async function checkForChanges(): Promise<string[]> {
           "User-Agent": SCRAPER_USER_AGENT,
         },
         // For PDFs, get binary data
-        responseType: monitored.url.endsWith(".pdf")
-          ? "arraybuffer"
-          : "text",
+        responseType: monitored.url.endsWith(".pdf") ? "arraybuffer" : "text",
       });
 
       const content =
@@ -55,24 +54,19 @@ export async function checkForChanges(): Promise<string[]> {
           data: {
             contentHash: newHash,
             lastChecked: new Date(),
-            ...(hasChanged
-              ? { lastChanged: new Date(), needsReparse: true }
-              : {}),
+            ...(hasChanged ? { lastChanged: new Date(), needsReparse: true } : {}),
           },
-        })
+        }),
       );
 
       if (hasChanged) {
         changedUrls.push(monitored.url);
-        console.log(`[change-detection] Changed: ${monitored.url}`);
+        log("change-detection", "Changed", { url: monitored.url });
       } else {
-        console.log(`[change-detection] Unchanged: ${monitored.url}`);
+        log("change-detection", "Unchanged", { url: monitored.url });
       }
     } catch (error) {
-      console.error(
-        `[change-detection] Error checking ${monitored.url}:`,
-        error instanceof Error ? error.message : error
-      );
+      logError("change-detection", `Error checking ${monitored.url}`, error);
     }
   }
 
@@ -81,9 +75,7 @@ export async function checkForChanges(): Promise<string[]> {
     await prisma.$transaction(updateOps);
   }
 
-  console.log(
-    `[change-detection] ${changedUrls.length} of ${urls.length} URLs changed`
-  );
+  log("change-detection", "Check complete", { changed: changedUrls.length, total: urls.length });
   return changedUrls;
 }
 
@@ -101,10 +93,7 @@ export async function markReparsed(url: string): Promise<void> {
   });
 }
 
-export async function addMonitoredUrl(
-  url: string,
-  sourceName: string
-): Promise<void> {
+export async function addMonitoredUrl(url: string, sourceName: string): Promise<void> {
   await prisma.monitoredUrl.upsert({
     where: { url },
     update: { sourceName },

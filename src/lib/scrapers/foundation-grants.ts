@@ -3,11 +3,8 @@ import * as cheerio from "cheerio";
 import type { GrantData } from "@/lib/types";
 import type { GenderFocus, GrantType, BusinessStage } from "@prisma/client";
 import { BROWSER_HEADERS } from "./config";
-import {
-  isExcludedByStateRestriction,
-  detectLocationScope,
-  extractDeadline,
-} from "./utils";
+import { isExcludedByStateRestriction, detectLocationScope, extractDeadline } from "./utils";
+import { log, logError } from "@/lib/errors";
 
 // ---------------------------------------------------------------------------
 // Curated private foundation grant programs for small businesses
@@ -200,7 +197,7 @@ const FOUNDATION_GRANTS: FoundationGrant[] = [
 // ---------------------------------------------------------------------------
 
 async function enrichFromPage(
-  grant: FoundationGrant
+  grant: FoundationGrant,
 ): Promise<{ deadline?: Date; liveDescription?: string }> {
   try {
     const response = await axios.get(grant.url, {
@@ -250,9 +247,7 @@ export async function fetchFoundationGrants(): Promise<GrantData[]> {
 
       // Skip if restricted to a non-Iowa state
       if (isExcludedByStateRestriction(fullText)) {
-        console.log(
-          `[foundation-grants] Skipping state-restricted: ${foundation.name}`
-        );
+        log("foundation-grants", "Skipping state-restricted", { name: foundation.name });
         continue;
       }
 
@@ -291,15 +286,13 @@ export async function fetchFoundationGrants(): Promise<GrantData[]> {
       // Polite delay between requests
       await new Promise((r) => setTimeout(r, 1500));
     } catch (error) {
-      console.error(
-        `[foundation-grants] Error processing ${foundation.name}:`,
-        error instanceof Error ? error.message : error
-      );
+      logError("foundation-grants", `Error processing ${foundation.name}`, error);
     }
   }
 
-  console.log(
-    `[foundation-grants] Total grants: ${allGrants.length} from ${FOUNDATION_GRANTS.length} curated sources`
-  );
+  log("foundation-grants", "Total grants", {
+    count: allGrants.length,
+    sources: FOUNDATION_GRANTS.length,
+  });
   return allGrants;
 }

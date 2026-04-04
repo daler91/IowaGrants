@@ -2,8 +2,15 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { Prisma } from "@prisma/client";
 import { requireAdminOrResponse } from "@/lib/auth";
-import { VALID_GRANT_TYPES, VALID_GENDER_FOCUS, VALID_BUSINESS_STAGE, VALID_GRANT_STATUS, GRANT_INCLUDE } from "@/lib/constants";
+import {
+  VALID_GRANT_TYPES,
+  VALID_GENDER_FOCUS,
+  VALID_BUSINESS_STAGE,
+  VALID_GRANT_STATUS,
+  GRANT_INCLUDE,
+} from "@/lib/constants";
 import { parsePagination, parseOptionalInt } from "@/lib/api-utils";
+import { logError } from "@/lib/errors";
 
 export async function GET(request: NextRequest) {
   try {
@@ -72,10 +79,7 @@ export async function GET(request: NextRequest) {
       prisma.grant.findMany({
         where,
         include: GRANT_INCLUDE,
-        orderBy: [
-          { deadline: { sort: "asc", nulls: "last" } },
-          { createdAt: "desc" },
-        ],
+        orderBy: [{ deadline: { sort: "asc", nulls: "last" } }, { createdAt: "desc" }],
         skip,
         take: limit,
       }),
@@ -92,11 +96,8 @@ export async function GET(request: NextRequest) {
     response.headers.set("Cache-Control", "public, s-maxage=60, stale-while-revalidate=300");
     return response;
   } catch (error) {
-    console.error("Failed to fetch grants:", error);
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 },
-    );
+    logError("grants-api", "Failed to fetch grants", error);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
 
@@ -132,10 +133,7 @@ export async function DELETE(request: NextRequest) {
 
     return NextResponse.json({ deleted: result.count });
   } catch (error) {
-    console.error("Failed to delete grants:", error);
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 },
-    );
+    logError("grants-api", "Failed to delete grants", error);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
