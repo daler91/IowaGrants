@@ -1,12 +1,24 @@
 import { NextRequest, NextResponse } from "next/server";
+import { timingSafeEqual } from "crypto";
 import { prisma } from "@/lib/db";
+import { requireAdmin } from "@/lib/auth";
 import { runFullScrape } from "@/lib/scrapers";
+
+function safeCompare(a: string, b: string): boolean {
+  const bufA = Buffer.from(a);
+  const bufB = Buffer.from(b);
+  if (bufA.length !== bufB.length) return false;
+  return timingSafeEqual(bufA, bufB);
+}
 
 export const maxDuration = 300; // 5 minute timeout for this route
 
 const STALE_LOCK_MS = 10 * 60 * 1000; // 10 minutes
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const admin = await requireAdmin(request);
+  if (admin instanceof NextResponse) return admin;
+
   const latest = await prisma.scrapeRun.findFirst({
     orderBy: { startedAt: "desc" },
   });
@@ -17,7 +29,8 @@ export async function POST(request: NextRequest) {
   const authHeader = request.headers.get("authorization");
   const cronSecret = process.env.CRON_SECRET;
 
-  if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
+  const expected = `Bearer ${cronSecret}`;
+  if (!cronSecret || !safeCompare(authHeader || "", expected)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

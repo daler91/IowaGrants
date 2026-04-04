@@ -28,9 +28,12 @@ export function middleware(request: NextRequest) {
   if (!config) return NextResponse.next();
 
   const [, { windowMs, max }] = config;
-  const ip =
-    request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
-  const key = `${ip}:${path}`;
+  const forwardedFor = request.headers.get("x-forwarded-for");
+  const ip = forwardedFor
+    ? forwardedFor.split(",").pop()?.trim() || "unknown"
+    : request.headers.get("x-real-ip") || "unknown";
+  const [prefix] = config;
+  const key = `${ip}:${prefix}`;
   const now = Date.now();
 
   // Periodic cleanup every 100 requests to prevent unbounded Map growth
