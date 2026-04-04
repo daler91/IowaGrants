@@ -178,7 +178,7 @@ export default async function GrantDetailPage({
             </div>
           )}
 
-          <div className="flex gap-4 pt-4 border-t border-[var(--border)]">
+          <div className="flex flex-wrap gap-4 pt-4 border-t border-[var(--border)]">
             <a
               href={grant.sourceUrl}
               target="_blank"
@@ -197,6 +197,23 @@ export default async function GrantDetailPage({
                 Download PDF Guidelines
               </a>
             )}
+            {(() => {
+              const rawData = grant.rawData as Record<string, unknown> | null;
+              const articlePage = rawData?.articlePage as string | undefined;
+              if (articlePage && articlePage !== grant.sourceUrl) {
+                return (
+                  <a
+                    href={articlePage}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-6 py-3 border border-[var(--border)] text-[var(--muted)] rounded-lg font-medium hover:bg-gray-50 transition-colors text-sm"
+                  >
+                    Found via {grant.sourceName}
+                  </a>
+                );
+              }
+              return null;
+            })()}
           </div>
 
           <p className="text-xs text-[var(--muted)]">

@@ -42,28 +42,61 @@ export function cleanHtmlToText(html: string, maxLength = 2000): string {
 /**
  * Extract a deadline date from HTML content by searching for common patterns.
  */
+// Date formats used across deadline extraction
+const DATE_FORMATS = [
+  /([A-Z][a-z]{2,8}\.? \d{1,2},?\s*\d{4})/i,   // January 15, 2025 / Mar. 15, 2025 / Jan 15 2025
+  /(\d{1,2} [A-Z][a-z]{2,8},?\s*\d{4})/i,       // 15 March, 2025 / 15 Jan 2025
+  /(\d{1,2}\/\d{1,2}\/\d{2,4})/,                 // 01/15/2025
+  /(\d{4}-\d{2}-\d{2})/,                          // 2025-01-15 (ISO)
+  /([A-Z][a-z]{2,8}\.?\s+\d{4})/i,               // March 2025 (month-only, interpreted as 1st)
+];
+
+function tryParseDate(text: string): Date | undefined {
+  for (const fmt of DATE_FORMATS) {
+    const match = fmt.exec(text);
+    if (match?.[1]) {
+      const parsed = new Date(match[1]);
+      if (
+        !Number.isNaN(parsed.getTime()) &&
+        parsed.getFullYear() >= new Date().getFullYear() - 1 &&
+        parsed.getFullYear() <= new Date().getFullYear() + 10
+      ) {
+        return parsed;
+      }
+    }
+  }
+  return undefined;
+}
+
 export function extractDeadline(html: string): Date | undefined {
   const text = html.replaceAll(/<[^>]+>/g, " ").replaceAll(/\s+/g, " ");
 
-  // Find deadline label positions, then extract dates after them
+  // Strategy 1: Find deadline label positions, then extract dates after them
   const labelPattern = /(?:deadline|due date|closes?|closing date|expiration|expires?|submit by|applications? due|apply by)[:\s]*/gi;
-  const dateFormats = [
-    /([A-Z][a-z]+ \d{1,2},?\s*\d{4})/i,
-    /(\d{1,2}\/\d{1,2}\/\d{2,4})/,
-    /(\d{4}-\d{2}-\d{2})/,
-  ];
 
   let labelMatch;
   while ((labelMatch = labelPattern.exec(text)) !== null) {
-    const after = text.slice(labelMatch.index + labelMatch[0].length);
-    for (const fmt of dateFormats) {
-      const dateMatch = fmt.exec(after);
-      if (dateMatch?.[1]) {
-        const parsed = new Date(dateMatch[1]);
-        if (!Number.isNaN(parsed.getTime()) && parsed.getFullYear() >= new Date().getFullYear() - 1 && parsed.getFullYear() <= new Date().getFullYear() + 10) {
-          return parsed;
-        }
-      }
+    // Look at the next ~80 chars after the label for a date
+    const after = text.slice(labelMatch.index + labelMatch[0].length, labelMatch.index + labelMatch[0].length + 80);
+    const date = tryParseDate(after);
+    if (date) return date;
+  }
+
+  // Strategy 2: Flowing-text patterns — dates near deadline-related phrases
+  const flowingPatterns = [
+    /(?:applications?\s+(?:are\s+)?due|deadline\s+(?:is|to\s+apply))\s+(?:by\s+|on\s+|:?\s*)/gi,
+    /(?:must\s+(?:be\s+)?(?:submitted?|received?)|submit\s+(?:your\s+)?applications?)\s+(?:by|before|no\s+later\s+than)\s+/gi,
+    /(?:closes?|closing)\s+(?:on\s+|date\s+(?:is\s+)?)/gi,
+    /(?:open|available|accepting\s+applications?)\s+(?:through|until|till)\s+/gi,
+    /(?:apply|register)\s+(?:by|before)\s+/gi,
+  ];
+
+  for (const pattern of flowingPatterns) {
+    let flowMatch;
+    while ((flowMatch = pattern.exec(text)) !== null) {
+      const after = text.slice(flowMatch.index + flowMatch[0].length, flowMatch.index + flowMatch[0].length + 80);
+      const date = tryParseDate(after);
+      if (date) return date;
     }
   }
 
@@ -601,4 +634,42 @@ export function isNonApplicationContent(
   }
 
   return { excluded: false, reason: "" };
+}
+
+/**
+ * Checks if a URL is reachable (not 404/5xx).
+ * Uses HEAD with GET fallback, 5-second timeout.
+ */
+export async function checkUrlHealth(url: string): Promise<boolean> {
+  try {
+    const response = await axios.head(url, {
+      timeout: 5000,
+      maxRedirects: 5,
+      validateStatus: () => true,
+      headers: {
+        "User-Agent": "Mozilla/5.0 (compatible; GrantScanner/1.0)",
+      },
+    });
+
+    // HEAD succeeded — check status
+    if (response.status >= 200 && response.status < 400) return true;
+
+    // Some servers reject HEAD — try GET
+    if (response.status === 405 || response.status === 403) {
+      const getResponse = await axios.get(url, {
+        timeout: 5000,
+        maxRedirects: 5,
+        validateStatus: () => true,
+        headers: {
+          "User-Agent": "Mozilla/5.0 (compatible; GrantScanner/1.0)",
+          Range: "bytes=0-1024",
+        },
+      });
+      return getResponse.status >= 200 && getResponse.status < 400;
+    }
+
+    return false;
+  } catch {
+    return false;
+  }
 }

@@ -90,6 +90,51 @@ describe("extractDeadline", () => {
     const html = "<p>Deadline: January 1, 2020</p>";
     expect(extractDeadline(html)).toBeUndefined();
   });
+
+  it("extracts deadline from flowing text: 'applications are due by'", () => {
+    const html = "<p>Applications are due by March 15, 2026 for consideration.</p>";
+    const result = extractDeadline(html);
+    expect(result).toBeInstanceOf(Date);
+    expect(result!.getMonth()).toBe(2); // March
+    expect(result!.getDate()).toBe(15);
+  });
+
+  it("extracts deadline from flowing text: 'must be submitted by'", () => {
+    const html = "<p>All applications must be submitted by June 30, 2026.</p>";
+    const result = extractDeadline(html);
+    expect(result).toBeInstanceOf(Date);
+    expect(result!.getMonth()).toBe(5); // June
+  });
+
+  it("extracts deadline from flowing text: 'apply by'", () => {
+    const result = extractDeadline("Apply by December 1, 2026 to be considered.");
+    expect(result).toBeInstanceOf(Date);
+    expect(result!.getMonth()).toBe(11); // December
+  });
+
+  it("extracts deadline from flowing text: 'open through'", () => {
+    const result = extractDeadline("Applications open through April 2026.");
+    expect(result).toBeInstanceOf(Date);
+    expect(result!.getMonth()).toBe(3); // April
+  });
+
+  it("extracts deadline from flowing text: 'closes on'", () => {
+    const result = extractDeadline("<p>This grant closes on September 15, 2026.</p>");
+    expect(result).toBeInstanceOf(Date);
+    expect(result!.getMonth()).toBe(8); // September
+  });
+
+  it("extracts abbreviated month names", () => {
+    const result = extractDeadline("<p>Deadline: Mar. 15, 2026</p>");
+    expect(result).toBeInstanceOf(Date);
+    expect(result!.getMonth()).toBe(2); // March
+  });
+
+  it("extracts day-before-month format", () => {
+    const result = extractDeadline("<p>Deadline: 15 March, 2026</p>");
+    expect(result).toBeInstanceOf(Date);
+    expect(result!.getDate()).toBe(15);
+  });
 });
 
 describe("isExcludedByStateRestriction", () => {
