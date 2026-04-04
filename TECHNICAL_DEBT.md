@@ -170,11 +170,10 @@ All define identical arrays: `VALID_GRANT_TYPES`, `VALID_GENDER_FOCUS`, `VALID_B
 
 **Missing indexes:**
 - No index on `sourceName` in `prisma/schema.prisma` despite being used in `findExistingGrant` queries
-- No unique constraint on `Category.name` or `EligibleExpense.name` (lines 45–54), allowing duplicate entries
 
 **Untyped JSON** — `prisma/schema.prisma` line 28: `rawData Json?` has no documented or validated structure. Used in `src/lib/ai/pdf-parser.ts` and multiple scrapers without type safety.
 
-**Action:** Batch the update loop in change detection. Add database index on `sourceName`. Add unique constraints on category/expense names. Define and document the expected `rawData` shape.
+**Action:** Batch the update loop in change detection. Add database index on `sourceName`. Define and document the expected `rawData` shape.
 
 ---
 
@@ -185,11 +184,9 @@ All define identical arrays: `VALID_GRANT_TYPES`, `VALID_GENDER_FOCUS`, `VALID_B
 - Single-instance only — won't work if scaled to multiple Railway instances
 - `x-forwarded-for` header used for IP identification with minimal validation (`.split(",").pop()`)
 
-**CSP header** — `next.config.mjs` lines 24–26: `connect-src 'self'` may block Anthropic SDK calls to `api.anthropic.com`. Should include `connect-src 'self' https://api.anthropic.com`.
-
 **No password strength validation** — `prisma/seed.ts` line 15 accepts `ADMIN_PASSWORD` from env without length/complexity requirements.
 
-**Action:** Fix CSP header to allow Anthropic API. Add password strength validation. Document rate limiter as single-instance only, and plan for distributed rate limiting if scaling.
+**Action:** Add password strength validation. Document rate limiter as single-instance only, and plan for distributed rate limiting if scaling.
 
 ---
 
