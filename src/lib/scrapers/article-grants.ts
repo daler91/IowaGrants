@@ -4,7 +4,7 @@ import type { CheerioAPI } from "cheerio";
 import type { AnyNode } from "domhandler";
 import type { GrantData } from "@/lib/types";
 import type { GenderFocus, GrantType, BusinessStage } from "@prisma/client";
-import { cleanHtmlToText, detectLocationScope, isExcludedByStateRestriction, isGenericHomepage } from "./utils";
+import { cleanHtmlToText, detectLocationScope, isExcludedByStateRestriction, isGenericHomepage, checkUrlHealth } from "./utils";
 
 // ---------------------------------------------------------------------------
 // Article-based grant page configuration
@@ -443,9 +443,74 @@ function extractLabeledField(text: string, labels: string[]): string | undefined
   return undefined;
 }
 
-function extractAmountFromText(text: string): string | undefined {
-  const match = /\$[\d,]+(?:\s*(?:to|-|–)\s*\$[\d,]+)?/.exec(text);
-  return match?.[0];
+// Negative-context words that indicate a dollar amount is NOT a grant award
+const AMOUNT_NEGATIVE_CONTEXT = [
+  // Revenue / income
+  "revenue", "income", "sales", "annual revenue", "gross revenue",
+  "net income", "earn", "earning", "earnings",
+  // Requirements / thresholds
+  "must have", "require", "required", "minimum", "at least", "need",
+  "maintain", "threshold", "no more than", "no less than",
+  // Investment / valuation
+  "invest", "investment", "raised", "valuation", "capitalization",
+  // Fees / costs
+  "fee", "cost", "price", "pay", "charge", "salary", "wage", "tuition",
+  "spend", "spending", "budget of",
+];
+
+// Positive-context words that indicate a dollar amount IS a grant award
+const AMOUNT_POSITIVE_CONTEXT = [
+  "award", "grant", "up to", "receive", "provides", "fund",
+  "funding", "prize", "scholarship", "stipend", "offers",
+];
+
+export function extractAmountFromText(text: string): string | undefined {
+  const amountPattern = /\$[\d,]+(?:\s*(?:to|-|–|—)\s*\$[\d,]+)?/g;
+  const matches = Array.from(text.matchAll(amountPattern));
+  if (matches.length === 0) return undefined;
+
+  interface Candidate {
+    match: string;
+    index: number;
+    hasPositiveContext: boolean;
+  }
+
+  const candidates: Candidate[] = [];
+
+  for (const m of matches) {
+    const idx = m.index ?? 0;
+    // Find the start of the current clause/sentence (split on . ; — or newline)
+    const textBefore = text.slice(0, idx);
+    const clauseStart = Math.max(
+      textBefore.lastIndexOf("."),
+      textBefore.lastIndexOf(";"),
+      textBefore.lastIndexOf("\n"),
+    );
+    const precedingText = text.slice(Math.max(0, clauseStart), idx).toLowerCase();
+
+    // Skip if preceded by negative context within the same clause
+    const hasNegative = AMOUNT_NEGATIVE_CONTEXT.some((word) =>
+      precedingText.includes(word)
+    );
+    if (hasNegative) continue;
+
+    // Check for positive context nearby (before and after within same clause)
+    const clauseEnd = text.indexOf(".", idx + m[0].length);
+    const surroundingText = text
+      .slice(Math.max(0, clauseStart), clauseEnd > 0 ? clauseEnd : idx + m[0].length + 60)
+      .toLowerCase();
+    const hasPositiveContext = AMOUNT_POSITIVE_CONTEXT.some((word) =>
+      surroundingText.includes(word)
+    );
+
+    candidates.push({ match: m[0], index: idx, hasPositiveContext });
+  }
+
+  if (candidates.length === 0) return undefined;
+
+  // Prefer candidates with positive context
+  const preferred = candidates.find((c) => c.hasPositiveContext);
+  return preferred ? preferred.match : candidates[0].match;
 }
 
 // ---------------------------------------------------------------------------
@@ -510,6 +575,7 @@ interface RawGrant {
   deadline?: string;
   eligibility?: string;
   applyUrl?: string;
+  candidateUrls?: string[];
 }
 
 function parseGrantsFromHtml(html: string, siteDomain: string): RawGrant[] {
@@ -532,34 +598,24 @@ function parseGrantsFromHtml(html: string, siteDomain: string): RawGrant[] {
   return grants;
 }
 
-function findApplyUrl($: CheerioAPI, $section: cheerio.Cheerio<AnyNode>, siteDomain: string): string | undefined {
-  // Prefer external links with action text
-  let applyUrl: string | undefined;
+function findCandidateUrls($: CheerioAPI, $section: cheerio.Cheerio<AnyNode>, siteDomain: string): string[] {
+  const actionUrls: string[] = [];
+  const otherUrls: string[] = [];
+
   $section.find("a[href]").each((_, a) => {
-    if (applyUrl) return;
     const href = $(a).attr("href") || "";
+    if (!href.startsWith("http") || href.includes(siteDomain)) return;
+
     const linkText = $(a).text().toLowerCase();
-    if (
-      href.startsWith("http") &&
-      !href.includes(siteDomain) &&
-      (linkText.includes("apply") || linkText.includes("learn more") || linkText.includes("visit"))
-    ) {
-      applyUrl = href;
+    if (linkText.includes("apply") || linkText.includes("learn more") || linkText.includes("visit")) {
+      if (!actionUrls.includes(href)) actionUrls.push(href);
+    } else {
+      if (!otherUrls.includes(href)) otherUrls.push(href);
     }
   });
 
-  // Fallback: any external link
-  if (!applyUrl) {
-    $section.find("a[href]").each((_, a) => {
-      if (applyUrl) return;
-      const href = $(a).attr("href") || "";
-      if (href.startsWith("http") && !href.includes(siteDomain)) {
-        applyUrl = href;
-      }
-    });
-  }
-
-  return applyUrl;
+  // Action links first, then other external links
+  return [...actionUrls, ...otherUrls];
 }
 
 function collectSectionElements($: CheerioAPI, $heading: cheerio.Cheerio<AnyNode>, headingTag: string) {
@@ -610,7 +666,9 @@ function parseStructuredSections($: CheerioAPI, grants: RawGrant[], siteDomain: 
       grant.amount = extractAmountFromText(sectionText);
     }
 
-    grant.applyUrl = findApplyUrl($, $section, siteDomain);
+    const urls = findCandidateUrls($, $section, siteDomain);
+    grant.applyUrl = urls[0];
+    grant.candidateUrls = urls;
 
     grants.push(grant);
   }
@@ -627,7 +685,7 @@ function parseHeadingSections($: CheerioAPI, grants: RawGrant[], siteDomain: str
     if (title.length < 5 || title.length > 200) continue;
 
     let description = "";
-    let applyUrl: string | undefined;
+    const candidateUrls: string[] = [];
     let $el = $heading.next();
     let collected = 0;
 
@@ -639,8 +697,8 @@ function parseHeadingSections($: CheerioAPI, grants: RawGrant[], siteDomain: str
 
       $el.find("a[href]").each((_, a) => {
         const href = $(a).attr("href") || "";
-        if (href.startsWith("http") && !href.includes(siteDomain) && !applyUrl) {
-          applyUrl = href;
+        if (href.startsWith("http") && !href.includes(siteDomain) && !candidateUrls.includes(href)) {
+          candidateUrls.push(href);
         }
       });
 
@@ -662,7 +720,8 @@ function parseHeadingSections($: CheerioAPI, grants: RawGrant[], siteDomain: str
       amount: extractLabeledField(description, ["amount", "award"]) || extractAmountFromText(description),
       deadline: extractLabeledField(description, ["deadline", "due date"]),
       eligibility: extractLabeledField(description, ["eligibility", "who can apply"]),
-      applyUrl,
+      applyUrl: candidateUrls[0],
+      candidateUrls,
     });
   }
 }
@@ -718,7 +777,11 @@ function toGrantData(raw: RawGrant, page: ArticleGrantPage): GrantData | null {
     industries: [],
     categories: [],
     eligibleExpenses: [],
-    rawData: { articlePage: page.url, originalTitle: raw.title },
+    rawData: {
+      articlePage: page.url,
+      originalTitle: raw.title,
+      candidateUrls: raw.candidateUrls || [],
+    },
   };
 }
 
@@ -726,12 +789,12 @@ function toGrantData(raw: RawGrant, page: ArticleGrantPage): GrantData | null {
 // Dedup + collection helper
 // ---------------------------------------------------------------------------
 
-function collectNewGrants(
+async function collectNewGrants(
   rawGrants: RawGrant[],
   page: ArticleGrantPage,
   seenUrls: Set<string>,
   seenTitles: Set<string>,
-): GrantData[] {
+): Promise<GrantData[]> {
   const newGrants: GrantData[] = [];
 
   for (const raw of rawGrants) {
@@ -741,6 +804,30 @@ function collectNewGrants(
     // Deduplicate by URL and normalized title across ALL pages/sites
     const titleKey = grant.title.toLowerCase().replaceAll(/[^a-z0-9]/g, "");
     if (seenUrls.has(grant.sourceUrl) || seenTitles.has(titleKey)) continue;
+
+    // Validate the source URL if it's not the article page itself
+    if (grant.sourceUrl !== page.url) {
+      const isHealthy = await checkUrlHealth(grant.sourceUrl);
+      if (!isHealthy) {
+        // Try other candidate URLs from the raw grant
+        const candidates = raw.candidateUrls || [];
+        let foundHealthy = false;
+        for (const candidate of candidates) {
+          if (candidate === grant.sourceUrl || isGenericHomepage(candidate)) continue;
+          const candidateHealthy = await checkUrlHealth(candidate);
+          if (candidateHealthy) {
+            grant.sourceUrl = candidate;
+            foundHealthy = true;
+            break;
+          }
+        }
+        if (!foundHealthy) {
+          // Fall back to article page URL
+          grant.sourceUrl = page.url;
+        }
+      }
+    }
+
     seenUrls.add(grant.sourceUrl);
     seenTitles.add(titleKey);
 
@@ -783,7 +870,7 @@ export async function scrapeArticleGrants(): Promise<GrantData[]> {
       }
 
       const rawGrants = parseGrantsFromHtml(html, page.siteDomain);
-      const newGrants = collectNewGrants(rawGrants, page, seenUrls, seenTitles);
+      const newGrants = await collectNewGrants(rawGrants, page, seenUrls, seenTitles);
       allGrants.push(...newGrants);
 
       console.log(`${logPrefix} ${rawGrants.length} parsed → ${newGrants.length} new grants`);

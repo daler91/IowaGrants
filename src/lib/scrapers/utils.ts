@@ -602,3 +602,41 @@ export function isNonApplicationContent(
 
   return { excluded: false, reason: "" };
 }
+
+/**
+ * Checks if a URL is reachable (not 404/5xx).
+ * Uses HEAD with GET fallback, 5-second timeout.
+ */
+export async function checkUrlHealth(url: string): Promise<boolean> {
+  try {
+    const response = await axios.head(url, {
+      timeout: 5000,
+      maxRedirects: 5,
+      validateStatus: () => true,
+      headers: {
+        "User-Agent": "Mozilla/5.0 (compatible; GrantScanner/1.0)",
+      },
+    });
+
+    // HEAD succeeded — check status
+    if (response.status >= 200 && response.status < 400) return true;
+
+    // Some servers reject HEAD — try GET
+    if (response.status === 405 || response.status === 403) {
+      const getResponse = await axios.get(url, {
+        timeout: 5000,
+        maxRedirects: 5,
+        validateStatus: () => true,
+        headers: {
+          "User-Agent": "Mozilla/5.0 (compatible; GrantScanner/1.0)",
+          Range: "bytes=0-1024",
+        },
+      });
+      return getResponse.status >= 200 && getResponse.status < 400;
+    }
+
+    return false;
+  } catch {
+    return false;
+  }
+}
