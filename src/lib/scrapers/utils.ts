@@ -565,7 +565,6 @@ export function isNonApplicationContent(
   url: string,
 ): { excluded: boolean; reason: string } {
   const text = `${title} ${description}`;
-  const lower = text.toLowerCase();
 
   // Check for closed/expired programs — but only if there are no signals
   // for an open/upcoming application cycle (e.g., "closed for 2025" + "next cycle opens May 2026")
