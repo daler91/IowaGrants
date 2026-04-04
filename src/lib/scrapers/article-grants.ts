@@ -4,7 +4,7 @@ import type { CheerioAPI } from "cheerio";
 import type { AnyNode } from "domhandler";
 import type { GrantData } from "@/lib/types";
 import type { GenderFocus, GrantType, BusinessStage } from "@prisma/client";
-import { cleanHtmlToText, detectLocationScope, isExcludedByStateRestriction, isGenericHomepage, checkUrlHealth } from "./utils";
+import { cleanHtmlToText, detectLocationScope, isExcludedByStateRestriction, isGenericHomepage, checkUrlHealth, extractDeadline } from "./utils";
 
 // ---------------------------------------------------------------------------
 // Article-based grant page configuration
@@ -654,13 +654,22 @@ function parseStructuredSections($: CheerioAPI, grants: RawGrant[], siteDomain: 
 
     const sectionHtml = sectionElements.map((el: AnyNode) => $.html(el)).join("");
 
+    const deadlineLabel = extractLabeledField(sectionText, ["deadline", "due date", "close date", "application deadline", "closes"]);
     const grant: RawGrant = {
       title,
       description: cleanHtmlToText(sectionHtml, 1500),
       amount: extractLabeledField(sectionText, ["amount", "award", "grant amount", "prize", "award amount"]),
-      deadline: extractLabeledField(sectionText, ["deadline", "due date", "close date", "application deadline", "closes"]),
+      deadline: deadlineLabel,
       eligibility: extractLabeledField(sectionText, ["eligibility", "who can apply", "eligible", "requirements", "qualifications"]),
     };
+
+    // Fallback: extract deadline from flowing text if labeled field missed it
+    if (!grant.deadline) {
+      const extracted = extractDeadline(sectionText);
+      if (extracted) {
+        grant.deadline = extracted.toISOString().split("T")[0];
+      }
+    }
 
     if (!grant.amount) {
       grant.amount = extractAmountFromText(sectionText);
@@ -714,11 +723,19 @@ function parseHeadingSections($: CheerioAPI, grants: RawGrant[], siteDomain: str
 
     if (!isGrant) continue;
 
+    let deadline = extractLabeledField(description, ["deadline", "due date"]);
+    if (!deadline) {
+      const extracted = extractDeadline(description);
+      if (extracted) {
+        deadline = extracted.toISOString().split("T")[0];
+      }
+    }
+
     grants.push({
       title,
       description: cleanHtmlToText(description, 1500),
       amount: extractLabeledField(description, ["amount", "award"]) || extractAmountFromText(description),
-      deadline: extractLabeledField(description, ["deadline", "due date"]),
+      deadline,
       eligibility: extractLabeledField(description, ["eligibility", "who can apply"]),
       applyUrl: candidateUrls[0],
       candidateUrls,
