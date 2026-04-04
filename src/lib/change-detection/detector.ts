@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import axios from "axios";
 import { prisma } from "@/lib/db";
+import { validateUrlForSSRF } from "@/lib/scrapers/utils";
 
 function computeHash(content: string): string {
   // Strip dynamic elements (timestamps, session tokens) before hashing
@@ -20,6 +21,9 @@ export async function checkForChanges(): Promise<string[]> {
 
   for (const monitored of urls) {
     try {
+      // SSRF protection: validate URL before fetching
+      await validateUrlForSSRF(monitored.url);
+
       const response = await axios.get(monitored.url, {
         timeout: 15000,
         headers: {

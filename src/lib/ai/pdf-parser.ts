@@ -1,7 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import axios from "axios";
 import type { GrantData } from "@/lib/types";
-import { validateDeadline } from "@/lib/scrapers/utils";
+import { validateDeadline, validateUrlForSSRF } from "@/lib/scrapers/utils";
 
 const anthropic = new Anthropic();
 
@@ -85,6 +85,9 @@ export async function parsePdfFromUrl(
   }
 
   try {
+    // SSRF protection: validate URL before fetching
+    await validateUrlForSSRF(pdfUrl);
+
     // Download the PDF
     const pdfResponse = await axios.get(pdfUrl, {
       responseType: "arraybuffer",

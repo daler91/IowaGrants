@@ -1,6 +1,79 @@
+import { lookup } from "dns/promises";
 import axios from "axios";
 import * as cheerio from "cheerio";
 import { IOWA_LOCATIONS } from "@/lib/ai/categorizer";
+
+/**
+ * Blocked hostnames and IP ranges for SSRF prevention.
+ * Prevents server-side requests to internal/cloud metadata endpoints.
+ */
+const BLOCKED_HOSTS = [
+  "metadata.google.internal",
+  "metadata.google",
+  "169.254.169.254",
+  "metadata",
+];
+
+function isPrivateIP(ip: string): boolean {
+  // IPv4 private/reserved ranges
+  if (ip.startsWith("10.")) return true;
+  if (ip.startsWith("127.")) return true;
+  if (ip.startsWith("0.")) return true;
+  if (ip === "0.0.0.0") return true;
+  if (ip.startsWith("169.254.")) return true; // link-local / cloud metadata
+  if (ip.startsWith("192.168.")) return true;
+  if (/^172\.(1[6-9]|2\d|3[01])\./.test(ip)) return true;
+  // IPv6 loopback and private
+  if (ip === "::1" || ip === "::") return true;
+  if (ip.startsWith("fc") || ip.startsWith("fd")) return true; // unique local
+  if (ip.startsWith("fe80")) return true; // link-local
+  return false;
+}
+
+/**
+ * Validate that a URL is safe to fetch (not targeting internal/private resources).
+ * Throws an error if the URL is blocked.
+ */
+export async function validateUrlForSSRF(url: string): Promise<void> {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    throw new Error(`Invalid URL: ${url}`);
+  }
+
+  // Only allow http/https
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    throw new Error(`Blocked protocol: ${parsed.protocol}`);
+  }
+
+  const hostname = parsed.hostname.toLowerCase();
+
+  // Check against blocked hostnames
+  if (BLOCKED_HOSTS.includes(hostname)) {
+    throw new Error(`Blocked host: ${hostname}`);
+  }
+
+  // Check if hostname is a raw IP
+  if (/^\d{1,3}(\.\d{1,3}){3}$/.test(hostname) || hostname.startsWith("[")) {
+    if (isPrivateIP(hostname.replace(/[[\]]/g, ""))) {
+      throw new Error(`Blocked private IP: ${hostname}`);
+    }
+  }
+
+  // DNS resolution check — resolve hostname and verify it doesn't point to private IPs
+  try {
+    const { address } = await lookup(hostname);
+    if (isPrivateIP(address)) {
+      throw new Error(`DNS resolves to private IP: ${hostname} -> ${address}`);
+    }
+  } catch (err) {
+    // If it's our own error, rethrow
+    if (err instanceof Error && err.message.startsWith("DNS resolves to")) throw err;
+    if (err instanceof Error && err.message.startsWith("Blocked")) throw err;
+    // DNS resolution failure is OK for some URLs (might be temporarily unreachable)
+  }
+}
 
 /**
  * Clean HTML content to plain text. Designed for sanitizing rich-text fields
