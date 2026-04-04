@@ -145,6 +145,80 @@ const ARTICLE_GRANT_PAGES: ArticleGrantPage[] = [
     grantType: "PRIVATE",
     businessStage: "STARTUP",
   },
+
+  // ── Bankrate ───────────────────────────────────────────────────────────
+  {
+    url: "https://www.bankrate.com/loans/small-business/where-to-find-grants/",
+    sourceName: "bankrate",
+    siteDomain: "bankrate.com",
+    gender: "ANY",
+    grantType: "PRIVATE",
+    businessStage: "BOTH",
+  },
+  {
+    url: "https://www.bankrate.com/loans/small-business/business-grants-for-women/",
+    sourceName: "bankrate",
+    siteDomain: "bankrate.com",
+    gender: "WOMEN",
+    grantType: "PRIVATE",
+    businessStage: "BOTH",
+  },
+  {
+    url: "https://www.bankrate.com/loans/small-business/business-grants-for-minorities/",
+    sourceName: "bankrate",
+    siteDomain: "bankrate.com",
+    gender: "MINORITY",
+    grantType: "PRIVATE",
+    businessStage: "BOTH",
+  },
+
+  // ── SCORE ──────────────────────────────────────────────────────────────
+  {
+    url: "https://www.score.org/resource/blog-post/how-get-a-small-business-grant",
+    sourceName: "score",
+    siteDomain: "score.org",
+    gender: "ANY",
+    grantType: "PRIVATE",
+    businessStage: "BOTH",
+  },
+
+  // ── Nav ────────────────────────────────────────────────────────────────
+  {
+    url: "https://www.nav.com/resource/small-business-grants/",
+    sourceName: "nav",
+    siteDomain: "nav.com",
+    gender: "ANY",
+    grantType: "PRIVATE",
+    businessStage: "BOTH",
+  },
+  {
+    url: "https://www.nav.com/business-financing-options/best-small-business-grants-for-women/",
+    sourceName: "nav",
+    siteDomain: "nav.com",
+    gender: "WOMEN",
+    grantType: "PRIVATE",
+    businessStage: "BOTH",
+  },
+
+  // ── Inc. Magazine ──────────────────────────────────────────────────────
+  {
+    url: "https://www.inc.com/brian-contreras/12-small-business-grants-to-apply-to-in-2026/91288454",
+    sourceName: "inc",
+    siteDomain: "inc.com",
+    gender: "ANY",
+    grantType: "PRIVATE",
+    businessStage: "BOTH",
+  },
+
+  // ── Business News Daily ────────────────────────────────────────────────
+  {
+    url: "https://www.businessnewsdaily.com/15758-government-grants-for-small-businesses.html",
+    sourceName: "businessnewsdaily",
+    siteDomain: "businessnewsdaily.com",
+    gender: "ANY",
+    grantType: "FEDERAL",
+    businessStage: "BOTH",
+  },
 ];
 
 // ---------------------------------------------------------------------------

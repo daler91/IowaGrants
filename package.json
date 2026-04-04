@@ -12,9 +12,6 @@
     "test:watch": "vitest",
     "seed": "tsx prisma/seed.ts"
   },
-  "prisma": {
-    "seed": "tsx prisma/seed.ts"
-  },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.81.0",
     "@prisma/client": "^6.19.2",
