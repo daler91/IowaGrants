@@ -3,6 +3,15 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { TYPE_COLORS, STATUS_COLORS } from "@/lib/constants";
 
+/** Only allow http(s) links to prevent javascript: XSS via stored URLs. */
+function safeHref(url: string): string | undefined {
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol === "http:" || parsed.protocol === "https:") return parsed.href;
+  } catch { /* invalid URL */ }
+  return undefined;
+}
+
 // Revalidate cached page every 5 minutes
 export const revalidate = 300;
 
@@ -179,17 +188,19 @@ export default async function GrantDetailPage({
           )}
 
           <div className="flex flex-wrap gap-4 pt-4 border-t border-[var(--border)]">
-            <a
-              href={grant.sourceUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="px-6 py-3 bg-[var(--primary)] text-white rounded-lg font-medium hover:bg-[var(--primary-light)] transition-colors"
-            >
-              View Original Source
-            </a>
-            {grant.pdfUrl && (
+            {safeHref(grant.sourceUrl) && (
               <a
-                href={grant.pdfUrl}
+                href={safeHref(grant.sourceUrl)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-6 py-3 bg-[var(--primary)] text-white rounded-lg font-medium hover:bg-[var(--primary-light)] transition-colors"
+              >
+                View Original Source
+              </a>
+            )}
+            {grant.pdfUrl && safeHref(grant.pdfUrl) && (
+              <a
+                href={safeHref(grant.pdfUrl)}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="px-6 py-3 border border-[var(--border)] text-[var(--foreground)] rounded-lg font-medium hover:bg-gray-50 transition-colors"
@@ -200,10 +211,11 @@ export default async function GrantDetailPage({
             {(() => {
               const rawData = grant.rawData as Record<string, unknown> | null;
               const articlePage = rawData?.articlePage as string | undefined;
-              if (articlePage && articlePage !== grant.sourceUrl) {
+              const safeArticleHref = articlePage ? safeHref(articlePage) : undefined;
+              if (safeArticleHref && articlePage !== grant.sourceUrl) {
                 return (
                   <a
-                    href={articlePage}
+                    href={safeArticleHref}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="px-6 py-3 border border-[var(--border)] text-[var(--muted)] rounded-lg font-medium hover:bg-gray-50 transition-colors text-sm"

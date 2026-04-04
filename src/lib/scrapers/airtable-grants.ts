@@ -56,9 +56,9 @@ const AIRTABLE_SOURCES: AirtableSource[] = [
   {
     name: "ladies-who-launch",
     sourceName: "ladies-who-launch",
-    baseId: process.env.LWL_AIRTABLE_BASE_ID || "appWOyoayT1shujGM",
-    tableId: process.env.LWL_AIRTABLE_TABLE_NAME || "tbluTVoKAfaUQk6uG",
-    sharedViewId: process.env.LWL_AIRTABLE_VIEW_ID || "shruHZuhBtjY8LY4I",
+    baseId: process.env.LWL_AIRTABLE_BASE_ID || "",
+    tableId: process.env.LWL_AIRTABLE_TABLE_NAME || "",
+    sharedViewId: process.env.LWL_AIRTABLE_VIEW_ID || "",
     sourcePageUrl: "https://www.ladieswholaunch.org/small-business-grants",
     fieldMapping: DEFAULT_FIELD_MAPPING,
     defaults: {

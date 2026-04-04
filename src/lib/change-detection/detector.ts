@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import axios from "axios";
 import { prisma } from "@/lib/db";
+import { isSafeUrl } from "@/lib/scrapers/utils";
 
 function computeHash(content: string): string {
   // Strip dynamic elements (timestamps, session tokens) before hashing
@@ -20,6 +21,12 @@ export async function checkForChanges(): Promise<string[]> {
 
   for (const monitored of urls) {
     try {
+      // SSRF protection: skip internal/private URLs
+      if (!isSafeUrl(monitored.url)) {
+        console.warn(`[change-detection] Blocked unsafe URL: ${monitored.url}`);
+        continue;
+      }
+
       const response = await axios.get(monitored.url, {
         timeout: 15000,
         headers: {
