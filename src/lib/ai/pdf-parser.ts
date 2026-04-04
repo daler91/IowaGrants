@@ -3,6 +3,9 @@ import axios from "axios";
 import type { GrantData } from "@/lib/types";
 import { validateDeadline, isSafeUrl } from "@/lib/scrapers/utils";
 import { env } from "@/lib/env";
+import { SCRAPER_USER_AGENT } from "@/lib/scrapers/config";
+import { log, logError, logWarn } from "@/lib/errors";
+import { ParsedGrantSchema } from "./schemas";
 
 const anthropic = new Anthropic();
 
@@ -26,27 +29,13 @@ const EXTRACTION_PROMPT = `You are analyzing a grant program document. Extract t
 
 Only include eligible expenses that are explicitly mentioned. If information is not available, use null or empty arrays. Return ONLY valid JSON, no markdown.`;
 
-interface ParsedGrant {
-  title: string;
-  description: string;
-  amountMin: number | null;
-  amountMax: number | null;
-  deadline: string | null;
-  eligibility: string | null;
-  grantType: string;
-  businessStage: string;
-  gender: string;
-  locations: string[];
-  industries: string[];
-  eligibleExpenses: string[];
-  categories: string[];
-}
+import type { ParsedGrant } from "./schemas";
 
 function mapParsedToGrantData(
   parsed: ParsedGrant,
   sourceUrl: string,
   sourceName: string,
-  pdfUrl?: string
+  pdfUrl?: string,
 ): GrantData {
   return {
     title: parsed.title,
@@ -63,11 +52,9 @@ function mapParsedToGrantData(
     eligibility: parsed.eligibility || undefined,
     grantType: (parsed.grantType as GrantData["grantType"]) || "STATE",
     status: "OPEN",
-    businessStage:
-      (parsed.businessStage as GrantData["businessStage"]) || "BOTH",
+    businessStage: (parsed.businessStage as GrantData["businessStage"]) || "BOTH",
     gender: (parsed.gender as GrantData["gender"]) || "ANY",
-    locations:
-      parsed.locations.length > 0 ? parsed.locations : ["Iowa"],
+    locations: parsed.locations.length > 0 ? parsed.locations : ["Iowa"],
     industries: parsed.industries,
     pdfUrl,
     rawData: parsed as unknown as Record<string, unknown>,
@@ -78,17 +65,17 @@ function mapParsedToGrantData(
 
 export async function parsePdfFromUrl(
   pdfUrl: string,
-  sourceName: string
+  sourceName: string,
 ): Promise<GrantData | null> {
   if (!env.ANTHROPIC_API_KEY) {
-    console.warn("[pdf-parser] ANTHROPIC_API_KEY not set — skipping PDF parse");
+    logWarn("pdf-parser", "ANTHROPIC_API_KEY not set — skipping PDF parse");
     return null;
   }
 
   try {
     // SSRF protection: reject internal/private URLs
     if (!isSafeUrl(pdfUrl)) {
-      console.warn(`[pdf-parser] Blocked unsafe URL: ${pdfUrl}`);
+      logWarn("pdf-parser", "Blocked unsafe URL", { url: pdfUrl });
       return null;
     }
 
@@ -97,7 +84,7 @@ export async function parsePdfFromUrl(
       responseType: "arraybuffer",
       timeout: 30000,
       headers: {
-        "User-Agent": "IowaGrantScanner/1.0 (educational research project)",
+        "User-Agent": SCRAPER_USER_AGENT,
       },
     });
 
@@ -130,20 +117,17 @@ export async function parsePdfFromUrl(
 
     const textContent = message.content.find((c) => c.type === "text");
     if (textContent?.type !== "text") {
-      console.error("[pdf-parser] No text response from Claude");
+      logError("pdf-parser", "No text response from Claude");
       return null;
     }
 
-    const parsed: ParsedGrant = JSON.parse(textContent.text);
+    const parsed = ParsedGrantSchema.parse(JSON.parse(textContent.text));
     const grant = mapParsedToGrantData(parsed, pdfUrl, sourceName, pdfUrl);
 
-    console.log(`[pdf-parser] Successfully parsed: ${grant.title}`);
+    log("pdf-parser", `Successfully parsed: ${grant.title}`);
     return grant;
   } catch (error) {
-    console.error(
-      `[pdf-parser] Error parsing ${pdfUrl}:`,
-      error instanceof Error ? error.message : error
-    );
+    logError("pdf-parser", `Error parsing ${pdfUrl}`, error);
     return null;
   }
 }
@@ -151,10 +135,10 @@ export async function parsePdfFromUrl(
 export async function parseTextWithAI(
   text: string,
   sourceUrl: string,
-  sourceName: string
+  sourceName: string,
 ): Promise<GrantData | null> {
   if (!env.ANTHROPIC_API_KEY) {
-    console.warn("[pdf-parser] ANTHROPIC_API_KEY not set — skipping AI parse");
+    logWarn("pdf-parser", "ANTHROPIC_API_KEY not set — skipping AI parse");
     return null;
   }
 
@@ -173,13 +157,10 @@ export async function parseTextWithAI(
     const textContent = message.content.find((c) => c.type === "text");
     if (textContent?.type !== "text") return null;
 
-    const parsed: ParsedGrant = JSON.parse(textContent.text);
+    const parsed = ParsedGrantSchema.parse(JSON.parse(textContent.text));
     return mapParsedToGrantData(parsed, sourceUrl, sourceName);
   } catch (error) {
-    console.error(
-      `[pdf-parser] Error parsing text from ${sourceUrl}:`,
-      error instanceof Error ? error.message : error
-    );
+    logError("pdf-parser", `Error parsing text from ${sourceUrl}`, error);
     return null;
   }
 }
