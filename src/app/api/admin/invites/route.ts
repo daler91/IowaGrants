@@ -38,8 +38,19 @@ export async function POST(request: NextRequest) {
   }
 
   const { email } = body as { email?: string };
-  const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  if (!email || typeof email !== "string" || !EMAIL_REGEX.test(email.trim())) {
+  if (!email || typeof email !== "string") {
+    return NextResponse.json({ error: "A valid email address is required" }, { status: 400 });
+  }
+  const trimmed = email.trim();
+  // Simple O(n) email check — avoids regex backtracking (CodeQL polynomial-redos)
+  const atIdx = trimmed.indexOf("@");
+  const hasValidStructure =
+    atIdx > 0 &&
+    trimmed.indexOf("@", atIdx + 1) === -1 &&
+    trimmed.indexOf(".", atIdx + 2) > atIdx &&
+    !trimmed.includes(" ") &&
+    trimmed.length <= 254;
+  if (!hasValidStructure) {
     return NextResponse.json({ error: "A valid email address is required" }, { status: 400 });
   }
 
