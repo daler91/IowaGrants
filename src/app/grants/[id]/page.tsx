@@ -2,6 +2,7 @@ import { prisma } from "@/lib/db";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { TYPE_COLORS, STATUS_COLORS } from "@/lib/constants";
+import AdminEditButton from "@/components/AdminEditButton";
 
 /** Only allow http(s) links to prevent javascript: XSS via stored URLs. */
 function safeHref(url: string): string | undefined {
@@ -81,9 +82,12 @@ export default async function GrantDetailPage({
           )}
         </div>
 
-        <h1 className="text-2xl font-bold text-[var(--foreground)] mb-4">
-          {grant.title}
-        </h1>
+        <div className="flex items-start justify-between gap-4 mb-4">
+          <h1 className="text-2xl font-bold text-[var(--foreground)]">
+            {grant.title}
+          </h1>
+          <AdminEditButton grantId={id} />
+        </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
           {grant.amount && (
