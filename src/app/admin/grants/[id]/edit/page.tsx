@@ -3,11 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-
-const GRANT_TYPES = ["FEDERAL", "STATE", "LOCAL", "PRIVATE"];
-const GRANT_STATUSES = ["OPEN", "CLOSED", "FORECASTED"];
-const BUSINESS_STAGES = ["STARTUP", "EXISTING", "BOTH"];
-const GENDER_OPTIONS = ["WOMEN", "VETERAN", "MINORITY", "GENERAL", "ANY"];
+import { VALID_GRANT_TYPES, VALID_GRANT_STATUS, VALID_BUSINESS_STAGE, VALID_GENDER_FOCUS } from "@/lib/constants";
 
 interface GrantFormData {
   title: string;
@@ -356,7 +352,7 @@ export default function EditGrantPage() {
                   onChange={handleChange}
                   className={inputClass}
                 >
-                  {GRANT_STATUSES.map((s) => (
+                  {VALID_GRANT_STATUS.map((s) => (
                     <option key={s} value={s}>
                       {s}
                     </option>
@@ -374,7 +370,7 @@ export default function EditGrantPage() {
                   onChange={handleChange}
                   className={inputClass}
                 >
-                  {GRANT_TYPES.map((t) => (
+                  {VALID_GRANT_TYPES.map((t) => (
                     <option key={t} value={t}>
                       {t}
                     </option>
@@ -392,7 +388,7 @@ export default function EditGrantPage() {
                   onChange={handleChange}
                   className={inputClass}
                 >
-                  {BUSINESS_STAGES.map((s) => (
+                  {VALID_BUSINESS_STAGE.map((s) => (
                     <option key={s} value={s}>
                       {s}
                     </option>
@@ -410,7 +406,7 @@ export default function EditGrantPage() {
                   onChange={handleChange}
                   className={inputClass}
                 >
-                  {GENDER_OPTIONS.map((g) => (
+                  {VALID_GENDER_FOCUS.map((g) => (
                     <option key={g} value={g}>
                       {g}
                     </option>

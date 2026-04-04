@@ -1,14 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { randomBytes, createHash } from "crypto";
 import { prisma } from "@/lib/db";
-import { requireAdmin } from "@/lib/auth";
+import { requireAdminOrResponse } from "@/lib/auth";
 
 function hashToken(token: string): string {
   return createHash("sha256").update(token).digest("hex");
 }
 
 export async function GET(request: NextRequest) {
-  const admin = await requireAdmin(request);
+  const admin = await requireAdminOrResponse(request);
   if (admin instanceof NextResponse) return admin;
 
   const invites = await prisma.adminInvite.findMany({
@@ -27,7 +27,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const admin = await requireAdmin(request);
+  const admin = await requireAdminOrResponse(request);
   if (admin instanceof NextResponse) return admin;
 
   let body: unknown;

@@ -619,8 +619,7 @@ function findCandidateUrls($: CheerioAPI, $section: cheerio.Cheerio<AnyNode>, si
 }
 
 function collectSectionElements($: CheerioAPI, $heading: cheerio.Cheerio<AnyNode>, headingTag: string) {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const sectionElements: any[] = [];
+  const sectionElements: AnyNode[] = [];
   let $el = $heading.next();
   let count = 0;
 

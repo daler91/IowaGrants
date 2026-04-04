@@ -1,6 +1,7 @@
 import axios from "axios";
 import * as cheerio from "cheerio";
 import type { GrantData } from "@/lib/types";
+import { env } from "@/lib/env";
 import { extractDeadline, isExcludedByStateRestriction, detectLocationScope, isGenericHomepage, cleanHtmlToText } from "./utils";
 
 const currentYear = new Date().getFullYear();
@@ -191,7 +192,7 @@ interface BraveWebResults {
 }
 
 async function searchBrave(query: string): Promise<SearchResult[]> {
-  const apiKey = process.env.BRAVE_SEARCH_API_KEY;
+  const apiKey = env.BRAVE_SEARCH_API_KEY;
   if (!apiKey) return [];
 
   try {
@@ -234,7 +235,7 @@ interface SerpApiResponse {
 }
 
 async function searchSerpApi(query: string): Promise<SearchResult[]> {
-  const apiKey = process.env.SERPAPI_API_KEY;
+  const apiKey = env.SERPAPI_API_KEY;
   if (!apiKey) return [];
 
   try {
@@ -427,8 +428,8 @@ async function processSearchResults(
 // ---------------------------------------------------------------------------
 
 export async function searchWebForGrants(): Promise<GrantData[]> {
-  const hasBrave = !!process.env.BRAVE_SEARCH_API_KEY;
-  const hasSerpApi = !!process.env.SERPAPI_API_KEY;
+  const hasBrave = !!env.BRAVE_SEARCH_API_KEY;
+  const hasSerpApi = !!env.SERPAPI_API_KEY;
 
   if (!hasBrave && !hasSerpApi) {
     console.log("[web-search] No search API keys set (BRAVE_SEARCH_API_KEY, SERPAPI_API_KEY) — skipping web search");

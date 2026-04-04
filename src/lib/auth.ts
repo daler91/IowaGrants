@@ -53,27 +53,59 @@ export async function getAdminFromRequest(
   return verifyToken(token);
 }
 
+export class UnauthorizedError extends Error {
+  constructor() {
+    super("Unauthorized");
+    this.name = "UnauthorizedError";
+  }
+}
+
+/**
+ * Verify the request is from an authenticated admin.
+ * Throws UnauthorizedError if not — callers should catch
+ * and return NextResponse.json({ error: "Unauthorized" }, { status: 401 }).
+ */
 export async function requireAdmin(
   request: NextRequest,
-): Promise<{ sub: string; email: string } | NextResponse> {
+): Promise<{ sub: string; email: string }> {
   const claims = await getAdminFromRequest(request);
   if (!claims) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    throw new UnauthorizedError();
   }
 
   // Verify token version against DB to support revocation
   const admin = await prisma.adminUser.findUnique({ where: { id: claims.sub } });
   if (!admin || admin.tokenVersion !== (claims.tokenVersion ?? 0)) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    throw new UnauthorizedError();
   }
 
   return claims;
 }
 
+/**
+ * Wrapper that calls requireAdmin and converts UnauthorizedError
+ * into a 401 NextResponse. Returns the admin claims on success,
+ * or a NextResponse on auth failure.
+ *
+ * @deprecated Prefer try/catch with requireAdmin() directly.
+ */
+export async function requireAdminOrResponse(
+  request: NextRequest,
+): Promise<{ sub: string; email: string } | NextResponse> {
+  try {
+    return await requireAdmin(request);
+  } catch (err) {
+    if (err instanceof UnauthorizedError) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    throw err;
+  }
+}
+
 export function setAuthCookie(response: NextResponse, token: string) {
   response.cookies.set(COOKIE_NAME, token, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
+    secure: env.isProduction,
     sameSite: "lax",
     maxAge: 7 * 24 * 60 * 60, // 7 days
     path: "/",
@@ -83,7 +115,7 @@ export function setAuthCookie(response: NextResponse, token: string) {
 export function clearAuthCookie(response: NextResponse) {
   response.cookies.set(COOKIE_NAME, "", {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
+    secure: env.isProduction,
     sameSite: "lax",
     maxAge: 0,
     path: "/",

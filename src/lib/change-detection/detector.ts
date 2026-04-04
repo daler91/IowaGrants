@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import axios from "axios";
 import { prisma } from "@/lib/db";
 import { isSafeUrl } from "@/lib/scrapers/utils";
+import { CHANGE_DETECTION_TIMEOUT_MS, SCRAPER_USER_AGENT } from "@/lib/scrapers/config";
 
 function computeHash(content: string): string {
   // Strip dynamic elements (timestamps, session tokens) before hashing
@@ -18,6 +19,7 @@ function computeHash(content: string): string {
 export async function checkForChanges(): Promise<string[]> {
   const urls = await prisma.monitoredUrl.findMany();
   const changedUrls: string[] = [];
+  const updateOps: ReturnType<typeof prisma.monitoredUrl.update>[] = [];
 
   for (const monitored of urls) {
     try {
@@ -28,9 +30,9 @@ export async function checkForChanges(): Promise<string[]> {
       }
 
       const response = await axios.get(monitored.url, {
-        timeout: 15000,
+        timeout: CHANGE_DETECTION_TIMEOUT_MS,
         headers: {
-          "User-Agent": "IowaGrantScanner/1.0 (educational research project)",
+          "User-Agent": SCRAPER_USER_AGENT,
         },
         // For PDFs, get binary data
         responseType: monitored.url.endsWith(".pdf")
@@ -46,16 +48,19 @@ export async function checkForChanges(): Promise<string[]> {
       const newHash = computeHash(content);
       const hasChanged = monitored.contentHash !== newHash;
 
-      await prisma.monitoredUrl.update({
-        where: { id: monitored.id },
-        data: {
-          contentHash: newHash,
-          lastChecked: new Date(),
-          ...(hasChanged
-            ? { lastChanged: new Date(), needsReparse: true }
-            : {}),
-        },
-      });
+      // Collect update operations for batching
+      updateOps.push(
+        prisma.monitoredUrl.update({
+          where: { id: monitored.id },
+          data: {
+            contentHash: newHash,
+            lastChecked: new Date(),
+            ...(hasChanged
+              ? { lastChanged: new Date(), needsReparse: true }
+              : {}),
+          },
+        })
+      );
 
       if (hasChanged) {
         changedUrls.push(monitored.url);
@@ -69,6 +74,11 @@ export async function checkForChanges(): Promise<string[]> {
         error instanceof Error ? error.message : error
       );
     }
+  }
+
+  // Batch all DB updates in a single transaction
+  if (updateOps.length > 0) {
+    await prisma.$transaction(updateOps);
   }
 
   console.log(

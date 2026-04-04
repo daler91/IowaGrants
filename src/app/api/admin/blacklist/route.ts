@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { requireAdmin } from "@/lib/auth";
+import { requireAdminOrResponse } from "@/lib/auth";
 
 export async function GET(request: NextRequest) {
-  const admin = await requireAdmin(request);
+  const admin = await requireAdminOrResponse(request);
   if (admin instanceof NextResponse) return admin;
 
   const page = Math.max(1, Number(request.nextUrl.searchParams.get("page")) || 1);
@@ -28,7 +28,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const admin = await requireAdmin(request);
+  const admin = await requireAdminOrResponse(request);
   if (admin instanceof NextResponse) return admin;
 
   let body: unknown;
@@ -65,7 +65,7 @@ export async function POST(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
-  const admin = await requireAdmin(request);
+  const admin = await requireAdminOrResponse(request);
   if (admin instanceof NextResponse) return admin;
 
   let body: unknown;

@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { timingSafeEqual } from "crypto";
 import { prisma } from "@/lib/db";
-import { requireAdmin } from "@/lib/auth";
+import { env } from "@/lib/env";
+import { requireAdminOrResponse } from "@/lib/auth";
 import { runFullScrape } from "@/lib/scrapers";
 
 function safeCompare(a: string, b: string): boolean {
@@ -16,7 +17,7 @@ export const maxDuration = 300; // 5 minute timeout for this route
 const STALE_LOCK_MS = 10 * 60 * 1000; // 10 minutes
 
 export async function GET(request: NextRequest) {
-  const admin = await requireAdmin(request);
+  const admin = await requireAdminOrResponse(request);
   if (admin instanceof NextResponse) return admin;
 
   const latest = await prisma.scrapeRun.findFirst({
@@ -27,7 +28,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   const authHeader = request.headers.get("authorization");
-  const cronSecret = process.env.CRON_SECRET;
+  const cronSecret = env.CRON_SECRET;
 
   const expected = `Bearer ${cronSecret}`;
   if (!cronSecret || !safeCompare(authHeader || "", expected)) {

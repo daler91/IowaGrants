@@ -2,6 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import axios from "axios";
 import type { GrantData } from "@/lib/types";
 import { validateDeadline, isSafeUrl } from "@/lib/scrapers/utils";
+import { env } from "@/lib/env";
 
 const anthropic = new Anthropic();
 
@@ -79,7 +80,7 @@ export async function parsePdfFromUrl(
   pdfUrl: string,
   sourceName: string
 ): Promise<GrantData | null> {
-  if (!process.env.ANTHROPIC_API_KEY) {
+  if (!env.ANTHROPIC_API_KEY) {
     console.warn("[pdf-parser] ANTHROPIC_API_KEY not set — skipping PDF parse");
     return null;
   }
@@ -152,7 +153,7 @@ export async function parseTextWithAI(
   sourceUrl: string,
   sourceName: string
 ): Promise<GrantData | null> {
-  if (!process.env.ANTHROPIC_API_KEY) {
+  if (!env.ANTHROPIC_API_KEY) {
     console.warn("[pdf-parser] ANTHROPIC_API_KEY not set — skipping AI parse");
     return null;
   }

@@ -1,5 +1,6 @@
 import axios from "axios";
 import type { GrantData } from "@/lib/types";
+import { env } from "@/lib/env";
 import { isExcludedByStateRestriction, validateDeadline } from "./utils";
 
 const SAM_GOV_API = "https://api.sam.gov/prod/opportunities/v2/search";
@@ -75,7 +76,7 @@ function mapToGrantData(opp: SamGovOpportunity): GrantData {
 }
 
 export async function fetchSamGov(): Promise<GrantData[]> {
-  const apiKey = process.env.SAM_GOV_API_KEY;
+  const apiKey = env.SAM_GOV_API_KEY;
 
   if (!apiKey) {
     console.warn(

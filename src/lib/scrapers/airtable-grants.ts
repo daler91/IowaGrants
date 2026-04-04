@@ -2,6 +2,7 @@ import axios from "axios";
 import * as cheerio from "cheerio";
 import type { CheerioAPI } from "cheerio";
 import type { GrantData } from "@/lib/types";
+import { env } from "@/lib/env";
 import { cleanHtmlToText, detectLocationScope, isExcludedByStateRestriction, isGenericHomepage } from "./utils";
 
 // ---------------------------------------------------------------------------
@@ -56,9 +57,9 @@ const AIRTABLE_SOURCES: AirtableSource[] = [
   {
     name: "ladies-who-launch",
     sourceName: "ladies-who-launch",
-    baseId: process.env.LWL_AIRTABLE_BASE_ID || "",
-    tableId: process.env.LWL_AIRTABLE_TABLE_NAME || "",
-    sharedViewId: process.env.LWL_AIRTABLE_VIEW_ID || "",
+    baseId: env.LWL_AIRTABLE_BASE_ID,
+    tableId: env.LWL_AIRTABLE_TABLE_NAME,
+    sharedViewId: env.LWL_AIRTABLE_VIEW_ID,
     sourcePageUrl: "https://www.ladieswholaunch.org/small-business-grants",
     fieldMapping: DEFAULT_FIELD_MAPPING,
     defaults: {
@@ -223,7 +224,7 @@ function transformRecord(record: AirtableRecord, source: AirtableSource): GrantD
 // ---------------------------------------------------------------------------
 
 async function fetchViaApi(source: AirtableSource): Promise<AirtableRecord[]> {
-  const apiKey = process.env.AIRTABLE_API_KEY;
+  const apiKey = env.AIRTABLE_API_KEY;
   if (!apiKey) return [];
 
   const allRecords: AirtableRecord[] = [];
@@ -462,7 +463,7 @@ function extractFromHtmlTable($: CheerioAPI): AirtableRecord[] {
 async function fetchRecordsForSource(source: AirtableSource): Promise<AirtableRecord[]> {
   let records: AirtableRecord[] = [];
 
-  if (process.env.AIRTABLE_API_KEY) {
+  if (env.AIRTABLE_API_KEY) {
     console.log(`[airtable:${source.name}] Fetching via official API...`);
     records = await fetchViaApi(source);
   }

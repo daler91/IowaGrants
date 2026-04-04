@@ -1,12 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { Prisma } from "@prisma/client";
-import { requireAdmin } from "@/lib/auth";
-
-const VALID_GRANT_TYPES = ["FEDERAL", "STATE", "LOCAL", "PRIVATE"];
-const VALID_GENDER_FOCUS = ["WOMEN", "VETERAN", "MINORITY", "GENERAL", "ANY"];
-const VALID_BUSINESS_STAGE = ["STARTUP", "EXISTING", "BOTH"];
-const VALID_GRANT_STATUS = ["OPEN", "CLOSED", "FORECASTED"];
+import { requireAdminOrResponse } from "@/lib/auth";
+import { VALID_GRANT_TYPES, VALID_GENDER_FOCUS, VALID_BUSINESS_STAGE, VALID_GRANT_STATUS, GRANT_INCLUDE } from "@/lib/constants";
 
 export async function GET(request: NextRequest) {
   try {
@@ -81,10 +77,7 @@ export async function GET(request: NextRequest) {
     const [grants, total] = await Promise.all([
       prisma.grant.findMany({
         where,
-        include: {
-          categories: true,
-          eligibleExpenses: true,
-        },
+        include: GRANT_INCLUDE,
         orderBy: [
           { deadline: { sort: "asc", nulls: "last" } },
           { createdAt: "desc" },
@@ -114,7 +107,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
-  const admin = await requireAdmin(request);
+  const admin = await requireAdminOrResponse(request);
   if (admin instanceof NextResponse) return admin;
 
   let body: unknown;

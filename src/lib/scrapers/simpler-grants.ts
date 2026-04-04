@@ -1,5 +1,6 @@
 import axios from "axios";
 import type { GrantData } from "@/lib/types";
+import { env } from "@/lib/env";
 import { isExcludedByStateRestriction, detectLocationScope, validateDeadline } from "./utils";
 
 const SIMPLER_GRANTS_API = "https://api.simpler.grants.gov/v1/opportunities/search";
@@ -104,7 +105,7 @@ function mapToGrantData(opp: SimplerOpportunity): GrantData {
 }
 
 export async function fetchSimplerGrants(): Promise<GrantData[]> {
-  const apiKey = process.env.SIMPLER_GRANTS_API_KEY;
+  const apiKey = env.SIMPLER_GRANTS_API_KEY;
   if (!apiKey) {
     console.log("[simpler-grants] SIMPLER_GRANTS_API_KEY not set — skipping");
     return [];

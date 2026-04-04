@@ -1,5 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { GrantData } from "@/lib/types";
+import { env } from "@/lib/env";
+import { VALIDATION_BATCH_SIZE, AI_CALL_DELAY_MS } from "@/lib/scrapers/config";
 
 const anthropic = new Anthropic();
 
@@ -63,48 +65,55 @@ function buildGrantSnippet(grant: GrantData, index: number): string {
   return parts.join("\n");
 }
 
+const MAX_RETRIES = 3;
+const INITIAL_RETRY_DELAY_MS = 1000;
+
 async function validateBatch(
   grants: Array<{ grant: GrantData; originalIndex: number }>
-): Promise<ValidationResult[]> {
+): Promise<ValidationResult[] | null> {
   const snippets = grants.map(({ grant }, i) =>
     buildGrantSnippet(grant, i)
   );
 
   const message = `${VALIDATION_PROMPT}\n\n---\n\n${snippets.join("\n\n---\n\n")}`;
 
-  try {
-    const response = await anthropic.messages.create({
-      model: "claude-haiku-4-5-20251001",
-      max_tokens: 2000,
-      messages: [{ role: "user", content: message }],
-    });
+  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+    try {
+      const response = await anthropic.messages.create({
+        model: "claude-haiku-4-5-20251001",
+        max_tokens: 2000,
+        messages: [{ role: "user", content: message }],
+      });
 
-    const text =
-      response.content[0].type === "text" ? response.content[0].text : "";
+      const text =
+        response.content[0].type === "text" ? response.content[0].text : "";
 
-    // Strip markdown fences if present
-    const cleaned = text
-      .replace(/^```(?:json)?\s*/m, "")
-      .replace(/\s*```\s*$/m, "")
-      .trim();
+      // Strip markdown fences if present
+      const cleaned = text
+        .replace(/^```(?:json)?\s*/m, "")
+        .replace(/\s*```\s*$/m, "")
+        .trim();
 
-    const results: ValidationResult[] = JSON.parse(cleaned);
-    return results;
-  } catch (error) {
-    console.error(
-      "[grant-validator] Batch validation failed:",
-      error instanceof Error ? error.message : error
-    );
-    // On failure, assume all grants are valid (fail-open)
-    return grants.map((_, i) => ({
-      index: i,
-      is_real_grant: true,
-      small_biz_eligible: true,
-      content_type: "grant_application" as const,
-      confidence: "MEDIUM" as const,
-      reason: "Validation failed, assuming valid",
-    }));
+      const results: ValidationResult[] = JSON.parse(cleaned);
+      return results;
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      console.error(
+        `[grant-validator] Batch validation attempt ${attempt + 1}/${MAX_RETRIES} failed: ${msg}`
+      );
+
+      if (attempt < MAX_RETRIES - 1) {
+        const delay = INITIAL_RETRY_DELAY_MS * 2 ** attempt;
+        await new Promise((r) => setTimeout(r, delay));
+      }
+    }
   }
+
+  // Fail closed: return null to signal the batch should be rejected
+  console.error(
+    `[grant-validator] All ${MAX_RETRIES} attempts failed — rejecting batch of ${grants.length} grants (fail-closed)`
+  );
+  return null;
 }
 
 /**
@@ -115,7 +124,7 @@ async function validateBatch(
  * reduce volume before grants reach this step.
  */
 export async function validateGrants(grants: GrantData[]): Promise<GrantData[]> {
-  if (!process.env.ANTHROPIC_API_KEY) {
+  if (!env.ANTHROPIC_API_KEY) {
     console.log("[grant-validator] ANTHROPIC_API_KEY not set — skipping validation");
     return grants;
   }
@@ -128,8 +137,7 @@ export async function validateGrants(grants: GrantData[]): Promise<GrantData[]> 
     `[grant-validator] Validating ${grants.length} grants with AI`
   );
 
-  // Process in batches of 10
-  const BATCH_SIZE = 10;
+  const BATCH_SIZE = VALIDATION_BATCH_SIZE;
   const validated: GrantData[] = [];
   let filtered = 0;
 
@@ -139,6 +147,15 @@ export async function validateGrants(grants: GrantData[]): Promise<GrantData[]> 
       originalIndex: i + idx,
     }));
     const results = await validateBatch(batch);
+
+    // Fail-closed: if validation failed after retries, skip this batch entirely
+    if (results === null) {
+      filtered += batch.length;
+      console.warn(
+        `[grant-validator] Dropped batch of ${batch.length} grants due to validation failure`
+      );
+      continue;
+    }
 
     for (const result of results) {
       const entry = batch[result.index];
@@ -168,7 +185,7 @@ export async function validateGrants(grants: GrantData[]): Promise<GrantData[]> 
 
     // Brief delay between API calls
     if (i + BATCH_SIZE < grants.length) {
-      await new Promise((r) => setTimeout(r, 500));
+      await new Promise((r) => setTimeout(r, AI_CALL_DELAY_MS));
     }
   }
 

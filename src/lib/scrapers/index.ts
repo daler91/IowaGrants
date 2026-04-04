@@ -303,43 +303,47 @@ export async function runFullScrape(scrapeRunId?: string): Promise<ScraperResult
   // Step 5: Run categorizer on all grants
   const categorized = categorizeAll(allGrants);
 
-  // Step 5b: Filter out grants with non-small-business eligibility
-  const eligibilityFiltered = categorized.filter((grant) => {
-    const text = `${grant.title} ${grant.description} ${grant.eligibility || ""}`;
-    if (isExcludedByEligibility(text)) {
-      console.log(`[orchestrator] Filtered by eligibility: "${grant.title}" (not for small businesses)`);
-      return false;
-    }
-    return true;
-  });
-  if (categorized.length !== eligibilityFiltered.length) {
-    console.log(`[orchestrator] Eligibility filter: ${categorized.length} → ${eligibilityFiltered.length}`);
-  }
+  // Step 5b: Apply grant filters in a single pass
+  const filters: Array<{
+    name: string;
+    test: (grant: GrantData) => boolean;
+  }> = [
+    {
+      name: "eligibility",
+      test: (g) => {
+        const text = `${g.title} ${g.description} ${g.eligibility || ""}`;
+        return !isExcludedByEligibility(text);
+      },
+    },
+    {
+      name: "non-grant program",
+      test: (g) => {
+        const text = `${g.title} ${g.description} ${g.eligibility || ""}`;
+        return !isNonGrantProgram(text);
+      },
+    },
+    {
+      name: "non-application content",
+      test: (g) => {
+        const result = isNonApplicationContent(g.title, g.description, g.sourceUrl);
+        return !result.excluded;
+      },
+    },
+  ];
 
-  // Step 5b2: Filter out non-grant programs (loans, revolving funds, etc.)
-  const nonGrantFiltered = eligibilityFiltered.filter((grant) => {
-    const text = `${grant.title} ${grant.description} ${grant.eligibility || ""}`;
-    if (isNonGrantProgram(text)) {
-      console.log(`[orchestrator] Filtered non-grant program: "${grant.title}"`);
-      return false;
+  let applicationFiltered = categorized;
+  for (const filter of filters) {
+    const before = applicationFiltered.length;
+    applicationFiltered = applicationFiltered.filter((grant) => {
+      const passes = filter.test(grant);
+      if (!passes) {
+        console.log(`[orchestrator] Filtered by ${filter.name}: "${grant.title}"`);
+      }
+      return passes;
+    });
+    if (before !== applicationFiltered.length) {
+      console.log(`[orchestrator] ${filter.name} filter: ${before} → ${applicationFiltered.length}`);
     }
-    return true;
-  });
-  if (eligibilityFiltered.length !== nonGrantFiltered.length) {
-    console.log(`[orchestrator] Non-grant filter: ${eligibilityFiltered.length} → ${nonGrantFiltered.length}`);
-  }
-
-  // Step 5b3: Filter out non-application content (awardee announcements, press releases, closed programs)
-  const applicationFiltered = nonGrantFiltered.filter((grant) => {
-    const result = isNonApplicationContent(grant.title, grant.description, grant.sourceUrl);
-    if (result.excluded) {
-      console.log(`[orchestrator] Filtered non-application content: "${grant.title}" — ${result.reason}`);
-      return false;
-    }
-    return true;
-  });
-  if (nonGrantFiltered.length !== applicationFiltered.length) {
-    console.log(`[orchestrator] Non-application filter: ${nonGrantFiltered.length} → ${applicationFiltered.length}`);
   }
 
   // Step 5c: AI-powered validation for ALL grants (filters non-real grants and wrong eligibility)

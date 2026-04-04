@@ -1,3 +1,4 @@
+import { memo } from "react";
 import Link from "next/link";
 import type { GrantListItem } from "@/lib/types";
 import { TYPE_COLORS, STATUS_COLORS } from "@/lib/constants";
@@ -27,7 +28,7 @@ interface GrantCardProps {
   onDelete?: (id: string, title: string) => void;
 }
 
-export default function GrantCard({
+export default memo(function GrantCard({
   grant,
   selectable,
   selected,
@@ -151,4 +152,4 @@ export default function GrantCard({
       </div>
     </Link>
   );
-}
+})

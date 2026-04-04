@@ -1,16 +1,25 @@
 export async function register() {
   // Only seed on the server side (not edge runtime)
+  // Note: NEXT_RUNTIME is set by Next.js itself before instrumentation runs,
+  // so it must be read directly from process.env (not via env.ts).
   if (process.env.NEXT_RUNTIME === "nodejs") {
     await seedAdmin();
   }
 }
 
 async function seedAdmin() {
-  const email = process.env.ADMIN_EMAIL;
-  const password = process.env.ADMIN_PASSWORD;
+  // Imported dynamically to avoid pulling env.ts into edge runtime.
+  const { env } = await import("@/lib/env");
+  const email = env.ADMIN_EMAIL;
+  const password = env.ADMIN_PASSWORD;
 
   if (!email || !password) {
     console.log("[seed] Skipping admin seed: ADMIN_EMAIL or ADMIN_PASSWORD not set");
+    return;
+  }
+
+  if (password.length < 12) {
+    console.error("[seed] ADMIN_PASSWORD must be at least 12 characters long");
     return;
   }
 

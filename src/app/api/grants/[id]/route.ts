@@ -1,12 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { Prisma } from "@prisma/client";
-import { requireAdmin } from "@/lib/auth";
-
-const VALID_GRANT_TYPES = ["FEDERAL", "STATE", "LOCAL", "PRIVATE"];
-const VALID_GENDER_FOCUS = ["WOMEN", "VETERAN", "MINORITY", "GENERAL", "ANY"];
-const VALID_BUSINESS_STAGE = ["STARTUP", "EXISTING", "BOTH"];
-const VALID_GRANT_STATUS = ["OPEN", "CLOSED", "FORECASTED"];
+import { requireAdminOrResponse } from "@/lib/auth";
+import { VALID_GRANT_TYPES, VALID_GENDER_FOCUS, VALID_BUSINESS_STAGE, VALID_GRANT_STATUS, GRANT_INCLUDE } from "@/lib/constants";
 
 export async function GET(
   _request: NextRequest,
@@ -17,10 +13,7 @@ export async function GET(
 
     const grant = await prisma.grant.findUnique({
       where: { id },
-      include: {
-        categories: true,
-        eligibleExpenses: true,
-      },
+      include: GRANT_INCLUDE,
     });
 
     if (!grant) {
@@ -41,7 +34,7 @@ export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const admin = await requireAdmin(request);
+  const admin = await requireAdminOrResponse(request);
   if (admin instanceof NextResponse) return admin;
 
   let body: Record<string, unknown>;
@@ -175,10 +168,7 @@ export async function PUT(
     const updated = await prisma.grant.update({
       where: { id },
       data,
-      include: {
-        categories: true,
-        eligibleExpenses: true,
-      },
+      include: GRANT_INCLUDE,
     });
 
     return NextResponse.json(updated);

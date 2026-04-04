@@ -38,6 +38,7 @@ model Grant {
   @@index([grantType])
   @@index([status, grantType, deadline])
   @@index([status, deadline])
+  @@index([sourceName])
 }
 
 model Category {

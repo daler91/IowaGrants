@@ -1,5 +1,6 @@
 import axios from "axios";
 import type { GrantData } from "@/lib/types";
+import { env } from "@/lib/env";
 import { detectLocationScope, isExcludedByStateRestriction } from "./utils";
 
 /**
@@ -12,7 +13,7 @@ import { detectLocationScope, isExcludedByStateRestriction } from "./utils";
  */
 
 const GRANTS_GOV_API_URL =
-  process.env.GRANTS_GOV_API_URL || "https://api.grants.gov/v1/api/search2";
+  env.GRANTS_GOV_API_URL || "https://api.grants.gov/v1/api/search2";
 
 // Search queries targeting small business grants
 const SEARCH_QUERIES = [
