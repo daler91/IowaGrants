@@ -1,6 +1,7 @@
 import axios from "axios";
 import * as cheerio from "cheerio";
 import type { GrantData } from "@/lib/types";
+import { SCRAPER_USER_AGENT } from "./config";
 import { fetchPageDetails } from "./utils";
 
 const OPPORTUNITY_IOWA_URLS = [
@@ -33,7 +34,7 @@ export async function scrapeOpportunityIowa(): Promise<GrantData[]> {
     try {
       const response = await axios.get(pageUrl, {
         headers: {
-          "User-Agent": "IowaGrantScanner/1.0 (educational research project)",
+          "User-Agent": SCRAPER_USER_AGENT,
         },
         timeout: 15000,
       });

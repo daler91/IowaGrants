@@ -3,6 +3,7 @@ import * as cheerio from "cheerio";
 import type { CheerioAPI } from "cheerio";
 import type { GrantData } from "@/lib/types";
 import { env } from "@/lib/env";
+import { SCRAPER_USER_AGENT, BROWSER_HEADERS } from "./config";
 import { cleanHtmlToText, detectLocationScope, isExcludedByStateRestriction, isGenericHomepage } from "./utils";
 
 // ---------------------------------------------------------------------------
@@ -239,7 +240,7 @@ async function fetchViaApi(source: AirtableSource): Promise<AirtableRecord[]> {
       {
         headers: {
           Authorization: `Bearer ${apiKey}`,
-          "User-Agent": "IowaGrantScanner/1.0 (educational research project)",
+          "User-Agent": SCRAPER_USER_AGENT,
         },
         params,
         timeout: 20000,
@@ -266,10 +267,7 @@ async function fetchViaSharedView(source: AirtableSource): Promise<AirtableRecor
 
   const response = await axios.get(url, {
     headers: {
-      "User-Agent":
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-      Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-      "Accept-Language": "en-US,en;q=0.9",
+      ...BROWSER_HEADERS,
     },
     timeout: 30000,
     maxRedirects: 5,

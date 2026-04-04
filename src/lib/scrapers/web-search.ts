@@ -2,6 +2,7 @@ import axios from "axios";
 import * as cheerio from "cheerio";
 import type { GrantData } from "@/lib/types";
 import { env } from "@/lib/env";
+import { BROWSER_USER_AGENT } from "./config";
 import { extractDeadline, isExcludedByStateRestriction, detectLocationScope, isGenericHomepage, cleanHtmlToText } from "./utils";
 
 const currentYear = new Date().getFullYear();
@@ -300,8 +301,7 @@ async function scrapeGrantPage(
   try {
     const response = await axios.get(url, {
       headers: {
-        "User-Agent":
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "User-Agent": BROWSER_USER_AGENT,
       },
       timeout: 10000,
       maxRedirects: 3,

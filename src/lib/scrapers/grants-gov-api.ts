@@ -1,6 +1,7 @@
 import axios from "axios";
 import type { GrantData } from "@/lib/types";
 import { env } from "@/lib/env";
+import { SCRAPER_USER_AGENT } from "./config";
 import { detectLocationScope, isExcludedByStateRestriction } from "./utils";
 
 /**
@@ -80,7 +81,7 @@ async function searchGrantsGov(keyword: string): Promise<GrantsGovHit[]> {
       {
         headers: {
           "Content-Type": "application/json",
-          "User-Agent": "IowaGrantScanner/1.0 (educational research project)",
+          "User-Agent": SCRAPER_USER_AGENT,
         },
         timeout: 20000,
       }

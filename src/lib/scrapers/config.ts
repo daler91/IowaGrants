@@ -25,4 +25,11 @@ export const SCRAPER_USER_AGENT =
 
 /** Browser-like User-Agent for sites that block non-browser requests */
 export const BROWSER_USER_AGENT =
-  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36";
+
+/** Reusable browser-like headers for scraper requests */
+export const BROWSER_HEADERS = {
+  "User-Agent": BROWSER_USER_AGENT,
+  Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+  "Accept-Language": "en-US,en;q=0.5",
+} as const;

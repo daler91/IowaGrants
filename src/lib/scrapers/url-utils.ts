@@ -1,5 +1,6 @@
 import axios from "axios";
 import { isIP } from "node:net";
+import { SCRAPER_USER_AGENT } from "./config";
 
 // ── SSRF / URL-safety helpers ─────────────────────────────────────────
 
@@ -102,7 +103,7 @@ export async function checkUrlHealth(url: string): Promise<boolean> {
       maxRedirects: 5,
       validateStatus: () => true,
       headers: {
-        "User-Agent": "Mozilla/5.0 (compatible; GrantScanner/1.0)",
+        "User-Agent": SCRAPER_USER_AGENT,
       },
     });
 
@@ -116,7 +117,7 @@ export async function checkUrlHealth(url: string): Promise<boolean> {
         maxRedirects: 5,
         validateStatus: () => true,
         headers: {
-          "User-Agent": "Mozilla/5.0 (compatible; GrantScanner/1.0)",
+          "User-Agent": SCRAPER_USER_AGENT,
           Range: "bytes=0-1024",
         },
       });

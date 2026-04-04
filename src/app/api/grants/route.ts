@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { Prisma } from "@prisma/client";
 import { requireAdminOrResponse } from "@/lib/auth";
 import { VALID_GRANT_TYPES, VALID_GENDER_FOCUS, VALID_BUSINESS_STAGE, VALID_GRANT_STATUS, GRANT_INCLUDE } from "@/lib/constants";
+import { parsePagination, parseOptionalInt } from "@/lib/api-utils";
 
 export async function GET(request: NextRequest) {
   try {
@@ -16,16 +17,9 @@ export async function GET(request: NextRequest) {
     const industry = params.get("industry") || undefined;
     const status = params.get("status") || undefined;
     const eligibleExpense = params.get("eligibleExpense") || undefined;
-    const amountMinParam = params.get("amountMin");
-    const amountMin = amountMinParam
-      ? Number.parseInt(amountMinParam)
-      : undefined;
-    const amountMaxParam = params.get("amountMax");
-    const amountMax = amountMaxParam
-      ? Number.parseInt(amountMaxParam)
-      : undefined;
-    const page = Math.max(1, Number.parseInt(params.get("page") || "1"));
-    const limit = Math.min(100, Math.max(1, Number.parseInt(params.get("limit") || "20")));
+    const amountMin = parseOptionalInt(params, "amountMin");
+    const amountMax = parseOptionalInt(params, "amountMax");
+    const { page, limit, skip } = parsePagination(params);
 
     const where: Prisma.GrantWhereInput = {};
 
@@ -82,7 +76,7 @@ export async function GET(request: NextRequest) {
           { deadline: { sort: "asc", nulls: "last" } },
           { createdAt: "desc" },
         ],
-        skip: (page - 1) * limit,
+        skip,
         take: limit,
       }),
       prisma.grant.count({ where }),
