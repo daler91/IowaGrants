@@ -66,23 +66,10 @@ const LOCAL_SOURCES: LocalSource[] = [
     ],
   },
   {
-    name: "Iowa Area Development Group",
-    sourceName: "iadg",
-    urls: [
-      "https://www.iadg.com/iowa-advantages/",
-    ],
-    grantType: "STATE",
-    keywords: [
-      "grant", "fund", "incentive", "financing", "loan", "tax credit",
-      "award", "capital",
-    ],
-  },
-  {
     name: "Cedar Rapids Economic Development",
     sourceName: "cedar-rapids-econ",
     urls: [
-      "https://www.cedarrapids.org/business",
-      "https://www.cedarrapids.org/business/incentives-and-financing",
+      "https://www.economicdevelopmentcr.com/incentives-government/",
     ],
     grantType: "LOCAL",
     keywords: [
@@ -100,6 +87,41 @@ const LOCAL_SOURCES: LocalSource[] = [
     keywords: [
       "grant", "fund", "award", "capital", "incentive",
       "financing", "tax credit",
+    ],
+  },
+  {
+    name: "Choose Iowa",
+    sourceName: "choose-iowa",
+    urls: [
+      "https://www.chooseiowa.com/grants",
+    ],
+    grantType: "STATE",
+    keywords: [
+      "grant", "fund", "award", "incentive", "value-added",
+    ],
+  },
+  {
+    name: "Iowa DAS Targeted Small Business",
+    sourceName: "iowa-das-tsb",
+    urls: [
+      "https://das.iowa.gov/vendors/targeted-small-business-program",
+    ],
+    grantType: "STATE",
+    keywords: [
+      "grant", "fund", "certification", "procurement", "contract",
+      "incentive", "award",
+    ],
+  },
+  {
+    name: "Midwest Partnership",
+    sourceName: "midwest-partnership",
+    urls: [
+      "https://www.midwestpartnership.com/small-business-development/",
+    ],
+    grantType: "LOCAL",
+    keywords: [
+      "grant", "fund", "incentive", "financing", "loan",
+      "capital", "award",
     ],
   },
 ];

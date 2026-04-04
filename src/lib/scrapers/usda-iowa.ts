@@ -21,7 +21,7 @@ function mapToGrantData(title: string, url: string, description: string): GrantD
   };
 }
 
-async function fetchWithRetry(url: string, retries = 1): Promise<import("axios").AxiosResponse> {
+async function fetchWithRetry(url: string, retries = 2): Promise<import("axios").AxiosResponse> {
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
       return await axios.get(url, {
@@ -30,7 +30,7 @@ async function fetchWithRetry(url: string, retries = 1): Promise<import("axios")
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
           Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
         },
-        timeout: 45000,
+        timeout: 60000,
       });
     } catch (error) {
       if (attempt < retries) {
