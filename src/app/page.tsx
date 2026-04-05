@@ -10,15 +10,26 @@ import ConfirmModal from "@/components/ConfirmModal";
 import { useAdmin } from "@/lib/hooks/useAdmin";
 import type { GrantFilters as FilterType, GrantListItem, PaginatedResponse } from "@/lib/types";
 
+function parseList<T extends string = string>(raw: string | null): T[] | undefined {
+  if (!raw) return undefined;
+  const values = raw
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean) as T[];
+  return values.length ? values : undefined;
+}
+
 function parseFiltersFromParams(params: URLSearchParams): { filters: FilterType; search: string } {
   return {
     search: params.get("search") || "",
     filters: {
-      grantType: (params.get("grantType") as FilterType["grantType"]) || undefined,
-      gender: (params.get("gender") as FilterType["gender"]) || undefined,
-      businessStage: (params.get("businessStage") as FilterType["businessStage"]) || undefined,
-      status: (params.get("status") as FilterType["status"]) || undefined,
-      eligibleExpense: params.get("eligibleExpense") || undefined,
+      grantType: parseList<NonNullable<FilterType["grantType"]>[number]>(params.get("grantType")),
+      gender: parseList<NonNullable<FilterType["gender"]>[number]>(params.get("gender")),
+      businessStage: parseList<NonNullable<FilterType["businessStage"]>[number]>(
+        params.get("businessStage"),
+      ),
+      status: parseList<NonNullable<FilterType["status"]>[number]>(params.get("status")),
+      eligibleExpense: parseList(params.get("eligibleExpense")),
       location: params.get("location") || undefined,
       page: Number.parseInt(params.get("page") || "1") || 1,
       limit: 20,
@@ -46,7 +57,10 @@ function DashboardSkeleton() {
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {Array.from({ length: 4 }, (_, i) => (
-          <div key={i} className="bg-white rounded-lg border border-[var(--border)] p-5 animate-pulse h-48" />
+          <div
+            key={i}
+            className="bg-white rounded-lg border border-[var(--border)] p-5 animate-pulse h-48"
+          />
         ))}
       </div>
     </div>
@@ -81,11 +95,12 @@ function Dashboard() {
     const params = new URLSearchParams();
 
     if (search) params.set("search", search);
-    if (filters.grantType) params.set("grantType", filters.grantType);
-    if (filters.gender) params.set("gender", filters.gender);
-    if (filters.businessStage) params.set("businessStage", filters.businessStage);
-    if (filters.status) params.set("status", filters.status);
-    if (filters.eligibleExpense) params.set("eligibleExpense", filters.eligibleExpense);
+    if (filters.grantType?.length) params.set("grantType", filters.grantType.join(","));
+    if (filters.gender?.length) params.set("gender", filters.gender.join(","));
+    if (filters.businessStage?.length) params.set("businessStage", filters.businessStage.join(","));
+    if (filters.status?.length) params.set("status", filters.status.join(","));
+    if (filters.eligibleExpense?.length)
+      params.set("eligibleExpense", filters.eligibleExpense.join(","));
     if (filters.location) params.set("location", filters.location);
     if (filters.amountMin) params.set("amountMin", filters.amountMin.toString());
     if (filters.amountMax) params.set("amountMax", filters.amountMax.toString());
@@ -111,11 +126,12 @@ function Dashboard() {
   useEffect(() => {
     const params = new URLSearchParams();
     if (search) params.set("search", search);
-    if (filters.grantType) params.set("grantType", filters.grantType);
-    if (filters.gender) params.set("gender", filters.gender);
-    if (filters.businessStage) params.set("businessStage", filters.businessStage);
-    if (filters.status) params.set("status", filters.status);
-    if (filters.eligibleExpense) params.set("eligibleExpense", filters.eligibleExpense);
+    if (filters.grantType?.length) params.set("grantType", filters.grantType.join(","));
+    if (filters.gender?.length) params.set("gender", filters.gender.join(","));
+    if (filters.businessStage?.length) params.set("businessStage", filters.businessStage.join(","));
+    if (filters.status?.length) params.set("status", filters.status.join(","));
+    if (filters.eligibleExpense?.length)
+      params.set("eligibleExpense", filters.eligibleExpense.join(","));
     if (filters.location) params.set("location", filters.location);
     if (filters.page && filters.page > 1) params.set("page", filters.page.toString());
     const paramStr = params.toString();
@@ -193,11 +209,12 @@ function Dashboard() {
   const exportHref = useMemo(() => {
     const params = new URLSearchParams();
     if (search) params.set("search", search);
-    if (filters.grantType) params.set("grantType", filters.grantType);
-    if (filters.gender) params.set("gender", filters.gender);
-    if (filters.businessStage) params.set("businessStage", filters.businessStage);
-    if (filters.status) params.set("status", filters.status);
-    if (filters.eligibleExpense) params.set("eligibleExpense", filters.eligibleExpense);
+    if (filters.grantType?.length) params.set("grantType", filters.grantType.join(","));
+    if (filters.gender?.length) params.set("gender", filters.gender.join(","));
+    if (filters.businessStage?.length) params.set("businessStage", filters.businessStage.join(","));
+    if (filters.status?.length) params.set("status", filters.status.join(","));
+    if (filters.eligibleExpense?.length)
+      params.set("eligibleExpense", filters.eligibleExpense.join(","));
     if (filters.location) params.set("location", filters.location);
     const qs = params.toString();
     return qs ? `/export?${qs}` : "/export";
@@ -211,8 +228,8 @@ function Dashboard() {
             Iowa Small Business Grants
           </h1>
           <p className="text-[var(--muted)]">
-            Discover grants for small businesses and entrepreneurs in Iowa.
-            Updated daily from federal, state, and local sources.
+            Discover grants for small businesses and entrepreneurs in Iowa. Updated daily from
+            federal, state, and local sources.
           </p>
         </div>
         <Link
@@ -220,8 +237,19 @@ function Dashboard() {
           className="self-start inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-[var(--border)] bg-white hover:bg-gray-50 text-[var(--foreground)] font-medium transition-colors"
           title="Export these filtered grants"
         >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5 5-5M12 15V3" />
+          <svg
+            className="w-4 h-4"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+            aria-hidden="true"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5 5-5M12 15V3"
+            />
           </svg>
           Export
         </Link>
@@ -234,10 +262,7 @@ function Dashboard() {
       {error && (
         <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700 flex items-center justify-between">
           <span>{error}</span>
-          <button
-            onClick={() => setError(null)}
-            className="ml-2 text-red-500 hover:text-red-700"
-          >
+          <button onClick={() => setError(null)} className="ml-2 text-red-500 hover:text-red-700">
             Dismiss
           </button>
         </div>

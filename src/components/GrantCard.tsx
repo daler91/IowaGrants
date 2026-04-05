@@ -36,6 +36,11 @@ export default memo(function GrantCard({
   onDelete,
 }: Readonly<GrantCardProps>) {
   const deadlineStr = formatDeadline(grant.deadline);
+  const deadlinePassed =
+    !!grant.deadline &&
+    // eslint-disable-next-line react-hooks/purity -- time-sensitive status derived from deadline; intentionally reads current time on render
+    new Date(grant.deadline).getTime() < Date.now();
+  const displayStatus = deadlinePassed ? "CLOSED" : grant.status;
   const isUrgent =
     grant.deadline &&
     // eslint-disable-next-line react-hooks/purity -- time-sensitive "urgent" badge; intentionally reads current time on render
@@ -89,9 +94,9 @@ export default memo(function GrantCard({
             {grant.grantType}
           </span>
           <span
-            className={`px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[grant.status] || "bg-gray-100 text-gray-800"}`}
+            className={`px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[displayStatus] || "bg-gray-100 text-gray-800"}`}
           >
-            {grant.status}
+            {displayStatus}
           </span>
           {grant.gender !== "ANY" && grant.gender !== "GENERAL" && (
             <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-pink-100 text-pink-800">

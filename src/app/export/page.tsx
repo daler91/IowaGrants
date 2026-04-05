@@ -24,6 +24,15 @@ const FORMATS: { value: ExportFormat; label: string; description: string }[] = [
   { value: "text", label: "Formatted Text", description: "Paste into an email" },
 ];
 
+function parseList<T extends string = string>(raw: string | null): T[] | undefined {
+  if (!raw) return undefined;
+  const values = raw
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean) as T[];
+  return values.length ? values : undefined;
+}
+
 function parseFiltersFromParams(params: URLSearchParams): {
   filters: FilterType;
   search: string;
@@ -34,11 +43,13 @@ function parseFiltersFromParams(params: URLSearchParams): {
     search: params.get("search") || "",
     format: FORMATS.some((f) => f.value === format) ? format : "pdf",
     filters: {
-      grantType: (params.get("grantType") as FilterType["grantType"]) || undefined,
-      gender: (params.get("gender") as FilterType["gender"]) || undefined,
-      businessStage: (params.get("businessStage") as FilterType["businessStage"]) || undefined,
-      status: (params.get("status") as FilterType["status"]) || undefined,
-      eligibleExpense: params.get("eligibleExpense") || undefined,
+      grantType: parseList<NonNullable<FilterType["grantType"]>[number]>(params.get("grantType")),
+      gender: parseList<NonNullable<FilterType["gender"]>[number]>(params.get("gender")),
+      businessStage: parseList<NonNullable<FilterType["businessStage"]>[number]>(
+        params.get("businessStage"),
+      ),
+      status: parseList<NonNullable<FilterType["status"]>[number]>(params.get("status")),
+      eligibleExpense: parseList(params.get("eligibleExpense")),
       location: params.get("location") || undefined,
     },
   };
@@ -47,11 +58,12 @@ function parseFiltersFromParams(params: URLSearchParams): {
 function buildQueryString(filters: FilterType, search: string, format?: ExportFormat): string {
   const params = new URLSearchParams();
   if (search) params.set("search", search);
-  if (filters.grantType) params.set("grantType", filters.grantType);
-  if (filters.gender) params.set("gender", filters.gender);
-  if (filters.businessStage) params.set("businessStage", filters.businessStage);
-  if (filters.status) params.set("status", filters.status);
-  if (filters.eligibleExpense) params.set("eligibleExpense", filters.eligibleExpense);
+  if (filters.grantType?.length) params.set("grantType", filters.grantType.join(","));
+  if (filters.gender?.length) params.set("gender", filters.gender.join(","));
+  if (filters.businessStage?.length) params.set("businessStage", filters.businessStage.join(","));
+  if (filters.status?.length) params.set("status", filters.status.join(","));
+  if (filters.eligibleExpense?.length)
+    params.set("eligibleExpense", filters.eligibleExpense.join(","));
   if (filters.location) params.set("location", filters.location);
   if (format) params.set("format", format);
   return params.toString();
@@ -85,10 +97,7 @@ function ExportPageInner() {
   const [copyStatus, setCopyStatus] = useState<"idle" | "copied">("idle");
   const [shareStatus, setShareStatus] = useState<"idle" | "copied">("idle");
 
-  const filterSummary = useMemo(
-    () => buildFilterSummary(filters, search),
-    [filters, search],
-  );
+  const filterSummary = useMemo(() => buildFilterSummary(filters, search), [filters, search]);
 
   // Sync state → URL (shareable link)
   useEffect(() => {

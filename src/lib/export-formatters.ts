@@ -81,7 +81,13 @@ export function buildFilterSummary(filters: GrantFilters, search: string): strin
   for (const key of Object.keys(FILTER_LABELS) as (keyof typeof FILTER_LABELS)[]) {
     const raw = (filters as Record<string, unknown>)[key];
     if (raw === undefined || raw === null || raw === "") continue;
-    parts.push(`${FILTER_LABELS[key]} = ${prettyValue(String(raw))}`);
+    if (Array.isArray(raw)) {
+      if (raw.length === 0) continue;
+      const rendered = raw.map((v) => prettyValue(String(v))).join(", ");
+      parts.push(`${FILTER_LABELS[key]} = ${rendered}`);
+    } else {
+      parts.push(`${FILTER_LABELS[key]} = ${prettyValue(String(raw))}`);
+    }
   }
   return parts.length === 0 ? "No filters (all grants)" : parts.join(" • ");
 }
@@ -166,12 +172,14 @@ export function toText(
   const headerTitle = "IOWA GRANTS EXPORT";
   lines.push(headerTitle);
   lines.push("=".repeat(headerTitle.length));
-  lines.push(`Date: ${new Date().toLocaleDateString("en-US", {
-    weekday: "long",
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  })}`);
+  lines.push(
+    `Date: ${new Date().toLocaleDateString("en-US", {
+      weekday: "long",
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    })}`,
+  );
   lines.push(`Filters: ${filterSummary}`);
   lines.push(`Grants: ${grants.length}`);
   lines.push("");
@@ -413,12 +421,9 @@ export function toPDF(grants: GrantExportRow[], filterSummary: string): ExportRe
     doc.setFont("helvetica", "normal");
     doc.setFontSize(9);
     doc.setTextColor(148, 163, 184); // slate-400
-    doc.text(
-      `Iowa Grants Export — Page ${p} of ${pageCount}`,
-      pageWidth / 2,
-      pageHeight - 20,
-      { align: "center" },
-    );
+    doc.text(`Iowa Grants Export — Page ${p} of ${pageCount}`, pageWidth / 2, pageHeight - 20, {
+      align: "center",
+    });
   }
 
   const blob = doc.output("blob");
