@@ -9,6 +9,8 @@ const anthropic = new Anthropic();
 
 const VALIDATION_PROMPT = `You are evaluating scraped grant listings to determine if they are real, active grant programs for small businesses.
 
+IMPORTANT: If a "Live page excerpt" is provided for a grant, weight it HEAVILY over the Description — the excerpt is what the source URL actually serves right now, while the Description may be a cached/stale summary. If the live excerpt shows a 404 / "page not found" / generic homepage / marketing landing page / no grant-specific content, classify as "expired_program" or "other" and set is_real_grant=false, even if the Description sounds legitimate.
+
 For each grant below, determine:
 1. content_type: Classify the content as one of:
    - "grant_application": An actual grant program with an open or upcoming application process
@@ -54,6 +56,13 @@ function buildGrantSnippet(grant: GrantData, index: number): string {
   }
   if (grant.amount) {
     parts.push(`Amount: ${grant.amount}`);
+  }
+  const liveBodyText =
+    grant.rawData && typeof grant.rawData === "object"
+      ? (grant.rawData as Record<string, unknown>).liveBodyText
+      : undefined;
+  if (typeof liveBodyText === "string" && liveBodyText.length > 0) {
+    parts.push(`Live page excerpt: ${liveBodyText.slice(0, 1500)}`);
   }
   return parts.join("\n");
 }

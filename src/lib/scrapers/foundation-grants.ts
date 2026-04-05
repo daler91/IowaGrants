@@ -1,10 +1,8 @@
-import axios from "axios";
-import * as cheerio from "cheerio";
 import type { GrantData } from "@/lib/types";
 import type { GenderFocus, GrantType, BusinessStage } from "@prisma/client";
-import { BROWSER_HEADERS } from "./config";
 import { isExcludedByStateRestriction, detectLocationScope, extractDeadline } from "./utils";
-import { log, logError } from "@/lib/errors";
+import { checkUrlHealth } from "./url-health";
+import { log, logError, logWarn } from "@/lib/errors";
 
 // ---------------------------------------------------------------------------
 // Curated private foundation grant programs for small businesses
@@ -678,47 +676,30 @@ const FOUNDATION_GRANTS: FoundationGrant[] = [
   },
 ];
 
-// Browser-like headers imported from ./config
-
 // ---------------------------------------------------------------------------
-// Enrichment: try to scrape current deadline and updated description
+// Enrichment: verify URL is alive and extract current deadline / live body
 // ---------------------------------------------------------------------------
 
-async function enrichFromPage(
-  grant: FoundationGrant,
-): Promise<{ deadline?: Date; liveDescription?: string }> {
-  try {
-    const response = await axios.get(grant.url, {
-      headers: BROWSER_HEADERS,
-      timeout: 15000,
-      maxRedirects: 5,
-    });
+interface EnrichResult {
+  alive: boolean;
+  deadStatus?: number | null;
+  deadReason?: string;
+  deadline?: Date;
+  liveBodyText?: string;
+}
 
-    if (response.status !== 200 || typeof response.data !== "string") {
-      return {};
-    }
-
-    const html = response.data as string;
-    const deadline = extractDeadline(html);
-
-    // Try to extract a better description from the live page
-    const $ = cheerio.load(html);
-    $("nav, footer, script, style, header, aside").remove();
-
-    const bodyText = $("main, article, .content, .entry-content, body")
-      .first()
-      .text()
-      .replaceAll(/\s+/g, " ")
-      .trim()
-      .slice(0, 1200);
-
-    return {
-      deadline,
-      liveDescription: bodyText.length > 100 ? bodyText : undefined,
-    };
-  } catch {
-    return {};
+async function enrichFromPage(grant: FoundationGrant): Promise<EnrichResult> {
+  const health = await checkUrlHealth(grant.url);
+  if (!health.alive) {
+    return { alive: false, deadStatus: health.status, deadReason: health.reason };
   }
+
+  const deadline = extractDeadline(health.bodyHtml);
+  return {
+    alive: true,
+    deadline,
+    liveBodyText: health.bodyText.length > 100 ? health.bodyText : undefined,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -739,12 +720,24 @@ export async function fetchFoundationGrants(): Promise<GrantData[]> {
         continue;
       }
 
-      // Enrich with live page data (deadline, updated description)
+      // Enrich with live page data (URL liveness, deadline, live body text)
       const enriched = await enrichFromPage(foundation);
 
+      // Skip grants whose source URL is dead. The periodic DB sweep will close
+      // any existing record for this URL since it will stop being refreshed.
+      if (!enriched.alive) {
+        logWarn("foundation-grants", "Dead source URL, skipping", {
+          name: foundation.name,
+          url: foundation.url,
+          status: enriched.deadStatus,
+          reason: enriched.deadReason,
+        });
+        continue;
+      }
+
       const description =
-        enriched.liveDescription && enriched.liveDescription.length > foundation.description.length
-          ? `${foundation.description}\n\n${enriched.liveDescription.slice(0, 800)}`
+        enriched.liveBodyText && enriched.liveBodyText.length > foundation.description.length
+          ? `${foundation.description}\n\n${enriched.liveBodyText.slice(0, 800)}`
           : foundation.description;
 
       const grant: GrantData = {
@@ -764,6 +757,7 @@ export async function fetchFoundationGrants(): Promise<GrantData[]> {
         industries: [],
         categories: ["Private Foundation"],
         eligibleExpenses: [],
+        rawData: enriched.liveBodyText ? { liveBodyText: enriched.liveBodyText } : undefined,
       };
 
       if (!seenUrls.has(grant.sourceUrl)) {

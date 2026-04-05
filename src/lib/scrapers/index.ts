@@ -31,6 +31,8 @@ import { categorizeAll } from "@/lib/ai/categorizer";
 import { parsePdfFromUrl } from "@/lib/ai/pdf-parser";
 import { validateGrants } from "@/lib/ai/grant-validator";
 import { extractDeadlinesWithAI } from "@/lib/ai/deadline-extractor";
+import { checkUrlHealth } from "./url-health";
+import { revalidateExistingGrants } from "./revalidate-existing";
 import {
   checkForChanges,
   getUrlsNeedingReparse,
@@ -383,6 +385,70 @@ async function upsertAndLog(
   return totalNew;
 }
 
+/**
+ * Concurrency-limited live-content fetch. For each grant that does not already
+ * have `rawData.liveBodyText`, check URL health and attach the live body so
+ * the AI validator can see what the source actually serves right now.
+ * Grants whose source URL is dead are dropped with a log line.
+ */
+async function hydrateLiveContent(grants: GrantData[]): Promise<GrantData[]> {
+  const CONCURRENCY = 8;
+  const survivors: GrantData[] = [];
+  let dropped = 0;
+
+  for (let i = 0; i < grants.length; i += CONCURRENCY) {
+    const batch = grants.slice(i, i + CONCURRENCY);
+    const outcomes = await Promise.all(
+      batch.map(async (grant) => {
+        const existing =
+          grant.rawData && typeof grant.rawData === "object"
+            ? (grant.rawData as Record<string, unknown>).liveBodyText
+            : undefined;
+        if (typeof existing === "string" && existing.length > 0) {
+          return { keep: true as const, grant };
+        }
+
+        // Skip PDF URLs — they were already parsed by processPdfGrants and
+        // checkUrlHealth would just fetch a binary and return non_html.
+        if (grant.sourceUrl.toLowerCase().endsWith(".pdf") || grant.pdfUrl) {
+          return { keep: true as const, grant };
+        }
+
+        const health = await checkUrlHealth(grant.sourceUrl);
+        if (!health.alive) {
+          log("orchestrator", "dead-url-filter: dropping grant", {
+            title: grant.title,
+            url: grant.sourceUrl,
+            status: health.status,
+            reason: health.reason,
+          });
+          return { keep: false as const };
+        }
+        const nextRaw: Record<string, unknown> = {
+          ...((grant.rawData as Record<string, unknown> | undefined) ?? {}),
+          liveBodyText: health.bodyText,
+        };
+        return { keep: true as const, grant: { ...grant, rawData: nextRaw } };
+      }),
+    );
+    for (const outcome of outcomes) {
+      if (outcome.keep) {
+        survivors.push(outcome.grant);
+      } else {
+        dropped++;
+      }
+    }
+  }
+
+  if (dropped > 0) {
+    log("orchestrator", "dead-url-filter complete", {
+      dropped,
+      kept: survivors.length,
+    });
+  }
+  return survivors;
+}
+
 export async function runFullScrape(scrapeRunId?: string): Promise<ScraperResult[]> {
   log("orchestrator", "Starting full scrape...");
   const results: ScraperResult[] = [];
@@ -515,8 +581,13 @@ export async function runFullScrape(scrapeRunId?: string): Promise<ScraperResult
     }
   }
 
+  // Step 5b-bis: Hydrate live page content for URL liveness check + AI validation.
+  // Any grant whose source URL is dead is dropped immediately; surviving grants
+  // get their live body text attached for validateGrants to inspect.
+  const hydrated = await hydrateLiveContent(applicationFiltered);
+
   // Step 5c: AI-powered validation for ALL grants (filters non-real grants and wrong eligibility)
-  const validated = await validateGrants(applicationFiltered);
+  const validated = await validateGrants(hydrated);
 
   // Step 6: Load blacklisted URLs
   const blacklistedUrls = new Set(
@@ -528,6 +599,15 @@ export async function runFullScrape(scrapeRunId?: string): Promise<ScraperResult
 
   // Step 7: Upsert all grants and log results
   const totalNew = await upsertAndLog(validated, results, blacklistedUrls);
+
+  // Step 8: Sweep a slice of existing OPEN grants in the DB (oldest-verified
+  // first) to catch inactive grants whose sources went dark between scrapes.
+  try {
+    const sweepSummary = await revalidateExistingGrants({ limit: 100 });
+    log("orchestrator", "Revalidation sweep done", { ...sweepSummary });
+  } catch (error) {
+    logError("orchestrator", "Revalidation sweep failed", error);
+  }
 
   // Update ScrapeRun record with final counts
   if (scrapeRunId) {
