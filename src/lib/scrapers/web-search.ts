@@ -2,7 +2,7 @@ import axios from "axios";
 import * as cheerio from "cheerio";
 import type { GrantData } from "@/lib/types";
 import { env } from "@/lib/env";
-import { BROWSER_USER_AGENT } from "./config";
+import { BROWSER_USER_AGENT, QUERIES_PER_RUN } from "./config";
 import {
   extractDeadline,
   isExcludedByStateRestriction,
@@ -11,22 +11,7 @@ import {
   cleanHtmlToText,
 } from "./utils";
 import { log, logError } from "@/lib/errors";
-
-const currentYear = new Date().getFullYear();
-const SEARCH_QUERIES = [
-  `Iowa small business grants ${currentYear}`,
-  "Iowa women veteran minority business grants",
-  "Iowa startup rural small business grants",
-  "Des Moines Cedar Rapids small business grants",
-  `nationwide small business grants ${currentYear}`,
-  "small business grants for women entrepreneurs",
-  `small business grants for veterans ${currentYear}`,
-  `small business grants for minorities ${currentYear}`,
-  `Black owned small business grants ${currentYear}`,
-  `LGBTQ small business grants ${currentYear}`,
-  `rural small business grants Iowa USDA ${currentYear}`,
-  `technology small business grants SBIR STTR ${currentYear}`,
-];
+import { selectQueriesForRun } from "./search-queries";
 
 // URLs to skip (aggregators we already scrape, or non-grant sites)
 const SKIP_DOMAINS = [
@@ -35,6 +20,7 @@ const SKIP_DOMAINS = [
   "grants.gov",
   "sam.gov",
   "iowagrants.gov",
+  "sba.gov", // handled by sba-gov scraper
   "grantwatch.com", // paywall
   // Domains already handled by article-grants scraper
   "nerdwallet.com",
@@ -432,50 +418,222 @@ async function processSearchResults(
 }
 
 // ---------------------------------------------------------------------------
+// Google Custom Search API (free tier: 100 queries/day)
+// ---------------------------------------------------------------------------
+
+interface GoogleCSEResponse {
+  items?: Array<{ title: string; link: string; snippet?: string }>;
+}
+
+async function searchGoogleCSE(query: string): Promise<SearchResult[]> {
+  const apiKey = env.GOOGLE_CSE_API_KEY;
+  const cx = env.GOOGLE_CSE_CX;
+  if (!apiKey || !cx) return [];
+
+  try {
+    const response = await axios.get<GoogleCSEResponse>(
+      "https://www.googleapis.com/customsearch/v1",
+      {
+        params: { key: apiKey, cx, q: query, num: 10 },
+        timeout: 15000,
+      },
+    );
+
+    return (response.data?.items || [])
+      .filter((r) => r.link && r.title && !shouldSkipUrl(r.link))
+      .slice(0, 8)
+      .map((r) => ({ title: r.title, url: r.link, snippet: r.snippet || "" }));
+  } catch (error) {
+    logError("web-search", `Google CSE search failed for "${query}"`, error);
+    return [];
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Deep site crawling — follow productive domains for more grants
+// ---------------------------------------------------------------------------
+
+/**
+ * When a domain yields 2+ grants, crawl sibling/parent pages for more.
+ * Takes a sample URL, navigates to its parent path, and extracts grant links.
+ */
+async function crawlProductiveDomain(
+  domain: string,
+  knownUrls: string[],
+  seenUrls: Set<string>,
+): Promise<GrantData[]> {
+  // Find the parent path from a known grant URL
+  const sampleUrl = knownUrls[0];
+  let parentUrl: string;
+  try {
+    const parsed = new URL(sampleUrl);
+    const pathParts = parsed.pathname.split("/").filter(Boolean);
+    if (pathParts.length > 1) {
+      // Go up one level: /grants/specific-grant → /grants/
+      parentUrl = `${parsed.origin}/${pathParts.slice(0, -1).join("/")}/`;
+    } else {
+      // Already at root level, try the homepage grants section
+      parentUrl = `${parsed.origin}/grants/`;
+    }
+  } catch {
+    return [];
+  }
+
+  if (seenUrls.has(parentUrl)) return [];
+  seenUrls.add(parentUrl);
+
+  try {
+    const response = await axios.get(parentUrl, {
+      headers: { "User-Agent": BROWSER_USER_AGENT },
+      timeout: 10000,
+      maxRedirects: 3,
+    });
+
+    const $ = cheerio.load(response.data);
+    $("nav, footer, script, style, header").remove();
+
+    const grantLinks: string[] = [];
+    const knownSet = new Set(knownUrls);
+
+    $("a[href]").each((_, el) => {
+      const href = $(el).attr("href");
+      if (!href) return;
+
+      let fullUrl: string;
+      try {
+        fullUrl = new URL(href, parentUrl).href;
+      } catch {
+        return;
+      }
+
+      // Only follow links on the same domain
+      try {
+        if (new URL(fullUrl).hostname.replace("www.", "") !== domain) return;
+      } catch {
+        return;
+      }
+
+      if (knownSet.has(fullUrl) || seenUrls.has(fullUrl)) return;
+      if (isGenericHomepage(fullUrl)) return;
+
+      // Link text or URL should suggest a grant
+      const text = $(el).text().toLowerCase();
+      const urlLower = fullUrl.toLowerCase();
+      const grantSignals = ["grant", "fund", "award", "program", "assistance", "incentive"];
+      if (grantSignals.some((s) => text.includes(s) || urlLower.includes(s))) {
+        grantLinks.push(fullUrl);
+      }
+    });
+
+    // Process up to 10 discovered links
+    const results: SearchResult[] = grantLinks.slice(0, 10).map((url) => ({
+      title: "",
+      url,
+      snippet: "",
+    }));
+
+    return processSearchResults(results, seenUrls, 1);
+  } catch {
+    return [];
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Main entry point
 // ---------------------------------------------------------------------------
 
 export async function searchWebForGrants(): Promise<GrantData[]> {
   const hasBrave = !!env.BRAVE_SEARCH_API_KEY;
   const hasSerpApi = !!env.SERPAPI_API_KEY;
+  const hasGoogleCSE = !!env.GOOGLE_CSE_API_KEY && !!env.GOOGLE_CSE_CX;
 
-  if (!hasBrave && !hasSerpApi) {
+  if (!hasBrave && !hasSerpApi && !hasGoogleCSE) {
     log(
       "web-search",
-      "No search API keys set (BRAVE_SEARCH_API_KEY, SERPAPI_API_KEY) — skipping web search",
+      "No search API keys set (BRAVE_SEARCH_API_KEY, SERPAPI_API_KEY, GOOGLE_CSE_API_KEY) — skipping web search",
     );
     return [];
   }
 
   const providers: string[] = [];
   if (hasBrave) providers.push("Brave");
+  if (hasGoogleCSE) providers.push("GoogleCSE");
   if (hasSerpApi) providers.push("SerpAPI");
-  log("web-search", "Starting web search discovery", { providers: providers.join(", ") });
+
+  // Select queries for this run using rotation
+  const selectedQueries = selectQueriesForRun(QUERIES_PER_RUN);
+  log("web-search", "Starting web search discovery", {
+    providers: providers.join(", "),
+    queryCount: selectedQueries.length,
+    totalPool: selectedQueries.length,
+  });
 
   const allGrants: GrantData[] = [];
   const seenUrls = new Set<string>();
 
-  for (let i = 0; i < SEARCH_QUERIES.length; i++) {
+  for (let i = 0; i < selectedQueries.length; i++) {
     // Small delay between queries (Brave: 1 req/sec, SerpAPI: no strict limit)
     if (i > 0) {
       await delay(1500);
     }
 
-    const query = SEARCH_QUERIES[i];
+    const { query } = selectedQueries[i];
 
-    // Use SerpAPI as fallback for all queries if available
-    const results = await searchWeb(query, hasSerpApi);
+    // Assign ~30% of rotating queries to Google CSE for result diversity
+    const useGoogleCSE = hasGoogleCSE && i >= selectedQueries.length * 0.7;
 
+    let results: SearchResult[];
     let provider: string;
-    if (results.length === 0) {
-      provider = "none";
+
+    if (useGoogleCSE) {
+      results = await searchGoogleCSE(query);
+      provider = results.length > 0 ? "google-cse" : "none";
+      // Fall back to Brave/SerpAPI if Google CSE returns nothing
+      if (results.length === 0) {
+        results = await searchWeb(query, hasSerpApi);
+        provider = results.length > 0 ? (hasBrave ? "brave" : "serpapi") : "none";
+      }
     } else {
-      provider = hasBrave ? "brave" : "serpapi";
+      results = await searchWeb(query, hasSerpApi);
+      provider = results.length > 0 ? (hasBrave ? "brave" : "serpapi") : "none";
     }
+
     log("web-search", `"${query}" → ${results.length} results`, { provider });
 
     const grants = await processSearchResults(results, seenUrls);
     allGrants.push(...grants);
+  }
+
+  // Deep crawl: find domains that yielded multiple grants and crawl siblings
+  const domainGrants = new Map<string, { urls: string[]; grants: GrantData[] }>();
+  for (const grant of allGrants) {
+    try {
+      const domain = new URL(grant.sourceUrl).hostname.replace("www.", "");
+      if (!domainGrants.has(domain)) {
+        domainGrants.set(domain, { urls: [], grants: [] });
+      }
+      const entry = domainGrants.get(domain)!;
+      entry.urls.push(grant.sourceUrl);
+      entry.grants.push(grant);
+    } catch {
+      /* skip invalid URLs */
+    }
+  }
+
+  // Crawl up to 3 productive domains (2+ grants found)
+  let crawledDomains = 0;
+  for (const [domain, { urls }] of Array.from(domainGrants.entries())) {
+    if (urls.length < 2 || crawledDomains >= 3) continue;
+    if (shouldSkipUrl(`https://${domain}/`)) continue;
+
+    crawledDomains++;
+    const additionalGrants = await crawlProductiveDomain(domain, urls, seenUrls);
+    if (additionalGrants.length > 0) {
+      log("web-search", `Deep crawl of ${domain} found additional grants`, {
+        count: additionalGrants.length,
+      });
+      allGrants.push(...additionalGrants);
+    }
   }
 
   log("web-search", "Found grants from web search", { count: allGrants.length });
