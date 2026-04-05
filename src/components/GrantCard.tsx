@@ -38,13 +38,15 @@ export default memo(function GrantCard({
   const deadlineStr = formatDeadline(grant.deadline);
   const isUrgent =
     grant.deadline &&
-    new Date(grant.deadline).getTime() - Date.now() <
-      7 * 24 * 60 * 60 * 1000 &&
+    // eslint-disable-next-line react-hooks/purity -- time-sensitive "urgent" badge; intentionally reads current time on render
+    new Date(grant.deadline).getTime() - Date.now() < 7 * 24 * 60 * 60 * 1000 &&
     new Date(grant.deadline) > new Date();
 
   return (
     <Link href={`/grants/${grant.id}`} className="block">
-      <div className={`relative bg-white rounded-lg border p-5 hover:shadow-md transition-shadow h-full flex flex-col ${selected ? "ring-2 ring-blue-500 border-blue-300" : "border-[var(--border)]"}`}>
+      <div
+        className={`relative bg-white rounded-lg border p-5 hover:shadow-md transition-shadow h-full flex flex-col ${selected ? "ring-2 ring-blue-500 border-blue-300" : "border-[var(--border)]"}`}
+      >
         {selectable && (
           <div className="absolute top-3 right-3 z-10 flex items-center gap-1">
             <button
@@ -58,7 +60,12 @@ export default memo(function GrantCard({
               title="Delete grant"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                />
               </svg>
             </button>
             <input
@@ -93,16 +100,12 @@ export default memo(function GrantCard({
           )}
           {grant.businessStage !== "BOTH" && (
             <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800">
-              {grant.businessStage === "STARTUP"
-                ? "Startup"
-                : "Existing Biz"}
+              {grant.businessStage === "STARTUP" ? "Startup" : "Existing Biz"}
             </span>
           )}
         </div>
 
-        <h3 className="font-semibold text-[var(--foreground)] mb-2 line-clamp-2">
-          {grant.title}
-        </h3>
+        <h3 className="font-semibold text-[var(--foreground)] mb-2 line-clamp-2">{grant.title}</h3>
 
         <p className="text-sm text-[var(--muted)] mb-3 line-clamp-3 flex-grow">
           {grant.description}
@@ -112,9 +115,7 @@ export default memo(function GrantCard({
           {grant.amount && (
             <div className="flex items-center gap-2 text-sm">
               <span className="text-[var(--muted)]">Amount:</span>
-              <span className="font-medium text-[var(--success)]">
-                {grant.amount}
-              </span>
+              <span className="font-medium text-[var(--success)]">{grant.amount}</span>
             </div>
           )}
 
@@ -152,4 +153,4 @@ export default memo(function GrantCard({
       </div>
     </Link>
   );
-})
+});
