@@ -1,7 +1,8 @@
 "use client";
 
-import { Suspense, useState, useEffect, useCallback } from "react";
+import { Suspense, useState, useEffect, useCallback, useMemo } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
+import Link from "next/link";
 import SearchBar from "@/components/SearchBar";
 import GrantFilters from "@/components/GrantFilters";
 import GrantList from "@/components/GrantList";
@@ -189,16 +190,41 @@ function Dashboard() {
     }
   };
 
+  const exportHref = useMemo(() => {
+    const params = new URLSearchParams();
+    if (search) params.set("search", search);
+    if (filters.grantType) params.set("grantType", filters.grantType);
+    if (filters.gender) params.set("gender", filters.gender);
+    if (filters.businessStage) params.set("businessStage", filters.businessStage);
+    if (filters.status) params.set("status", filters.status);
+    if (filters.eligibleExpense) params.set("eligibleExpense", filters.eligibleExpense);
+    if (filters.location) params.set("location", filters.location);
+    const qs = params.toString();
+    return qs ? `/export?${qs}` : "/export";
+  }, [search, filters]);
+
   return (
     <div>
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-[var(--foreground)] mb-2">
-          Iowa Small Business Grants
-        </h1>
-        <p className="text-[var(--muted)]">
-          Discover grants for small businesses and entrepreneurs in Iowa.
-          Updated daily from federal, state, and local sources.
-        </p>
+      <div className="mb-8 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold text-[var(--foreground)] mb-2">
+            Iowa Small Business Grants
+          </h1>
+          <p className="text-[var(--muted)]">
+            Discover grants for small businesses and entrepreneurs in Iowa.
+            Updated daily from federal, state, and local sources.
+          </p>
+        </div>
+        <Link
+          href={exportHref}
+          className="self-start inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-[var(--border)] bg-white hover:bg-gray-50 text-[var(--foreground)] font-medium transition-colors"
+          title="Export these filtered grants"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5 5-5M12 15V3" />
+          </svg>
+          Export
+        </Link>
       </div>
 
       <div className="mb-6">
