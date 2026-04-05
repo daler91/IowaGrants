@@ -201,6 +201,18 @@ const OTHER_DEMOGRAPHIC_QUERIES: SearchQuery[] = [
     demographic: "general",
     geography: "national",
   },
+  {
+    query: `refugee entrepreneur small business grants ${currentYear}`,
+    priority: "rotating",
+    demographic: "general",
+    geography: "national",
+  },
+  {
+    query: "environmental justice climate resilience small business grants",
+    priority: "rotating",
+    demographic: "general",
+    geography: "national",
+  },
 ];
 
 // ---------------------------------------------------------------------------
@@ -256,6 +268,72 @@ const INDUSTRY_QUERIES: SearchQuery[] = [
     demographic: "general",
     geography: "national",
   },
+  {
+    query: `construction contractor small business grants ${currentYear}`,
+    priority: "rotating",
+    demographic: "general",
+    geography: "national",
+  },
+  {
+    query: `childcare daycare small business grants ${currentYear}`,
+    priority: "rotating",
+    demographic: "general",
+    geography: "national",
+  },
+  {
+    query: "trucking logistics small business grants",
+    priority: "rotating",
+    demographic: "general",
+    geography: "national",
+  },
+  {
+    query: "beauty salon barbershop small business grants",
+    priority: "rotating",
+    demographic: "general",
+    geography: "national",
+  },
+  {
+    query: "auto repair small business grants",
+    priority: "rotating",
+    demographic: "general",
+    geography: "national",
+  },
+  {
+    query: "landscaping small business grants",
+    priority: "rotating",
+    demographic: "general",
+    geography: "national",
+  },
+  {
+    query: "creative arts artist small business grants",
+    priority: "rotating",
+    demographic: "general",
+    geography: "national",
+  },
+  {
+    query: "food truck mobile vendor small business grants",
+    priority: "rotating",
+    demographic: "general",
+    geography: "national",
+  },
+  {
+    query: "brewery distillery craft beverage small business grants",
+    priority: "rotating",
+    demographic: "general",
+    geography: "national",
+  },
+  {
+    query: "tourism hospitality small business grants",
+    priority: "rotating",
+    demographic: "general",
+    geography: "national",
+  },
+  {
+    query: `AI biotech startup small business grants ${currentYear}`,
+    priority: "rotating",
+    demographic: "general",
+    geography: "national",
+  },
 ];
 
 // ---------------------------------------------------------------------------
@@ -299,6 +377,36 @@ const GEOGRAPHY_QUERIES: SearchQuery[] = [
     demographic: "general",
     geography: "national",
   },
+  {
+    query: `Davenport Quad Cities small business grants ${currentYear}`,
+    priority: "rotating",
+    demographic: "general",
+    geography: "iowa",
+  },
+  {
+    query: `Sioux City Waterloo small business grants ${currentYear}`,
+    priority: "rotating",
+    demographic: "general",
+    geography: "iowa",
+  },
+  {
+    query: `Iowa City Dubuque small business grants ${currentYear}`,
+    priority: "rotating",
+    demographic: "general",
+    geography: "iowa",
+  },
+  {
+    query: `Ames Council Bluffs small business grants ${currentYear}`,
+    priority: "rotating",
+    demographic: "general",
+    geography: "iowa",
+  },
+  {
+    query: `Iowa disaster recovery derecho flood small business grants ${currentYear}`,
+    priority: "rotating",
+    demographic: "general",
+    geography: "iowa",
+  },
 ];
 
 // ---------------------------------------------------------------------------
@@ -341,6 +449,18 @@ const FUNDING_TYPE_QUERIES: SearchQuery[] = [
     priority: "rotating",
     demographic: "general",
     geography: "national",
+  },
+  {
+    query: `${currentYear} pitch competition cash prize small business`,
+    priority: "rotating",
+    demographic: "general",
+    geography: "national",
+  },
+  {
+    query: `Iowa accelerator cohort grant ${currentYear}`,
+    priority: "rotating",
+    demographic: "general",
+    geography: "iowa",
   },
 ];
 

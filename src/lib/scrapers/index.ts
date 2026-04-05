@@ -16,6 +16,8 @@ import { scrapeIowaLocalGrants } from "./iowa-local-grants";
 import { scrapeRssFeeds } from "./rss-feeds";
 import { scrapeSbaGov } from "./sba-gov";
 import { scrapeCommunityFoundations } from "./community-foundations";
+import { scrapeFederalAgencySbir } from "./federal-agency-sbir";
+import { scrapeIowaIedaPrograms } from "./iowa-ieda-programs";
 import {
   normalizeTitle,
   isExcludedByEligibility,
@@ -280,6 +282,8 @@ export async function runFullScrape(scrapeRunId?: string): Promise<ScraperResult
     rssFeeds,
     sbaGov,
     communityFoundations,
+    federalAgencySbir,
+    iowaIedaPrograms,
   ] = await Promise.allSettled([
     fetchSamGov(),
     scrapeIEDA(),
@@ -296,6 +300,8 @@ export async function runFullScrape(scrapeRunId?: string): Promise<ScraperResult
     scrapeRssFeeds(),
     scrapeSbaGov(),
     scrapeCommunityFoundations(),
+    scrapeFederalAgencySbir(),
+    scrapeIowaIedaPrograms(),
   ]);
 
   const sourceResults: Array<{ name: string; result: PromiseSettledResult<GrantData[]> }> = [
@@ -314,6 +320,8 @@ export async function runFullScrape(scrapeRunId?: string): Promise<ScraperResult
     { name: "rss-feeds", result: rssFeeds },
     { name: "sba-gov", result: sbaGov },
     { name: "community-foundations", result: communityFoundations },
+    { name: "federal-agency-sbir", result: federalAgencySbir },
+    { name: "iowa-ieda-programs", result: iowaIedaPrograms },
   ];
 
   // Step 2b: Collect results from all sources

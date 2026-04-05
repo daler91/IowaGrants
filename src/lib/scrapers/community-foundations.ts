@@ -86,6 +86,101 @@ const IOWA_FOUNDATIONS: CommunityFoundation[] = [
     name: "Burlington Community Foundation",
     url: "https://www.burlingtoniowa.org",
   },
+  {
+    name: "Community Foundation of Johnson County",
+    url: "https://www.cfjc.org",
+    grantsPage: "https://www.cfjc.org/nonprofits/",
+  },
+  {
+    name: "Story County Community Foundation",
+    url: "https://www.storycountyfoundation.org",
+    grantsPage: "https://www.storycountyfoundation.org/grants",
+  },
+  {
+    name: "Scott County Regional Authority",
+    url: "https://www.scottcountyia.com",
+  },
+  {
+    name: "Community Foundation of Greater Muscatine",
+    url: "https://www.muscatinecommunityfoundation.org",
+    grantsPage: "https://www.muscatinecommunityfoundation.org/grants/",
+  },
+  {
+    name: "Grinnell Area Community Foundation",
+    url: "https://www.grinnellareacommunityfoundation.org",
+    grantsPage: "https://www.grinnellareacommunityfoundation.org/grants",
+  },
+  {
+    name: "Marshalltown Area Community Foundation",
+    url: "https://www.macfoundation.com",
+    grantsPage: "https://www.macfoundation.com/grants",
+  },
+  {
+    name: "Pella Community Foundation",
+    url: "https://www.pellacommunityfoundation.org",
+  },
+  {
+    name: "Greater Jefferson County Foundation",
+    url: "https://www.gjcfoundation.org",
+  },
+  {
+    name: "Winneshiek County Community Foundation",
+    url: "https://www.winneshiekcountyfoundation.org",
+  },
+  {
+    name: "Greater Poweshiek Community Foundation",
+    url: "https://www.greaterpcf.org",
+    grantsPage: "https://www.greaterpcf.org/grants/",
+  },
+  {
+    name: "Community Foundation of Clinton County",
+    url: "https://www.clintoncountyfoundation.com",
+    grantsPage: "https://www.clintoncountyfoundation.com/grants",
+  },
+  {
+    name: "Wapello County Community Foundation",
+    url: "https://wapellocountyfoundation.org",
+  },
+  {
+    name: "Boone County Community Foundation",
+    url: "https://www.boonecountyfoundation.org",
+  },
+  {
+    name: "Oskaloosa Area Community Foundation",
+    url: "https://www.oacfiowa.org",
+  },
+  {
+    name: "Hardin County Community Endowment Foundation",
+    url: "https://www.hardincountyfoundation.org",
+  },
+  {
+    name: "Newton Area Community Foundation",
+    url: "https://www.newtoniowa.com",
+  },
+  {
+    name: "Greene County Community Foundation",
+    url: "https://www.greenecountyfoundation.org",
+  },
+  {
+    name: "Webster City Area Community Foundation",
+    url: "https://www.webstercityfoundation.org",
+  },
+  {
+    name: "Community Foundation of Louisa County",
+    url: "https://www.louisacountyfoundation.org",
+  },
+  {
+    name: "Van Buren County Community Foundation",
+    url: "https://www.vbccf.org",
+  },
+  {
+    name: "Community Foundation of Madison County",
+    url: "https://www.madisoncountyfoundation.org",
+  },
+  {
+    name: "Iowa County Community Foundation",
+    url: "https://www.iowacountyfoundation.org",
+  },
 ];
 
 // ---------------------------------------------------------------------------
