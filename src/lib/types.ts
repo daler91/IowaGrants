@@ -1,9 +1,4 @@
-import type {
-  GrantType,
-  GrantStatus,
-  GenderFocus,
-  BusinessStage,
-} from "@prisma/client";
+import type { GrantType, GrantStatus, GenderFocus, BusinessStage } from "@prisma/client";
 
 export interface GrantData {
   title: string;
@@ -44,15 +39,15 @@ export interface GrantListItem {
 
 export interface GrantFilters {
   search?: string;
-  grantType?: GrantType;
-  gender?: GenderFocus;
-  businessStage?: BusinessStage;
+  grantType?: GrantType[];
+  gender?: GenderFocus[];
+  businessStage?: BusinessStage[];
   location?: string;
   industry?: string;
-  status?: GrantStatus;
+  status?: GrantStatus[];
   amountMin?: number;
   amountMax?: number;
-  eligibleExpense?: string;
+  eligibleExpense?: string[];
   page?: number;
   limit?: number;
 }

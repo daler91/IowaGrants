@@ -51,6 +51,10 @@ export default async function GrantDetailPage({
     grant.deadline.getTime() - Date.now() < 7 * 24 * 60 * 60 * 1000 &&
     grant.deadline > new Date();
 
+  // eslint-disable-next-line react-hooks/purity -- server component; time-sensitive status derived from deadline
+  const deadlinePassed = !!grant.deadline && grant.deadline.getTime() < Date.now();
+  const displayStatus = deadlinePassed ? "CLOSED" : grant.status;
+
   return (
     <div>
       <Link
@@ -68,9 +72,9 @@ export default async function GrantDetailPage({
             {grant.grantType}
           </span>
           <span
-            className={`px-3 py-1 rounded-full text-sm font-medium ${STATUS_COLORS[grant.status]}`}
+            className={`px-3 py-1 rounded-full text-sm font-medium ${STATUS_COLORS[displayStatus]}`}
           >
-            {grant.status}
+            {displayStatus}
           </span>
           {grant.gender !== "ANY" && grant.gender !== "GENERAL" && (
             <span className="px-3 py-1 rounded-full text-sm font-medium bg-pink-100 text-pink-800">
