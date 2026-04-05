@@ -7,6 +7,7 @@ import { useAdmin } from "@/lib/hooks/useAdmin";
 const NAV_LINKS = [
   { href: "/", label: "Dashboard" },
   { href: "/calendar", label: "Deadlines" },
+  { href: "/export", label: "Export" },
 ];
 
 export default function NavBar() {
