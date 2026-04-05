@@ -90,10 +90,10 @@ function extractProgramLinks(html: string, baseUrl: string): ProgramLink[] {
       return;
     }
 
-    // Keep only iowaeda.com program pages
+    // Keep only iowaeda.com program pages (exact host or legitimate subdomain)
     try {
       const host = new URL(fullUrl).hostname.toLowerCase();
-      if (!host.endsWith("iowaeda.com")) return;
+      if (host !== "iowaeda.com" && !host.endsWith(".iowaeda.com")) return;
     } catch {
       return;
     }
