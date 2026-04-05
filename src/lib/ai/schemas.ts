@@ -71,6 +71,15 @@ export const RawDataSchema = z
     articlePage: z.string().optional(),
     originalTitle: z.string().optional(),
     candidateUrls: z.array(z.string()).optional(),
+    liveBodyText: z.string().optional(),
+    closedReason: z
+      .object({
+        method: z.enum(["url-health", "ai-revalidation"]),
+        status: z.number().nullable().optional(),
+        reason: z.string().optional(),
+        at: z.string().optional(),
+      })
+      .optional(),
     deadlineSource: z
       .object({
         method: z.enum(["regex", "ai", "api", "merged"]),
