@@ -19,9 +19,11 @@ export const AI_CALL_DELAY_MS = 500;
 /** Number of grants to validate per AI batch */
 export const VALIDATION_BATCH_SIZE = 10;
 
+/** Total search queries to run per scrape (anchor + rotating combined) */
+export const QUERIES_PER_RUN = 16;
+
 /** Common User-Agent string for scraper requests */
-export const SCRAPER_USER_AGENT =
-  "IowaGrantScanner/1.0 (educational research project)";
+export const SCRAPER_USER_AGENT = "IowaGrantScanner/1.0 (educational research project)";
 
 /** Browser-like User-Agent for sites that block non-browser requests */
 export const BROWSER_USER_AGENT =

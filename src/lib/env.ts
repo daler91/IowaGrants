@@ -43,13 +43,16 @@ export const env = {
   get SERPAPI_API_KEY() {
     return optionalEnv("SERPAPI_API_KEY");
   },
+  get GOOGLE_CSE_API_KEY() {
+    return optionalEnv("GOOGLE_CSE_API_KEY");
+  },
+  get GOOGLE_CSE_CX() {
+    return optionalEnv("GOOGLE_CSE_CX");
+  },
 
   // ── Optional config with defaults ─────────────────────────────────
   get GRANTS_GOV_API_URL() {
-    return optionalEnv(
-      "GRANTS_GOV_API_URL",
-      "https://api.grants.gov/v1/opportunities/search"
-    );
+    return optionalEnv("GRANTS_GOV_API_URL", "https://api.grants.gov/v1/opportunities/search");
   },
   get LWL_AIRTABLE_BASE_ID() {
     return optionalEnv("LWL_AIRTABLE_BASE_ID") || "";
