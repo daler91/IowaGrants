@@ -2,23 +2,7 @@ import { memo } from "react";
 import Link from "next/link";
 import type { GrantListItem } from "@/lib/types";
 import { TYPE_COLORS, STATUS_COLORS } from "@/lib/constants";
-
-function formatDeadline(deadline: string | null | undefined): string {
-  if (!deadline) return "No deadline";
-  const d = new Date(deadline);
-  const now = new Date();
-  const diff = Math.ceil((d.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-
-  const formatted = d.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-
-  if (diff < 0) return `Closed ${formatted}`;
-  if (diff <= 30) return `${diff}d left - ${formatted}`;
-  return formatted;
-}
+import { formatDeadlineShort, isDeadlinePassed, isDeadlineUrgent } from "@/lib/deadline";
 
 interface GrantCardProps {
   grant: GrantListItem;
@@ -35,17 +19,10 @@ export default memo(function GrantCard({
   onSelectChange,
   onDelete,
 }: Readonly<GrantCardProps>) {
-  const deadlineStr = formatDeadline(grant.deadline);
-  const deadlinePassed =
-    !!grant.deadline &&
-    // eslint-disable-next-line react-hooks/purity -- time-sensitive status derived from deadline; intentionally reads current time on render
-    new Date(grant.deadline).getTime() < Date.now();
+  const deadlineStr = formatDeadlineShort(grant.deadline);
+  const deadlinePassed = isDeadlinePassed(grant.deadline);
   const displayStatus = deadlinePassed ? "CLOSED" : grant.status;
-  const isUrgent =
-    grant.deadline &&
-    // eslint-disable-next-line react-hooks/purity -- time-sensitive "urgent" badge; intentionally reads current time on render
-    new Date(grant.deadline).getTime() - Date.now() < 7 * 24 * 60 * 60 * 1000 &&
-    new Date(grant.deadline) > new Date();
+  const isUrgent = isDeadlineUrgent(grant.deadline);
 
   return (
     <Link href={`/grants/${grant.id}`} className="block">

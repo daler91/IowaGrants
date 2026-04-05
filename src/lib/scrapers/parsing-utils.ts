@@ -29,10 +29,10 @@ export function cleanHtmlToText(html: string, maxLength = 2000): string {
 
   return text
     .replaceAll("\r\n", "\n")
-    .replaceAll(/[ \t]+/g, " ")        // collapse horizontal whitespace
-    .replaceAll("\n ", "\n")           // trim leading spaces on lines
-    .replaceAll(" \n", "\n")           // trim trailing spaces on lines
-    .replaceAll(/\n{3,}/g, "\n\n")     // max 2 consecutive newlines
+    .replaceAll(/[ \t]+/g, " ") // collapse horizontal whitespace
+    .replaceAll("\n ", "\n") // trim leading spaces on lines
+    .replaceAll(" \n", "\n") // trim trailing spaces on lines
+    .replaceAll(/\n{3,}/g, "\n\n") // max 2 consecutive newlines
     .trim()
     .slice(0, maxLength);
 }
@@ -41,11 +41,11 @@ export function cleanHtmlToText(html: string, maxLength = 2000): string {
 
 // Date formats used across deadline extraction
 const DATE_FORMATS = [
-  /([A-Z][a-z]{2,8}\.? \d{1,2},?\s*\d{4})/i,   // January 15, 2025 / Mar. 15, 2025 / Jan 15 2025
-  /(\d{1,2} [A-Z][a-z]{2,8},?\s*\d{4})/i,       // 15 March, 2025 / 15 Jan 2025
-  /(\d{1,2}\/\d{1,2}\/\d{2,4})/,                 // 01/15/2025
-  /(\d{4}-\d{2}-\d{2})/,                          // 2025-01-15 (ISO)
-  /([A-Z][a-z]{2,8}\.?\s+\d{4})/i,               // March 2025 (month-only, interpreted as 1st)
+  /([A-Z][a-z]{2,8}\.? \d{1,2},?\s*\d{4})/i, // January 15, 2025 / Mar. 15, 2025 / Jan 15 2025
+  /(\d{1,2} [A-Z][a-z]{2,8},?\s*\d{4})/i, // 15 March, 2025 / 15 Jan 2025
+  /(\d{1,2}\/\d{1,2}\/\d{2,4})/, // 01/15/2025
+  /(\d{4}-\d{2}-\d{2})/, // 2025-01-15 (ISO)
+  /([A-Z][a-z]{2,8}\.?\s+\d{4})/i, // March 2025 (month-only, interpreted as 1st)
 ];
 
 function tryParseDate(text: string): Date | undefined {
@@ -72,11 +72,15 @@ export function extractDeadline(html: string): Date | undefined {
   const text = html.replaceAll(/<[^>]+>/g, " ").replaceAll(/\s+/g, " ");
 
   // Strategy 1: Find deadline label positions, then extract dates after them
-  const labelPattern = /(?:deadline|due date|closes?|closing date|expiration|expires?|submit by|applications? due|apply by)[:\s]*/gi;
+  const labelPattern =
+    /(?:deadline|due date|closes?|closing date|expiration|expires?|submit by|applications? due|apply by)[:\s]*/gi;
 
   let labelMatch;
   while ((labelMatch = labelPattern.exec(text)) !== null) {
-    const after = text.slice(labelMatch.index + labelMatch[0].length, labelMatch.index + labelMatch[0].length + 80);
+    const after = text.slice(
+      labelMatch.index + labelMatch[0].length,
+      labelMatch.index + labelMatch[0].length + 80,
+    );
     const date = tryParseDate(after);
     if (date) return date;
   }
@@ -93,13 +97,43 @@ export function extractDeadline(html: string): Date | undefined {
   for (const pattern of flowingPatterns) {
     let flowMatch;
     while ((flowMatch = pattern.exec(text)) !== null) {
-      const after = text.slice(flowMatch.index + flowMatch[0].length, flowMatch.index + flowMatch[0].length + 80);
+      const after = text.slice(
+        flowMatch.index + flowMatch[0].length,
+        flowMatch.index + flowMatch[0].length + 80,
+      );
       const date = tryParseDate(after);
       if (date) return date;
     }
   }
 
   return undefined;
+}
+
+/**
+ * Find all date-shaped substrings in text and return the ones that parse to
+ * a plausible future or recent date. Used by the deadline reconciliation
+ * step to cheaply detect when a description contains a date that may
+ * disagree with the stored `grant.deadline`.
+ */
+export function findAllDateCandidates(text: string): Date[] {
+  const stripped = text.replaceAll(/<[^>]+>/g, " ").replaceAll(/\s+/g, " ");
+  const found: Date[] = [];
+  for (const fmt of DATE_FORMATS) {
+    // clone flags to avoid shared lastIndex across calls
+    const pattern = new RegExp(fmt.source, `${fmt.flags.includes("g") ? "" : "g"}${fmt.flags}`);
+    let match;
+    while ((match = pattern.exec(stripped)) !== null) {
+      const parsed = new Date(match[1]);
+      if (
+        !Number.isNaN(parsed.getTime()) &&
+        parsed.getFullYear() >= new Date().getFullYear() - 1 &&
+        parsed.getFullYear() <= new Date().getFullYear() + 10
+      ) {
+        found.push(parsed);
+      }
+    }
+  }
+  return found;
 }
 
 /**
@@ -133,7 +167,8 @@ export function normalizeTitle(title: string): string {
  */
 export function parseGrantAmount(text: string): { raw: string; min: number; max: number } | null {
   // Match dollar amounts with optional magnitude suffixes
-  const amountPattern = /\$\s*([\d,]+(?:\.\d+)?)\s*([KkMmBb](?:illion|illion)?|[Kk]|[Mm]illion|[Bb]illion)?/g;
+  const amountPattern =
+    /\$\s*([\d,]+(?:\.\d+)?)\s*([KkMmBb](?:illion|illion)?|[Kk]|[Mm]illion|[Bb]illion)?/g;
 
   const amounts: Array<{ value: number; raw: string }> = [];
   let match;
@@ -158,7 +193,8 @@ export function parseGrantAmount(text: string): { raw: string; min: number; max:
   if (amounts.length === 0) return null;
 
   // Check for range patterns in original text
-  const rangePattern = /\$\s*[\d,]+(?:\.\d+)?\s*[KkMmBb]?\w*\s*(?:to|-|–|—)\s*\$\s*[\d,]+(?:\.\d+)?\s*[KkMmBb]?\w*/;
+  const rangePattern =
+    /\$\s*[\d,]+(?:\.\d+)?\s*[KkMmBb]?\w*\s*(?:to|-|–|—)\s*\$\s*[\d,]+(?:\.\d+)?\s*[KkMmBb]?\w*/;
   const hasRange = rangePattern.test(text);
 
   if (hasRange && amounts.length >= 2) {
