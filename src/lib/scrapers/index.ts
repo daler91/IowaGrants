@@ -30,6 +30,7 @@ import { findAllDateCandidates } from "./parsing-utils";
 import { categorizeAll } from "@/lib/ai/categorizer";
 import { parsePdfFromUrl } from "@/lib/ai/pdf-parser";
 import { validateGrants } from "@/lib/ai/grant-validator";
+import { generateDescriptions } from "@/lib/ai/description-generator";
 import { extractDeadlinesWithAI } from "@/lib/ai/deadline-extractor";
 import { checkUrlHealth } from "./url-health";
 import { revalidateExistingGrants } from "./revalidate-existing";
@@ -597,8 +598,11 @@ export async function runFullScrape(scrapeRunId?: string): Promise<ScraperResult
     log("orchestrator", "Loaded blacklisted URLs", { count: blacklistedUrls.size });
   }
 
+  // Step 6b: AI-powered description generation for grants that passed all filters
+  const described = await generateDescriptions(validated);
+
   // Step 7: Upsert all grants and log results
-  const totalNew = await upsertAndLog(validated, results, blacklistedUrls);
+  const totalNew = await upsertAndLog(described, results, blacklistedUrls);
 
   // Step 8: Sweep a slice of existing OPEN grants in the DB (oldest-verified
   // first) to catch inactive grants whose sources went dark between scrapes.
