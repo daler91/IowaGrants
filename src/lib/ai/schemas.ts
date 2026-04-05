@@ -62,6 +62,19 @@ export const DeadlineExtractionArraySchema = z.array(DeadlineExtractionSchema);
 export type DeadlineExtraction = z.infer<typeof DeadlineExtractionSchema>;
 
 /**
+ * Schema for a single AI description-generation result.
+ * Used by the description generator step in the scraper pipeline.
+ */
+export const DescriptionResultSchema = z.object({
+  index: z.number().int(),
+  description: z.string(),
+});
+
+export const DescriptionResultArraySchema = z.array(DescriptionResultSchema);
+
+export type DescriptionResult = z.infer<typeof DescriptionResultSchema>;
+
+/**
  * Schema for the rawData JSON field stored on Grant records.
  * Different scrapers store different shapes; this schema is permissive
  * but extracts known fields safely.
@@ -72,6 +85,7 @@ export const RawDataSchema = z
     originalTitle: z.string().optional(),
     candidateUrls: z.array(z.string()).optional(),
     liveBodyText: z.string().optional(),
+    originalDescription: z.string().optional(),
     closedReason: z
       .object({
         method: z.enum(["url-health", "ai-revalidation"]),

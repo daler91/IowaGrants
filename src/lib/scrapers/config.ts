@@ -22,6 +22,9 @@ export const VALIDATION_BATCH_SIZE = 10;
 /** Number of grants to extract deadlines for per AI batch */
 export const DEADLINE_AI_BATCH_SIZE = 8;
 
+/** Number of grants to generate descriptions for per AI batch */
+export const DESCRIPTION_BATCH_SIZE = 8;
+
 /** Total search queries to run per scrape (anchor + rotating combined) */
 export const QUERIES_PER_RUN = 16;
 
