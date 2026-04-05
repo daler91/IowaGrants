@@ -47,6 +47,7 @@ export default async function GrantDetailPage({
 
   const isUrgent =
     grant.deadline &&
+    // eslint-disable-next-line react-hooks/purity -- server component; evaluated per request
     grant.deadline.getTime() - Date.now() < 7 * 24 * 60 * 60 * 1000 &&
     grant.deadline > new Date();
 
