@@ -74,7 +74,41 @@ export function buildGrantWhere(params: URLSearchParams): Prisma.GrantWhereInput
   }
 
   if (statuses.length) {
-    where.status = { in: statuses as Prisma.EnumGrantStatusFilter["in"] };
+    const now = new Date();
+    const wantsOpen = statuses.includes("OPEN");
+    const wantsClosed = statuses.includes("CLOSED");
+    const wantsForecasted = statuses.includes("FORECASTED");
+
+    const statusClauses: Prisma.GrantWhereInput[] = [];
+
+    if (wantsOpen) {
+      // OPEN means DB status is OPEN *and* deadline hasn't passed
+      statusClauses.push({
+        status: "OPEN",
+        OR: [{ deadline: null }, { deadline: { gte: now } }],
+      });
+    }
+
+    if (wantsClosed) {
+      // CLOSED means DB status is CLOSED, or OPEN with a past deadline
+      statusClauses.push({ status: "CLOSED" }, { status: "OPEN", deadline: { lt: now } });
+    }
+
+    if (wantsForecasted) {
+      statusClauses.push({ status: "FORECASTED" });
+    }
+
+    if (statusClauses.length === 1) {
+      where.AND = [
+        ...(Array.isArray(where.AND) ? where.AND : where.AND ? [where.AND] : []),
+        statusClauses[0],
+      ];
+    } else if (statusClauses.length > 1) {
+      where.AND = [
+        ...(Array.isArray(where.AND) ? where.AND : where.AND ? [where.AND] : []),
+        { OR: statusClauses },
+      ];
+    }
   }
 
   if (amountMin !== undefined && !Number.isNaN(amountMin)) {
