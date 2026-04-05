@@ -47,6 +47,21 @@ export const ParsedGrantSchema = z.object({
 export type ParsedGrant = z.infer<typeof ParsedGrantSchema>;
 
 /**
+ * Schema for a single AI deadline-extraction result.
+ * Used by the deadline reconciliation step in the scraper pipeline.
+ */
+export const DeadlineExtractionSchema = z.object({
+  index: z.number().int(),
+  deadline: z.string().nullable(), // "YYYY-MM-DD" or null
+  confidence: z.enum(["HIGH", "MEDIUM", "LOW"]),
+  reason: z.string(),
+});
+
+export const DeadlineExtractionArraySchema = z.array(DeadlineExtractionSchema);
+
+export type DeadlineExtraction = z.infer<typeof DeadlineExtractionSchema>;
+
+/**
  * Schema for the rawData JSON field stored on Grant records.
  * Different scrapers store different shapes; this schema is permissive
  * but extracts known fields safely.
@@ -56,6 +71,15 @@ export const RawDataSchema = z
     articlePage: z.string().optional(),
     originalTitle: z.string().optional(),
     candidateUrls: z.array(z.string()).optional(),
+    deadlineSource: z
+      .object({
+        method: z.enum(["regex", "ai", "api", "merged"]),
+        confidence: z.enum(["HIGH", "MEDIUM", "LOW"]),
+        reason: z.string().optional(),
+        regexValue: z.string().nullable().optional(),
+        aiValue: z.string().nullable().optional(),
+      })
+      .optional(),
   })
   .passthrough();
 

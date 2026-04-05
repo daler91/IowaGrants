@@ -26,9 +26,11 @@ import {
   validateDeadline,
   cleanHtmlToText,
 } from "./utils";
+import { findAllDateCandidates } from "./parsing-utils";
 import { categorizeAll } from "@/lib/ai/categorizer";
 import { parsePdfFromUrl } from "@/lib/ai/pdf-parser";
 import { validateGrants } from "@/lib/ai/grant-validator";
+import { extractDeadlinesWithAI } from "@/lib/ai/deadline-extractor";
 import {
   checkForChanges,
   getUrlsNeedingReparse,
@@ -204,15 +206,141 @@ async function processPdfGrants(allGrants: GrantData[], urlsToReparse: string[])
     if (grant.pdfUrl) {
       const parsed = await parsePdfFromUrl(grant.pdfUrl, grant.sourceName);
       if (parsed) {
-        // Replace grant with merged data (prefer AI-extracted, keep original URL/source)
-        allGrants[i] = {
-          ...parsed,
-          sourceUrl: grant.sourceUrl,
-          sourceName: grant.sourceName,
-        };
+        allGrants[i] = mergeGrantWithPdfParse(grant, parsed);
       }
     }
   }
+}
+
+/**
+ * Merge a PDF-parsed grant into an HTML-scraped grant. Prefer the parsed
+ * (PDF/AI) values for most fields, but never let a null/undefined parsed
+ * deadline wipe out a real HTML-extracted deadline — and prefer the later
+ * date when both exist (grants typically have a future application
+ * deadline, not the document's original publish date).
+ */
+function mergeGrantWithPdfParse(original: GrantData, parsed: GrantData): GrantData {
+  let deadline: Date | undefined = parsed.deadline ?? original.deadline;
+  if (original.deadline && parsed.deadline) {
+    deadline =
+      parsed.deadline.getTime() >= original.deadline.getTime()
+        ? parsed.deadline
+        : original.deadline;
+  }
+
+  return {
+    ...parsed,
+    deadline,
+    sourceUrl: original.sourceUrl,
+    sourceName: original.sourceName,
+    // Preserve original rawData fields (e.g. articlePage) by merging instead of replacing
+    rawData: { ...(original.rawData ?? {}), ...(parsed.rawData ?? {}) },
+  };
+}
+
+/**
+ * Reconcile deadlines across scraped grants using AI.
+ *
+ * Regex-based extraction is fast but frequently picks the wrong date
+ * (posted dates, event dates, past cycles). This step runs Claude over
+ * grants where the regex result is suspect — missing, in the past, or
+ * contradicted by a date found inside the description body — and replaces
+ * the deadline with the AI result when confidence is high enough.
+ *
+ * Provenance is written into `grant.rawData.deadlineSource` for debugging.
+ */
+async function reconcileDeadlines(grants: GrantData[]): Promise<void> {
+  if (grants.length === 0) return;
+
+  const now = Date.now();
+  const indicesToCheck: number[] = [];
+
+  for (let i = 0; i < grants.length; i++) {
+    const g = grants[i];
+    const deadlineMissing = !g.deadline;
+    const deadlinePast = !!g.deadline && g.deadline.getTime() < now;
+
+    if (deadlineMissing || deadlinePast) {
+      indicesToCheck.push(i);
+      continue;
+    }
+
+    // Regex sanity check: does the description mention a date that disagrees
+    // with the stored deadline? If so, ask the AI to adjudicate.
+    const haystack = `${g.title} ${g.description} ${g.eligibility ?? ""}`;
+    const candidates = findAllDateCandidates(haystack);
+    if (candidates.length > 0 && g.deadline) {
+      const stored = g.deadline.getTime();
+      const dayMs = 24 * 60 * 60 * 1000;
+      const hasDisagreement = candidates.some((c) => Math.abs(c.getTime() - stored) > dayMs);
+      if (hasDisagreement) indicesToCheck.push(i);
+    }
+  }
+
+  if (indicesToCheck.length === 0) {
+    log("orchestrator", "Deadline reconcile: no grants need AI check");
+    return;
+  }
+
+  log("orchestrator", "Deadline reconcile: running AI check", {
+    candidates: indicesToCheck.length,
+    totalGrants: grants.length,
+  });
+
+  const subset = indicesToCheck.map((i) => grants[i]);
+  const extracted = await extractDeadlinesWithAI(subset);
+
+  let overwritten = 0;
+  let filledEmpty = 0;
+  let disagreementsKept = 0;
+
+  for (let k = 0; k < indicesToCheck.length; k++) {
+    const i = indicesToCheck[k];
+    const result = extracted[k];
+    if (!result) continue;
+
+    const grant = grants[i];
+    const regexDeadlineIso = grant.deadline?.toISOString() ?? null;
+    const aiDeadlineIso = result.deadline?.toISOString() ?? null;
+
+    let method: "regex" | "ai" | "merged" = "regex";
+
+    if (result.confidence === "HIGH" && result.deadline) {
+      grant.deadline = result.deadline;
+      method = "ai";
+      overwritten++;
+    } else if (result.confidence === "MEDIUM" && result.deadline && !grant.deadline) {
+      grant.deadline = result.deadline;
+      method = "ai";
+      filledEmpty++;
+    } else if (result.confidence === "MEDIUM" && result.deadline && grant.deadline) {
+      method = "merged";
+      disagreementsKept++;
+      logWarn("orchestrator", `Deadline disagreement kept regex value for "${grant.title}"`, {
+        regex: regexDeadlineIso,
+        ai: aiDeadlineIso,
+        reason: result.reason,
+      });
+    }
+
+    grant.rawData = {
+      ...(grant.rawData ?? {}),
+      deadlineSource: {
+        method,
+        confidence: result.confidence,
+        reason: result.reason,
+        regexValue: regexDeadlineIso,
+        aiValue: aiDeadlineIso,
+      },
+    };
+  }
+
+  log("orchestrator", "Deadline reconcile complete", {
+    checked: indicesToCheck.length,
+    overwritten,
+    filledEmpty,
+    disagreementsKept,
+  });
 }
 
 async function upsertAndLog(
@@ -337,6 +465,9 @@ export async function runFullScrape(scrapeRunId?: string): Promise<ScraperResult
   // Step 3 & 4: Parse PDFs (reparsing + scraper-found)
   const urlsToReparse = await getUrlsNeedingReparse();
   await processPdfGrants(allGrants, urlsToReparse);
+
+  // Step 4b: Reconcile deadlines — use Claude to correct regex misses / wrong-cycle dates
+  await reconcileDeadlines(allGrants);
 
   // Step 5: Run categorizer on all grants
   const categorized = categorizeAll(allGrants);

@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { TYPE_COLORS, STATUS_COLORS } from "@/lib/constants";
 import { parseRawData } from "@/lib/ai/schemas";
+import { formatDeadlineLong, isDeadlinePassed, isDeadlineUrgent } from "@/lib/deadline";
 import AdminEditButton from "@/components/AdminEditButton";
 
 /** Only allow http(s) links to prevent javascript: XSS via stored URLs. */
@@ -36,24 +37,19 @@ export default async function GrantDetailPage({
 
   if (!grant) notFound();
 
-  const deadlineStr = grant.deadline
-    ? grant.deadline.toLocaleDateString("en-US", {
-        weekday: "long",
-        year: "numeric",
-        month: "long",
-        day: "numeric",
-      })
-    : "No deadline specified";
-
-  const isUrgent =
-    grant.deadline &&
-    // eslint-disable-next-line react-hooks/purity -- server component; evaluated per request
-    grant.deadline.getTime() - Date.now() < 7 * 24 * 60 * 60 * 1000 &&
-    grant.deadline > new Date();
-
-  // eslint-disable-next-line react-hooks/purity -- server component; time-sensitive status derived from deadline
-  const deadlinePassed = !!grant.deadline && grant.deadline.getTime() < Date.now();
+  const deadlineStr = formatDeadlineLong(grant.deadline);
+  const isUrgent = isDeadlineUrgent(grant.deadline);
+  const deadlinePassed = isDeadlinePassed(grant.deadline);
   const displayStatus = deadlinePassed ? "CLOSED" : grant.status;
+
+  const rawData = parseRawData(grant.rawData);
+  const deadlineSource = rawData?.deadlineSource;
+  const showDeadlineHint =
+    !!grant.deadline &&
+    deadlineSource &&
+    typeof deadlineSource === "object" &&
+    "confidence" in deadlineSource &&
+    deadlineSource.confidence !== "HIGH";
 
   return (
     <div>
@@ -107,6 +103,11 @@ export default async function GrantDetailPage({
             >
               {deadlineStr}
             </p>
+            {showDeadlineHint && (
+              <p className="text-xs text-[var(--muted)] mt-1 italic">
+                Auto-extracted — verify at the original source.
+              </p>
+            )}
           </div>
           <div className="bg-gray-50 rounded-lg p-4">
             <p className="text-sm text-[var(--muted)] mb-1">Source</p>
@@ -203,7 +204,6 @@ export default async function GrantDetailPage({
               </a>
             )}
             {(() => {
-              const rawData = parseRawData(grant.rawData);
               const articlePage = rawData?.articlePage;
               const safeArticleHref = articlePage ? safeHref(articlePage) : undefined;
               if (safeArticleHref && articlePage !== grant.sourceUrl) {
