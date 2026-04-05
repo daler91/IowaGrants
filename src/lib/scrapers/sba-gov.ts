@@ -64,7 +64,13 @@ async function extractGrantLinks(pageUrl: string): Promise<string[]> {
       }
 
       // Only follow sba.gov links about grants/funding
-      if (!fullUrl.includes("sba.gov")) return;
+      let hostname: string;
+      try {
+        hostname = new URL(fullUrl).hostname.toLowerCase();
+      } catch {
+        return;
+      }
+      if (!(hostname === "sba.gov" || hostname.endsWith(".sba.gov"))) return;
       const lower = fullUrl.toLowerCase();
       if (
         !lower.includes("grant") &&
@@ -177,7 +183,7 @@ export async function scrapeSbaGov(): Promise<GrantData[]> {
   }
 
   // Deduplicate links
-  const uniqueLinks = [...new Set(allLinks)];
+  const uniqueLinks = Array.from(new Set(allLinks));
   log("sba-gov", `Total unique grant links to scrape: ${uniqueLinks.length}`);
 
   // Step 2: Scrape each link for grant details (cap at 20)

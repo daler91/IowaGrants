@@ -622,7 +622,7 @@ export async function searchWebForGrants(): Promise<GrantData[]> {
 
   // Crawl up to 3 productive domains (2+ grants found)
   let crawledDomains = 0;
-  for (const [domain, { urls }] of domainGrants) {
+  for (const [domain, { urls }] of Array.from(domainGrants.entries())) {
     if (urls.length < 2 || crawledDomains >= 3) continue;
     if (shouldSkipUrl(`https://${domain}/`)) continue;
 

@@ -114,7 +114,7 @@ function parseRSSFeed(xml: string): FeedItem[] {
   const items: FeedItem[] = [];
 
   // Try RSS 2.0 format first
-  $("item").each((_: number, el: cheerio.Element) => {
+  $("item").each((_, el) => {
     const title = $(el).find("title").first().text().trim();
     const link = $(el).find("link").first().text().trim();
     const description = $(el).find("description").first().text().trim();
@@ -127,7 +127,7 @@ function parseRSSFeed(xml: string): FeedItem[] {
 
   // Try Atom format if RSS found nothing
   if (items.length === 0) {
-    $("entry").each((_: number, el: cheerio.Element) => {
+    $("entry").each((_, el) => {
       const title = $(el).find("title").first().text().trim();
       const link =
         $(el).find("link[rel='alternate']").attr("href") ||

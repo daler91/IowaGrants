@@ -102,7 +102,7 @@ async function scrapeFoundationForGrants(foundation: CommunityFoundation): Promi
   ].filter((p): p is string => !!p);
 
   // Deduplicate pages to check
-  const uniquePages = [...new Set(pagesToCheck)];
+  const uniquePages = Array.from(new Set(pagesToCheck));
 
   for (const pageUrl of uniquePages) {
     try {
@@ -142,7 +142,7 @@ async function scrapeFoundationForGrants(foundation: CommunityFoundation): Promi
 
       // Extract grant program links
       const grantLinks: string[] = [];
-      $("a[href]").each((_: number, el: cheerio.Element) => {
+      $("a[href]").each((_, el) => {
         const href = $(el).attr("href");
         if (!href) return;
 
