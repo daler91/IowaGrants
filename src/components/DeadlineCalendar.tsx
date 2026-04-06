@@ -143,11 +143,12 @@ export default function DeadlineCalendar() {
         </div>
 
         {/* Calendar grid */}
-        {error ? (
+        {error && (
           <div className="text-center py-12 text-sm text-red-600 bg-red-50 rounded-lg border border-red-200">
             {error}
           </div>
-        ) : loading ? (
+        )}
+        {!error && loading && (
           <div className="grid grid-cols-7 gap-1">
             {Array.from({ length: 35 }, (_, i) => `skeleton-${i}`).map((key) => (
               <div
@@ -156,7 +157,8 @@ export default function DeadlineCalendar() {
               />
             ))}
           </div>
-        ) : (
+        )}
+        {!error && !loading && (
           <div className="grid grid-cols-7 gap-1">
             {cells.map((cell) => {
               if (cell.day === null) {
@@ -175,6 +177,13 @@ export default function DeadlineCalendar() {
               );
               const isUrgent = hasGrants && diffDays >= 0 && diffDays <= 7;
 
+              const deadlineSuffix = dayGrants.length > 1 ? "s" : "";
+              const grantsLabel = hasGrants
+                ? `, ${dayGrants.length} grant deadline${deadlineSuffix}`
+                : "";
+              const todayLabel = isToday ? " (today)" : "";
+              const ariaLabel = `${MONTH_NAMES[month - 1]} ${cell.day}${grantsLabel}${todayLabel}`;
+
               return (
                 <button
                   key={cell.key}
@@ -183,7 +192,7 @@ export default function DeadlineCalendar() {
                       isSelected ? null : cell.dateStr
                     )
                   }
-                  aria-label={`${MONTH_NAMES[month - 1]} ${cell.day}${hasGrants ? `, ${dayGrants.length} grant deadline${dayGrants.length > 1 ? "s" : ""}` : ""}${isToday ? " (today)" : ""}`}
+                  aria-label={ariaLabel}
                   aria-pressed={isSelected}
                   className={`h-20 rounded-lg p-1.5 text-left transition-all border ${getCellBorderClass(isSelected, isUrgent, isToday, hasGrants)}`}
                 >
