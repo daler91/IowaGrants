@@ -5,6 +5,13 @@ import { env } from "./env";
 import { prisma } from "./db";
 
 const COOKIE_NAME = "admin_token";
+
+/**
+ * Pre-computed dummy hash used for timing-attack prevention during login.
+ * When a user doesn't exist we compare against this hash so the response
+ * time is indistinguishable from a wrong-password attempt.
+ */
+export const DUMMY_HASH = bcrypt.hashSync("__not_a_real_password__", 12);
 const TOKEN_EXPIRY = "7d";
 const JWT_ISSUER = "iowagrants-admin";
 const JWT_AUDIENCE = "iowagrants-web";
