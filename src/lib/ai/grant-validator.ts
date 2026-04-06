@@ -1,3 +1,4 @@
+import Anthropic from "@anthropic-ai/sdk";
 import type { GrantData } from "@/lib/types";
 import { env } from "@/lib/env";
 import { VALIDATION_BATCH_SIZE, AI_CALL_DELAY_MS } from "@/lib/scrapers/config";
@@ -57,9 +58,7 @@ function buildGrantSnippet(grant: GrantData, index: number): string {
     parts.push(`Amount: ${grant.amount}`);
   }
   const liveBodyText =
-    grant.rawData && typeof grant.rawData === "object"
-      ? grant.rawData.liveBodyText
-      : undefined;
+    grant.rawData && typeof grant.rawData === "object" ? grant.rawData.liveBodyText : undefined;
   if (typeof liveBodyText === "string" && liveBodyText.length > 0) {
     parts.push(`Live page excerpt: ${liveBodyText.slice(0, 1500)}`);
   }
@@ -78,11 +77,21 @@ async function validateBatch(
 
   for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
     try {
-      const response = await getAnthropic().messages.create({
-        model: "claude-haiku-4-5-20251001",
-        max_tokens: 2000,
-        messages: [{ role: "user", content: message }],
-      });
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 60_000);
+      let response;
+      try {
+        response = await getAnthropic().messages.create(
+          {
+            model: "claude-haiku-4-5-20251001",
+            max_tokens: 2000,
+            messages: [{ role: "user", content: message }],
+          },
+          { signal: controller.signal },
+        );
+      } finally {
+        clearTimeout(timeout);
+      }
 
       const text = response.content[0].type === "text" ? response.content[0].text : "";
 
@@ -103,8 +112,14 @@ async function validateBatch(
       );
 
       if (attempt < MAX_RETRIES - 1) {
-        const delay = INITIAL_RETRY_DELAY_MS * 2 ** attempt;
-        await new Promise((r) => setTimeout(r, delay));
+        // Respect Anthropic rate-limit Retry-After header when available
+        if (error instanceof Anthropic.RateLimitError) {
+          const retryAfter = Number.parseInt(error.headers?.get?.("retry-after") ?? "5", 10);
+          await new Promise((r) => setTimeout(r, retryAfter * 1000));
+        } else {
+          const delay = INITIAL_RETRY_DELAY_MS * 2 ** attempt;
+          await new Promise((r) => setTimeout(r, delay));
+        }
       }
     }
   }

@@ -66,7 +66,8 @@ export async function POST(request: NextRequest) {
   // Create a new scrape run record
   const scrapeRun = await prisma.scrapeRun.create({ data: {} });
 
-  // Run scraper in the background
+  // Run scraper in the background — wrap the entire chain so that errors
+  // inside .then() (e.g. a failed DB update) don't become unhandled rejections.
   runFullScrape(scrapeRun.id)
     .then(async (results) => {
       const grantsFound = results.reduce((sum, r) => sum + r.grants.length, 0);
@@ -83,14 +84,18 @@ export async function POST(request: NextRequest) {
     })
     .catch(async (error) => {
       logError("scraper-api", "Scrape failed", error);
-      await prisma.scrapeRun.update({
-        where: { id: scrapeRun.id },
-        data: {
-          status: "failed",
-          completedAt: new Date(),
-          error: (error instanceof Error ? error.message : "Unknown error").slice(0, 500),
-        },
-      });
+      try {
+        await prisma.scrapeRun.update({
+          where: { id: scrapeRun.id },
+          data: {
+            status: "failed",
+            completedAt: new Date(),
+            error: (error instanceof Error ? error.message : "Unknown error").slice(0, 500),
+          },
+        });
+      } catch (updateError) {
+        logError("scraper-api", "Failed to update scrape run status after failure", updateError);
+      }
     });
 
   return NextResponse.json({

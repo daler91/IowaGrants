@@ -21,7 +21,11 @@ export const env = {
     return requireEnv("CRON_SECRET");
   },
   get JWT_SECRET() {
-    return requireEnv("JWT_SECRET");
+    const secret = requireEnv("JWT_SECRET");
+    if (secret.length < 32) {
+      throw new Error("JWT_SECRET must be at least 32 characters for secure HS256 signing");
+    }
+    return secret;
   },
 
   // ── Optional API keys (scrapers degrade gracefully without these) ─
