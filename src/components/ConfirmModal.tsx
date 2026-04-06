@@ -54,7 +54,6 @@ export default function ConfirmModal({
         open
         aria-labelledby="confirm-modal-title"
         className="relative bg-white rounded-lg border border-[var(--border)] p-6 shadow-xl max-w-md w-full mx-4"
-        onClick={(e: React.MouseEvent) => e.stopPropagation()}
       >
         <h2
           id="confirm-modal-title"
