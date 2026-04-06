@@ -5,9 +5,9 @@ import { SCRAPER_USER_AGENT } from "./config";
 // ── SSRF / URL-safety helpers ─────────────────────────────────────────
 
 const BLOCKED_HOSTS = new Set([
-  "169.254.169.254",      // AWS EC2 metadata
+  "169.254.169.254", // AWS EC2 metadata
   "metadata.google.internal", // GCP metadata
-  "100.100.100.200",      // Alibaba Cloud metadata
+  "100.100.100.200", // Alibaba Cloud metadata
 ]);
 
 /**
@@ -15,7 +15,7 @@ const BLOCKED_HOSTS = new Set([
  * Blocks private/link-local IPs, cloud metadata endpoints, and
  * non-HTTP(S) protocols to prevent SSRF.
  */
-function isPrivateIp(hostname: string): boolean {
+function isPrivateIpV4(hostname: string): boolean {
   const parts = hostname.split(".");
   const first = Number.parseInt(parts[0]);
   if (first === 10 || first === 127) return true;
@@ -28,12 +28,54 @@ function isPrivateIp(hostname: string): boolean {
   return false;
 }
 
+/**
+ * Check if an IPv6 address (as returned by `new URL().hostname`) is private.
+ * Node's URL parser strips brackets, so hostname will be e.g. "::1" not "[::1]".
+ * IPv4-mapped IPv6 addresses are canonicalized by Node (e.g. ::ffff:127.0.0.1
+ * becomes ::ffff:7f00:1), so we expand the check to cover those forms.
+ */
+function isPrivateIpV6(hostname: string): boolean {
+  const lower = hostname.toLowerCase();
+  // Loopback
+  if (lower === "::1") return true;
+  // Link-local
+  if (lower.startsWith("fe80:")) return true;
+  // IPv4-mapped IPv6 — covers both ::ffff:127.0.0.1 and canonical ::ffff:7f00:1 forms
+  if (lower.startsWith("::ffff:")) {
+    const mapped = lower.slice(7);
+    // If the mapped portion contains dots, it's the dotted-decimal form
+    if (mapped.includes(".")) return isPrivateIpV4(mapped);
+    // Otherwise it's the canonical hex form — parse the two 16-bit groups
+    // Format: ::ffff:XXYY:ZZWW where XX.YY.ZZ.WW is the IPv4 address
+    const parts = mapped.split(":");
+    if (parts.length === 2) {
+      const high = Number.parseInt(parts[0], 16);
+      const low = Number.parseInt(parts[1], 16);
+      if (!Number.isNaN(high) && !Number.isNaN(low)) {
+        const a = (high >> 8) & 0xff;
+        const b = high & 0xff;
+        const c = (low >> 8) & 0xff;
+        const d = low & 0xff;
+        return isPrivateIpV4(`${a}.${b}.${c}.${d}`);
+      }
+    }
+  }
+  return false;
+}
+
 export function isSafeUrl(urlStr: string): boolean {
   try {
     const url = new URL(urlStr);
     if (url.protocol !== "https:" && url.protocol !== "http:") return false;
     if (BLOCKED_HOSTS.has(url.hostname)) return false;
-    if (isIP(url.hostname) && isPrivateIp(url.hostname)) return false;
+    // Strip brackets from IPv6 literals (Node's URL parser keeps them: "[::1]")
+    const bare =
+      url.hostname.startsWith("[") && url.hostname.endsWith("]")
+        ? url.hostname.slice(1, -1)
+        : url.hostname;
+    const ipVersion = isIP(bare);
+    if (ipVersion === 4 && isPrivateIpV4(bare)) return false;
+    if (ipVersion === 6 && isPrivateIpV6(bare)) return false;
     return true;
   } catch {
     return false;
@@ -73,10 +115,28 @@ export function isGenericHomepage(url: string): boolean {
     // Single-segment generic paths
     if (segments.length === 1) {
       const generic = [
-        "about", "contact", "home", "index", "main", "welcome",
-        "business", "programs", "grants", "funding", "resources",
-        "services", "help", "support", "faq", "blog", "news",
-        "partners", "sponsors", "donate", "join", "membership",
+        "about",
+        "contact",
+        "home",
+        "index",
+        "main",
+        "welcome",
+        "business",
+        "programs",
+        "grants",
+        "funding",
+        "resources",
+        "services",
+        "help",
+        "support",
+        "faq",
+        "blog",
+        "news",
+        "partners",
+        "sponsors",
+        "donate",
+        "join",
+        "membership",
       ];
       if (generic.includes(segments[0].toLowerCase())) return true;
     }

@@ -77,41 +77,62 @@ export async function parsePdfFromUrl(
       return null;
     }
 
-    // Download the PDF
+    // Download the PDF (10 MB limit to prevent resource exhaustion)
+    const MAX_PDF_SIZE = 10 * 1024 * 1024;
     const pdfResponse = await axios.get(pdfUrl, {
       responseType: "arraybuffer",
       timeout: 30000,
+      maxContentLength: MAX_PDF_SIZE,
+      maxBodyLength: MAX_PDF_SIZE,
       headers: {
         "User-Agent": SCRAPER_USER_AGENT,
       },
     });
 
+    if (pdfResponse.data.byteLength > MAX_PDF_SIZE) {
+      logWarn("pdf-parser", "PDF too large, skipping", {
+        url: pdfUrl,
+        bytes: pdfResponse.data.byteLength,
+      });
+      return null;
+    }
+
     const pdfBase64 = Buffer.from(pdfResponse.data).toString("base64");
 
-    // Send to Claude with vision for table extraction
-    const message = await getAnthropic().messages.create({
-      model: "claude-sonnet-4-6",
-      max_tokens: 2000,
-      messages: [
+    // Send to Claude with vision for table extraction (90s timeout for large PDFs)
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 90_000);
+    let message;
+    try {
+      message = await getAnthropic().messages.create(
         {
-          role: "user",
-          content: [
+          model: "claude-sonnet-4-6",
+          max_tokens: 2000,
+          messages: [
             {
-              type: "document",
-              source: {
-                type: "base64",
-                media_type: "application/pdf",
-                data: pdfBase64,
-              },
-            },
-            {
-              type: "text",
-              text: EXTRACTION_PROMPT,
+              role: "user",
+              content: [
+                {
+                  type: "document",
+                  source: {
+                    type: "base64",
+                    media_type: "application/pdf",
+                    data: pdfBase64,
+                  },
+                },
+                {
+                  type: "text",
+                  text: EXTRACTION_PROMPT,
+                },
+              ],
             },
           ],
         },
-      ],
-    });
+        { signal: controller.signal },
+      );
+    } finally {
+      clearTimeout(timeout);
+    }
 
     const textContent = message.content.find((c) => c.type === "text");
     if (textContent?.type !== "text") {
@@ -141,16 +162,26 @@ export async function parseTextWithAI(
   }
 
   try {
-    const message = await getAnthropic().messages.create({
-      model: "claude-sonnet-4-6",
-      max_tokens: 2000,
-      messages: [
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 60_000);
+    let message;
+    try {
+      message = await getAnthropic().messages.create(
         {
-          role: "user",
-          content: `${EXTRACTION_PROMPT}\n\nHere is the grant program text:\n\n${text.slice(0, 10000)}`,
+          model: "claude-sonnet-4-6",
+          max_tokens: 2000,
+          messages: [
+            {
+              role: "user",
+              content: `${EXTRACTION_PROMPT}\n\nHere is the grant program text:\n\n${text.slice(0, 10000)}`,
+            },
+          ],
         },
-      ],
-    });
+        { signal: controller.signal },
+      );
+    } finally {
+      clearTimeout(timeout);
+    }
 
     const textContent = message.content.find((c) => c.type === "text");
     if (textContent?.type !== "text") return null;

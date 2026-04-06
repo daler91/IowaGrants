@@ -19,6 +19,21 @@ describe("isSafeUrl", () => {
     expect(isSafeUrl("http://metadata.google.internal")).toBe(false);
   });
 
+  it("should block IPv6 loopback and link-local addresses", () => {
+    expect(isSafeUrl("http://[::1]")).toBe(false);
+    expect(isSafeUrl("http://[::1]:8080/admin")).toBe(false);
+  });
+
+  it("should block IPv4-mapped IPv6 addresses", () => {
+    expect(isSafeUrl("http://[::ffff:127.0.0.1]")).toBe(false);
+    expect(isSafeUrl("http://[::ffff:10.0.0.1]")).toBe(false);
+    expect(isSafeUrl("http://[::ffff:192.168.1.1]")).toBe(false);
+  });
+
+  it("should block IPv6 link-local addresses", () => {
+    expect(isSafeUrl("http://[fe80::1]")).toBe(false);
+  });
+
   it("should block non-HTTP protocols", () => {
     expect(isSafeUrl("ftp://example.com")).toBe(false);
     expect(isSafeUrl("javascript:alert(1)")).toBe(false);
