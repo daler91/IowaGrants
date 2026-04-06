@@ -197,8 +197,9 @@ export function parseGrantAmount(text: string): { raw: string; min: number; max:
   if (amounts.length === 0) return null;
 
   // Check for range patterns in original text
+  // Use non-overlapping quantifiers to avoid catastrophic backtracking
   const rangePattern =
-    /\$[\d,.\s]+[KkMmBb]?\w*\s*(?:to|-|–|—)\s*\$[\d,.\s]+[KkMmBb]?\w*/;
+    /\$[\d,.]+\s*[KkMmBb]?\w*\s*(?:to|-|–|—)\s*\$[\d,.]+\s*[KkMmBb]?\w*/;
   const hasRange = rangePattern.test(text);
 
   if (hasRange && amounts.length >= 2) {
