@@ -171,102 +171,64 @@ export function toText(
   const sorted = sortForDecisionMaking(grants);
   const stats = buildSummaryStats(sorted);
   const lines: string[] = [];
-  const sep = "═".repeat(60);
-  const thinSep = "─".repeat(60);
   const today = new Date().toLocaleDateString("en-US", {
-    weekday: "long",
-    year: "numeric",
     month: "long",
     day: "numeric",
+    year: "numeric",
   });
 
-  // ── Header ──
-  lines.push(sep);
-  lines.push("          IOWA GRANTS — OPPORTUNITY REPORT");
-  lines.push(sep);
-  lines.push(`  Date:      ${today}`);
-  lines.push(`  Filters:   ${filterSummary}`);
-  lines.push(`  Grants:    ${stats.total} total`);
-  lines.push("");
+  // ── Compact header ──
+  lines.push(
+    "IOWA GRANT OPPORTUNITIES",
+    "========================",
+    `${today} | ${stats.total} grants | ${filterSummary}`,
+    "",
+  );
 
-  // ── Executive Summary ──
-  lines.push("  QUICK SUMMARY");
-  lines.push(`    Open:          ${stats.openCount} grant${stats.openCount === 1 ? "" : "s"}`);
-  lines.push(`    Forecasted:    ${stats.forecastedCount} grant${stats.forecastedCount === 1 ? "" : "s"}`);
-  lines.push(`    Closed:        ${stats.closedCount} grant${stats.closedCount === 1 ? "" : "s"}`);
+  // ── One-line summary ──
+  const summaryParts = [`${stats.openCount} open`, `${stats.forecastedCount} forecasted`, `${stats.closedCount} closed`];
   if (stats.closingSoon.length > 0) {
-    lines.push(`    Closing soon:  ${stats.closingSoon.length} grant${stats.closingSoon.length === 1 ? "" : "s"} (within 30 days)`);
+    summaryParts.push(`${stats.closingSoon.length} closing soon`);
   }
-  lines.push("");
-  const typeParts = Object.entries(stats.byType).map(([t, c]) => `${prettyValue(t)} (${c})`);
-  if (typeParts.length) {
-    lines.push(`    By type:  ${typeParts.join(" | ")}`);
-    lines.push("");
-  }
-
-  // ── Closing Soon callout ──
-  if (stats.closingSoon.length > 0) {
-    lines.push("  CLOSING SOON — ACTION REQUIRED");
-    for (const g of stats.closingSoon) {
-      const days = daysUntil(g.deadline!);
-      lines.push(`    • "${g.title}" — Apply by ${formatDeadline(g.deadline)} (${days} day${days === 1 ? "" : "s"})`);
-    }
-    lines.push("");
-  }
-
-  lines.push(sep);
+  lines.push(`Summary: ${summaryParts.join(", ")}`);
   lines.push("");
 
-  // ── Per-grant cards ──
+  // ── Per-grant entries (compact) ──
   sorted.forEach((g, i) => {
-    lines.push(thinSep);
-    lines.push(`  ${i + 1}. ${g.title}`);
-    lines.push(`     ${prettyValue(g.grantType)}  |  ${prettyValue(g.status)}  |  ${prettyValue(g.businessStage)}`);
-    lines.push(thinSep);
+    lines.push(`${i + 1}. ${g.title}`);
+    lines.push(`   ${prettyValue(g.grantType)} | ${prettyValue(g.status)} | ${prettyValue(g.businessStage)}`);
 
-    const urgency = deadlineUrgency(g.deadline);
-    const deadlineStr = formatDeadline(g.deadline) + (urgency ? ` [${urgency}]` : "");
-    lines.push(`  Deadline:      ${deadlineStr}`);
-    if (g.amount) lines.push(`  Amount:        ${g.amount}`);
-    if (g.locations.length) lines.push(`  Locations:     ${g.locations.join(", ")}`);
-    if (g.eligibleExpenses.length) {
-      lines.push(`  Use of Funds:  ${g.eligibleExpenses.map((e) => e.label).join(", ")}`);
+    // Deadline with days remaining
+    if (g.status === "OPEN" && g.deadline) {
+      const days = daysUntil(g.deadline);
+      if (days >= 0) {
+        lines.push(`   Deadline: ${formatDeadline(g.deadline)} (${days} day${days === 1 ? "" : "s"} left)`);
+      } else {
+        lines.push(`   Deadline: ${formatDeadline(g.deadline)}`);
+      }
+    } else {
+      lines.push(`   Deadline: ${formatDeadline(g.deadline)}`);
     }
-    if (g.gender && g.gender !== "ANY" && g.gender !== "GENERAL") {
-      lines.push(`  Focus:         ${prettyValue(g.gender)}`);
-    }
-    lines.push("");
 
+    if (g.amount) lines.push(`   Amount: ${g.amount}`);
+
+    // Eligibility — truncated to one line
     if (g.eligibility) {
-      lines.push("  Eligibility:");
-      const wrapped = softWrap(g.eligibility, 72);
-      for (const wline of wrapped) lines.push(`    ${wline}`);
-      lines.push("");
+      const elig = g.eligibility.replaceAll(/\s+/g, " ").trim();
+      lines.push(`   Eligibility: ${elig.length > 120 ? elig.slice(0, 117) + "..." : elig}`);
     }
 
-    const cats = formatCategories(g.categories);
-    if (cats) lines.push(`  Categories:    ${cats}`);
-    if (g.industries && g.industries.length) {
-      lines.push(`  Industries:    ${g.industries.join(", ")}`);
-    }
-    if (cats || (g.industries && g.industries.length)) lines.push("");
+    // Brief description — one line
+    const desc = g.description.replaceAll(/\s+/g, " ").trim();
+    lines.push(`   ${desc.length > 120 ? desc.slice(0, 117) + "..." : desc}`);
 
-    lines.push("  Description:");
-    const wrapped = softWrap(g.description, 72);
-    for (const wline of wrapped) lines.push(`    ${wline}`);
-    lines.push("");
-
-    lines.push(`  Source:      ${g.sourceName}`);
-    lines.push(`  Link:        ${g.sourceUrl}`);
-    if (g.pdfUrl) lines.push(`  Apply PDF:   ${g.pdfUrl}`);
+    lines.push(`   Link: ${g.sourceUrl}`);
+    if (g.pdfUrl) lines.push(`   Apply: ${g.pdfUrl}`);
     lines.push("");
   });
 
   // ── Footer ──
-  lines.push(sep);
-  lines.push(`  End of report — ${stats.total} grant${stats.total === 1 ? "" : "s"} exported`);
-  lines.push(`  Generated by Iowa Grants on ${today}`);
-  lines.push(sep);
+  lines.push("---", "Full details in the attached PDF.");
 
   const text = lines.join("\n");
   return {
@@ -432,7 +394,7 @@ export function toPDF(grants: GrantExportRow[], filterSummary: string): ExportRe
   doc.setFont("helvetica", "bold");
   doc.setFontSize(22);
   doc.setTextColor(30, 64, 175); // primary blue
-  doc.text("Iowa Grants — Opportunity Report", margin, y);
+  doc.text("Grant Opportunities for Your Business", margin, y);
   y += 26;
 
   doc.setFont("helvetica", "normal");
@@ -444,12 +406,21 @@ export function toPDF(grants: GrantExportRow[], filterSummary: string): ExportRe
     month: "long",
     day: "numeric",
   });
-  doc.text(`Generated: ${today}`, margin, y);
+  doc.text(today, margin, y);
   y += 14;
 
   const filterLines = doc.splitTextToSize(`Filters: ${filterSummary}`, contentWidth) as string[];
   doc.text(filterLines, margin, y);
-  y += filterLines.length * 12 + 4;
+  y += filterLines.length * 12 + 6;
+
+  // ── Intro paragraph ──
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(11);
+  doc.setTextColor(71, 85, 105); // slate-600
+  const introText = "The following grants may be a good fit for your business. Each listing includes eligibility requirements, funding amounts, and deadlines to help you decide which to pursue.";
+  const introLines = doc.splitTextToSize(introText, contentWidth) as string[];
+  doc.text(introLines, margin, y);
+  y += introLines.length * 14 + 8;
 
   // Divider
   doc.setDrawColor(226, 232, 240); // slate-200
@@ -461,15 +432,13 @@ export function toPDF(grants: GrantExportRow[], filterSummary: string): ExportRe
   const summaryBoxTop = y;
   const summaryPadding = 12;
 
-  // Pre-calculate box content height
   let summaryContentH = 0;
-  summaryContentH += 16; // "Executive Summary" heading
+  summaryContentH += 16; // heading
   summaryContentH += 14; // status line
   summaryContentH += 14; // type line
-  if (stats.closingSoon.length > 0) summaryContentH += 16; // closing soon line
+  if (stats.closingSoon.length > 0) summaryContentH += 16;
   const boxH = summaryContentH + summaryPadding * 2;
 
-  // Draw background
   doc.setFillColor(248, 250, 252); // slate-50
   doc.roundedRect(margin, summaryBoxTop, contentWidth, boxH, 6, 6, "F");
   doc.setDrawColor(226, 232, 240);
@@ -480,31 +449,31 @@ export function toPDF(grants: GrantExportRow[], filterSummary: string): ExportRe
 
   doc.setFont("helvetica", "bold");
   doc.setFontSize(12);
-  doc.setTextColor(15, 23, 42); // slate-900
-  doc.text("Executive Summary", margin + summaryPadding, y + 10);
+  doc.setTextColor(15, 23, 42);
+  doc.text("At a Glance", margin + summaryPadding, y + 10);
   y += 18;
 
-  // Status breakdown
   doc.setFont("helvetica", "normal");
   doc.setFontSize(10);
-  doc.setTextColor(51, 65, 85); // slate-700
-  const statusLine = `${stats.total} grants total:  ${stats.openCount} Open  |  ${stats.forecastedCount} Forecasted  |  ${stats.closedCount} Closed`;
-  doc.text(statusLine, margin + summaryPadding, y + 10);
+  doc.setTextColor(51, 65, 85);
+  doc.text(
+    `${stats.total} grants found:  ${stats.openCount} Open  |  ${stats.forecastedCount} Forecasted  |  ${stats.closedCount} Closed`,
+    margin + summaryPadding,
+    y + 10,
+  );
   y += 14;
 
-  // Type breakdown
   const typeParts = Object.entries(stats.byType)
     .map(([t, c]) => `${prettyValue(t)} (${c})`)
     .join("  |  ");
   doc.text(`By type:  ${typeParts}`, margin + summaryPadding, y + 10);
   y += 14;
 
-  // Closing soon callout
   if (stats.closingSoon.length > 0) {
     doc.setFont("helvetica", "bold");
     doc.setTextColor(146, 64, 14); // amber-800
     doc.text(
-      `${stats.closingSoon.length} grant${stats.closingSoon.length === 1 ? "" : "s"} closing within 30 days — action required`,
+      `${stats.closingSoon.length} grant${stats.closingSoon.length === 1 ? "" : "s"} closing within 30 days`,
       margin + summaryPadding,
       y + 10,
     );
@@ -513,8 +482,8 @@ export function toPDF(grants: GrantExportRow[], filterSummary: string): ExportRe
 
   y = summaryBoxTop + boxH + 16;
 
-  // ── Grant Index (if >10 grants) ──────────────────────────
-  if (sorted.length > 10) {
+  // ── Grant Index (only for large exports) ─────────────────
+  if (sorted.length > 20) {
     ensureSpace(60);
     doc.setFont("helvetica", "bold");
     doc.setFontSize(12);
@@ -526,8 +495,6 @@ export function toPDF(grants: GrantExportRow[], filterSummary: string): ExportRe
     for (let i = 0; i < sorted.length; i++) {
       ensureSpace(11);
       const g = sorted[i];
-      const indexStatus = prettyValue(g.status);
-      const indexDeadline = formatDeadline(g.deadline);
       const indexLine = `${i + 1}. ${g.title}`;
       const truncTitle = indexLine.length > 55 ? indexLine.slice(0, 52) + "..." : indexLine;
 
@@ -535,15 +502,14 @@ export function toPDF(grants: GrantExportRow[], filterSummary: string): ExportRe
       doc.setTextColor(51, 65, 85);
       doc.text(truncTitle, margin, y);
 
-      // Status in its color
       const sColors = STATUS_PILL_COLORS[g.status] ?? DEFAULT_PILL;
       doc.setFont("helvetica", "bold");
       doc.setTextColor(sColors.text[0], sColors.text[1], sColors.text[2]);
-      doc.text(indexStatus, margin + 290, y);
+      doc.text(prettyValue(g.status), margin + 290, y);
 
       doc.setFont("helvetica", "normal");
       doc.setTextColor(100, 116, 139);
-      doc.text(indexDeadline, margin + 370, y);
+      doc.text(formatDeadline(g.deadline), margin + 370, y);
       y += 11;
     }
 
@@ -558,24 +524,23 @@ export function toPDF(grants: GrantExportRow[], filterSummary: string): ExportRe
   const labelCol = margin + 16;
   const valueCol = margin + 100;
   const cardContentWidth = contentWidth - 32;
+  const DESC_MAX_CHARS = 180;
 
   for (let i = 0; i < sorted.length; i++) {
     const g = sorted[i];
 
     ensureSpace(120);
 
-    // ── Card background ──
+    // Card background
     const cardTop = y - 6;
-    // We'll draw the background after calculating height — use a bookmark approach
-    // For simplicity, draw a light background first with estimated height, then overlay text
-    const estimatedCardH = 140 + (g.eligibility ? 40 : 0) + (g.categories?.length ? 14 : 0) + (g.industries?.length ? 14 : 0);
+    const estimatedCardH = 130 + (g.eligibility ? 36 : 0);
     doc.setFillColor(249, 250, 251); // gray-50
     doc.roundedRect(margin - 4, cardTop, contentWidth + 8, Math.min(estimatedCardH, pageHeight - margin - cardTop - 20), 6, 6, "F");
 
     // Title
     doc.setFont("helvetica", "bold");
     doc.setFontSize(13);
-    doc.setTextColor(15, 23, 42); // slate-900
+    doc.setTextColor(15, 23, 42);
     const titleLines = doc.splitTextToSize(`${i + 1}. ${g.title}`, contentWidth - 16) as string[];
     doc.text(titleLines, margin + 8, y);
     y += titleLines.length * 16;
@@ -606,10 +571,10 @@ export function toPDF(grants: GrantExportRow[], filterSummary: string): ExportRe
     const metaRow = (label: string, value: string) => {
       ensureSpace(14);
       doc.setFont("helvetica", "bold");
-      doc.setTextColor(71, 85, 105); // slate-600
+      doc.setTextColor(71, 85, 105);
       doc.text(`${label}:`, labelCol, y);
       doc.setFont("helvetica", "normal");
-      doc.setTextColor(51, 65, 85); // slate-700
+      doc.setTextColor(51, 65, 85);
       const valueLines = doc.splitTextToSize(value, cardContentWidth - 90) as string[];
       doc.text(valueLines, valueCol, y);
       y += valueLines.length * 13;
@@ -623,7 +588,7 @@ export function toPDF(grants: GrantExportRow[], filterSummary: string): ExportRe
       doc.setTextColor(71, 85, 105);
       doc.text("Deadline:", labelCol, y);
       doc.setFont("helvetica", "bold");
-      doc.setTextColor(146, 64, 14); // amber-800 for urgency
+      doc.setTextColor(146, 64, 14);
       doc.text(deadlineDisplay, valueCol, y);
       y += 13;
     } else {
@@ -664,52 +629,53 @@ export function toPDF(grants: GrantExportRow[], filterSummary: string): ExportRe
     if (cats) metaRow("Categories", cats);
     if (g.industries && g.industries.length) metaRow("Industries", g.industries.join(", "));
 
-    // Description
+    // Description (truncated for brevity)
     y += 4;
     ensureSpace(30);
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(10);
-    doc.setTextColor(15, 23, 42);
-    doc.text("Description", labelCol, y);
-    y += 13;
     doc.setFont("helvetica", "normal");
-    doc.setTextColor(71, 85, 105); // slate-600
-    const descLines = doc.splitTextToSize(g.description, cardContentWidth) as string[];
+    doc.setFontSize(10);
+    doc.setTextColor(71, 85, 105);
+    const rawDesc = g.description.replaceAll(/\s+/g, " ").trim();
+    const truncDesc = rawDesc.length > DESC_MAX_CHARS ? rawDesc.slice(0, DESC_MAX_CHARS - 3) + "..." : rawDesc;
+    const descLines = doc.splitTextToSize(truncDesc, cardContentWidth) as string[];
     for (const line of descLines) {
       ensureSpace(12);
       doc.text(line, labelCol, y);
       y += 12;
     }
 
-    // Source (clickable)
-    y += 4;
-    ensureSpace(14);
+    // ── How to Apply ──
+    y += 6;
+    ensureSpace(28);
     doc.setFont("helvetica", "bold");
-    doc.setTextColor(71, 85, 105);
-    doc.text("Source:", labelCol, y);
+    doc.setFontSize(10);
+    doc.setTextColor(15, 23, 42);
+    doc.text("How to Apply", labelCol, y);
+    y += 13;
+
     doc.setFont("helvetica", "normal");
+    doc.setFontSize(10);
     doc.setTextColor(30, 64, 175); // link blue
-    doc.text(g.sourceName, valueCol, y);
-    y += 12;
-    ensureSpace(14);
-    const urlLines = doc.splitTextToSize(g.sourceUrl, cardContentWidth) as string[];
-    for (const line of urlLines) {
+
+    if (g.pdfUrl) {
       ensureSpace(12);
-      doc.textWithLink(line, labelCol, y, { url: g.sourceUrl });
+      doc.text("Download the application form:", labelCol, y);
       y += 12;
+      ensureSpace(12);
+      const pdfUrlTrunc = g.pdfUrl.length > 80 ? g.pdfUrl.slice(0, 77) + "..." : g.pdfUrl;
+      doc.textWithLink(pdfUrlTrunc, labelCol, y, { url: g.pdfUrl });
+      y += 13;
     }
 
-    // Application PDF link
-    if (g.pdfUrl) {
-      ensureSpace(14);
-      doc.setFont("helvetica", "bold");
-      doc.setTextColor(71, 85, 105);
-      doc.text("Apply PDF:", labelCol, y);
-      doc.setFont("helvetica", "normal");
-      doc.setTextColor(30, 64, 175);
-      doc.textWithLink(g.pdfUrl, valueCol, y, { url: g.pdfUrl });
-      y += 12;
-    }
+    ensureSpace(12);
+    doc.setTextColor(51, 65, 85);
+    doc.text(`Visit ${g.sourceName} to learn more:`, labelCol, y);
+    y += 12;
+    ensureSpace(12);
+    doc.setTextColor(30, 64, 175);
+    const srcUrlTrunc = g.sourceUrl.length > 80 ? g.sourceUrl.slice(0, 77) + "..." : g.sourceUrl;
+    doc.textWithLink(srcUrlTrunc, labelCol, y, { url: g.sourceUrl });
+    y += 12;
 
     // Separator between grants
     y += 12;
@@ -722,15 +688,15 @@ export function toPDF(grants: GrantExportRow[], filterSummary: string): ExportRe
     }
   }
 
-  // Page footer with page numbers
+  // Page footer
   const pageCount = doc.getNumberOfPages();
   for (let p = 1; p <= pageCount; p++) {
     doc.setPage(p);
     doc.setFont("helvetica", "normal");
     doc.setFontSize(9);
-    doc.setTextColor(148, 163, 184); // slate-400
+    doc.setTextColor(148, 163, 184);
     doc.text(
-      `Iowa Grants — Opportunity Report  |  Page ${p} of ${pageCount}`,
+      `Grant Opportunities  |  Page ${p} of ${pageCount}`,
       pageWidth / 2,
       pageHeight - 20,
       { align: "center" },
@@ -767,7 +733,7 @@ const MAILTO_MAX_BODY = 1800;
  * on longer query strings.
  */
 export function buildMailto(formattedText: string, grantCount: number): string {
-  const subject = `Iowa Grants Export — ${grantCount} grant${grantCount === 1 ? "" : "s"}`;
+  const subject = `Grant Opportunities for Your Business — ${grantCount} grant${grantCount === 1 ? "" : "s"}`;
   let body = formattedText;
   if (body.length > MAILTO_MAX_BODY) {
     body = body.slice(0, MAILTO_MAX_BODY) + "\n\n…(truncated — see attached export for full list)";
