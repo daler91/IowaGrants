@@ -11,14 +11,16 @@ const GRANT_TIMEZONE = "America/Chicago";
 const MS_PER_DAY = 1000 * 60 * 60 * 24;
 const URGENT_THRESHOLD_MS = 7 * MS_PER_DAY;
 
-function toDate(deadline: Date | string | null | undefined): Date | null {
+type DeadlineInput = Date | string | null | undefined;
+
+function toDate(deadline: DeadlineInput): Date | null {
   if (!deadline) return null;
   const d = deadline instanceof Date ? deadline : new Date(deadline);
   return Number.isNaN(d.getTime()) ? null : d;
 }
 
 /** Short-form deadline used on grant cards: "Jan 15, 2025" / "5d left - ..." / "Closed ...". */
-export function formatDeadlineShort(deadline: Date | string | null | undefined): string {
+export function formatDeadlineShort(deadline: DeadlineInput): string {
   const d = toDate(deadline);
   if (!d) return "No deadline";
 
@@ -36,7 +38,7 @@ export function formatDeadlineShort(deadline: Date | string | null | undefined):
 }
 
 /** Long-form deadline used on the detail page: "Monday, January 15, 2025". */
-export function formatDeadlineLong(deadline: Date | string | null | undefined): string {
+export function formatDeadlineLong(deadline: DeadlineInput): string {
   const d = toDate(deadline);
   if (!d) return "No deadline specified";
 
@@ -50,13 +52,13 @@ export function formatDeadlineLong(deadline: Date | string | null | undefined): 
 }
 
 /** True if the deadline exists and is in the past. */
-export function isDeadlinePassed(deadline: Date | string | null | undefined): boolean {
+export function isDeadlinePassed(deadline: DeadlineInput): boolean {
   const d = toDate(deadline);
   return !!d && d.getTime() < Date.now();
 }
 
 /** True if the deadline exists, is in the future, and is within 7 days. */
-export function isDeadlineUrgent(deadline: Date | string | null | undefined): boolean {
+export function isDeadlineUrgent(deadline: DeadlineInput): boolean {
   const d = toDate(deadline);
   if (!d) return false;
   const delta = d.getTime() - Date.now();

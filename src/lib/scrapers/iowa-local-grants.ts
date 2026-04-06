@@ -349,12 +349,9 @@ async function collectLinks(source: LocalSource): Promise<RawLink[]> {
 
       if (response.status === 200 && typeof response.data === "string") {
         const links = extractLinks(response.data, url, source.keywords);
-        for (const link of links) {
-          if (!seenUrls.has(link.url)) {
-            seenUrls.add(link.url);
-            allLinks.push(link);
-          }
-        }
+        const newLinks = links.filter((link) => !seenUrls.has(link.url));
+        for (const link of newLinks) seenUrls.add(link.url);
+        allLinks.push(...newLinks);
       }
     } catch (error) {
       log("iowa-local-grants", `Failed to fetch ${url}`, {
