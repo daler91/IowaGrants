@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { requireAdmin, UnauthorizedError } from "@/lib/auth";
 import { parsePagination } from "@/lib/api-utils";
+import { errorResponse, log } from "@/lib/errors";
 import { parseJson } from "@/lib/http/parse-json";
 import { blacklistPostSchema, deleteIdsSchema } from "@/lib/http/schemas";
 
@@ -29,7 +30,7 @@ export async function GET(request: NextRequest) {
     });
   } catch (err) {
     if (err instanceof UnauthorizedError) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return errorResponse(request, 401, "Unauthorized", "UNAUTHORIZED");
     }
     throw err;
   }
@@ -59,10 +60,17 @@ export async function POST(request: NextRequest) {
     const created = results.filter((r) => r.status === "fulfilled").length;
     const duplicates = results.filter((r) => r.status === "rejected").length;
 
+    log("admin-audit", "Blacklist URLs added", {
+      admin: admin.email,
+      created,
+      duplicates,
+      urlCount: urls.length,
+    });
+
     return NextResponse.json({ created, duplicates });
   } catch (err) {
     if (err instanceof UnauthorizedError) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return errorResponse(request, 401, "Unauthorized", "UNAUTHORIZED");
     }
     throw err;
   }
@@ -70,7 +78,7 @@ export async function POST(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
-    await requireAdmin(request);
+    const admin = await requireAdmin(request);
 
     const result = await parseJson(request, deleteIdsSchema);
     if (result.error) return result.error;
@@ -81,10 +89,16 @@ export async function DELETE(request: NextRequest) {
       where: { id: { in: ids } },
     });
 
+    log("admin-audit", "Blacklist URLs removed", {
+      admin: admin.email,
+      deleted: deleteResult.count,
+      ids,
+    });
+
     return NextResponse.json({ deleted: deleteResult.count });
   } catch (err) {
     if (err instanceof UnauthorizedError) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return errorResponse(request, 401, "Unauthorized", "UNAUTHORIZED");
     }
     throw err;
   }

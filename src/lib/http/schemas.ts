@@ -22,19 +22,22 @@ export const registerSchema = z.object({
 // ── Admin Invites ───────────────────────────────────────────────────────
 
 export const inviteSchema = z.object({
-  email: z.string().min(1).check(
-    z.refine((email) => {
-      const trimmed = email.trim();
-      const atIdx = trimmed.indexOf("@");
-      return (
-        atIdx > 0 &&
-        !trimmed.includes("@", atIdx + 1) &&
-        trimmed.indexOf(".", atIdx + 2) > atIdx &&
-        !trimmed.includes(" ") &&
-        trimmed.length <= 254
-      );
-    }, "A valid email address is required"),
-  ),
+  email: z
+    .string()
+    .min(1)
+    .check(
+      z.refine((email) => {
+        const trimmed = email.trim();
+        const atIdx = trimmed.indexOf("@");
+        return (
+          atIdx > 0 &&
+          !trimmed.includes("@", atIdx + 1) &&
+          trimmed.indexOf(".", atIdx + 2) > atIdx &&
+          !trimmed.includes(" ") &&
+          trimmed.length <= 254
+        );
+      }, "A valid email address is required"),
+    ),
 });
 
 // ── Blacklist ───────────────────────────────────────────────────────────
@@ -48,6 +51,12 @@ export const blacklistPostSchema = z.object({
 
 export const deleteIdsSchema = z.object({
   ids: z.array(z.string()).min(1).max(100),
+});
+
+// ── Admin Revalidate ───────────────────────────────────────────────────
+
+export const revalidateSchema = z.object({
+  limit: z.number().int().min(1).max(1000).optional().default(200),
 });
 
 // ── Grant Update (PUT /api/grants/[id]) ─────────────────────────────────

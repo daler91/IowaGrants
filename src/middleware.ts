@@ -47,6 +47,15 @@ function checkCsrfOrigin(request: NextRequest): NextResponse | null {
   return null;
 }
 
+/** Forward requestId on both request (for route handlers) and response headers. */
+function nextWithRequestId(request: NextRequest, requestId: string): NextResponse {
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set("x-request-id", requestId);
+  const response = NextResponse.next({ request: { headers: requestHeaders } });
+  response.headers.set("x-request-id", requestId);
+  return response;
+}
+
 export function middleware(request: NextRequest) {
   const csrfError = checkCsrfOrigin(request);
   if (csrfError) return csrfError;
@@ -58,9 +67,7 @@ export function middleware(request: NextRequest) {
 
   const config = Object.entries(RATE_LIMITS).find(([prefix]) => path.startsWith(prefix));
   if (!config) {
-    const response = NextResponse.next();
-    response.headers.set("x-request-id", requestId);
-    return response;
+    return nextWithRequestId(request, requestId);
   }
 
   const [, { windowMs, max }] = config;
@@ -81,9 +88,7 @@ export function middleware(request: NextRequest) {
   const entry = hits.get(key);
   if (!entry || now > entry.resetAt) {
     hits.set(key, { count: 1, resetAt: now + windowMs });
-    const response = NextResponse.next();
-    response.headers.set("x-request-id", requestId);
-    return response;
+    return nextWithRequestId(request, requestId);
   }
 
   entry.count++;
@@ -100,9 +105,7 @@ export function middleware(request: NextRequest) {
     );
   }
 
-  const response = NextResponse.next();
-  response.headers.set("x-request-id", requestId);
-  return response;
+  return nextWithRequestId(request, requestId);
 }
 
 export const config = {

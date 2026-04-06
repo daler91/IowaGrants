@@ -1,3 +1,19 @@
+import { NextRequest, NextResponse } from "next/server";
+
+/** Uniform error response with optional machine-readable code and request correlation. */
+export function errorResponse(
+  request: NextRequest,
+  status: number,
+  error: string,
+  code?: string,
+): NextResponse {
+  const requestId = request.headers.get("x-request-id") ?? undefined;
+  return NextResponse.json(
+    { error, ...(code && { code }), ...(requestId && { requestId }) },
+    { status },
+  );
+}
+
 /**
  * Standardized error extraction — replaces the inconsistent mix of:
  *   error instanceof Error ? error.message : error
@@ -24,7 +40,12 @@ export function log(module: string, message: string, data?: Record<string, unkno
   console.log(JSON.stringify(entry));
 }
 
-export function logError(module: string, message: string, error?: unknown, data?: Record<string, unknown>) {
+export function logError(
+  module: string,
+  message: string,
+  error?: unknown,
+  data?: Record<string, unknown>,
+) {
   const entry = {
     module,
     message,
