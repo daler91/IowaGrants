@@ -56,7 +56,7 @@ export default function InvitesPage() {
       }
 
       const data = await res.json();
-      const link = `${window.location.origin}/register#token=${data.invite.token}`;
+      const link = `${globalThis.location.origin}/register#token=${data.invite.token}`;
       setInviteLink(link);
       setEmail("");
       fetchInvites();

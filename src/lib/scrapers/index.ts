@@ -31,7 +31,7 @@ import { categorizeAll } from "@/lib/ai/categorizer";
 import { parsePdfFromUrl } from "@/lib/ai/pdf-parser";
 import { validateGrants } from "@/lib/ai/grant-validator";
 import { generateDescriptions } from "@/lib/ai/description-generator";
-import { extractDeadlinesWithAI } from "@/lib/ai/deadline-extractor";
+import { extractDeadlinesWithAI, type ExtractedDeadline } from "@/lib/ai/deadline-extractor";
 import { checkUrlHealth } from "./url-health";
 import { revalidateExistingGrants } from "./revalidate-existing";
 import {
@@ -268,6 +268,18 @@ function mergeGrantWithPdfParse(original: GrantData, parsed: GrantData): GrantDa
  *
  * Provenance is written into `grant.rawData.deadlineSource` for debugging.
  */
+function needsDeadlineCheck(grant: GrantData, now: number): boolean {
+  if (!grant.deadline || grant.deadline.getTime() < now) return true;
+
+  const haystack = `${grant.title} ${grant.description} ${grant.eligibility ?? ""}`;
+  const candidates = findAllDateCandidates(haystack);
+  if (candidates.length === 0) return false;
+
+  const stored = grant.deadline.getTime();
+  const dayMs = 24 * 60 * 60 * 1000;
+  return candidates.some((c) => Math.abs(c.getTime() - stored) > dayMs);
+}
+
 async function reconcileDeadlines(grants: GrantData[], opts: { budget?: IntegrationBudget } = {}): Promise<void> {
   if (grants.length === 0) return;
 
@@ -275,24 +287,8 @@ async function reconcileDeadlines(grants: GrantData[], opts: { budget?: Integrat
   const indicesToCheck: number[] = [];
 
   for (let i = 0; i < grants.length; i++) {
-    const g = grants[i];
-    const deadlineMissing = !g.deadline;
-    const deadlinePast = !!g.deadline && g.deadline.getTime() < now;
-
-    if (deadlineMissing || deadlinePast) {
+    if (needsDeadlineCheck(grants[i], now)) {
       indicesToCheck.push(i);
-      continue;
-    }
-
-    // Regex sanity check: does the description mention a date that disagrees
-    // with the stored deadline? If so, ask the AI to adjudicate.
-    const haystack = `${g.title} ${g.description} ${g.eligibility ?? ""}`;
-    const candidates = findAllDateCandidates(haystack);
-    if (candidates.length > 0 && g.deadline) {
-      const stored = g.deadline.getTime();
-      const dayMs = 24 * 60 * 60 * 1000;
-      const hasDisagreement = candidates.some((c) => Math.abs(c.getTime() - stored) > dayMs);
-      if (hasDisagreement) indicesToCheck.push(i);
     }
   }
 
@@ -309,57 +305,57 @@ async function reconcileDeadlines(grants: GrantData[], opts: { budget?: Integrat
   const subset = indicesToCheck.map((i) => grants[i]);
   const extracted = await extractDeadlinesWithAI(subset, { budget: opts.budget });
 
-  let overwritten = 0;
-  let filledEmpty = 0;
-  let disagreementsKept = 0;
+  const counts = { overwritten: 0, filledEmpty: 0, disagreementsKept: 0 };
 
   for (let k = 0; k < indicesToCheck.length; k++) {
-    const i = indicesToCheck[k];
     const result = extracted[k];
     if (!result) continue;
-
-    const grant = grants[i];
-    const regexDeadlineIso = grant.deadline?.toISOString() ?? null;
-    const aiDeadlineIso = result.deadline?.toISOString() ?? null;
-
-    let method: "regex" | "ai" | "merged" = "regex";
-
-    if (result.confidence === "HIGH" && result.deadline) {
-      grant.deadline = result.deadline;
-      method = "ai";
-      overwritten++;
-    } else if (result.confidence === "MEDIUM" && result.deadline && !grant.deadline) {
-      grant.deadline = result.deadline;
-      method = "ai";
-      filledEmpty++;
-    } else if (result.confidence === "MEDIUM" && result.deadline && grant.deadline) {
-      method = "merged";
-      disagreementsKept++;
-      logWarn("orchestrator", `Deadline disagreement kept regex value for "${grant.title}"`, {
-        regex: regexDeadlineIso,
-        ai: aiDeadlineIso,
-        reason: result.reason,
-      });
-    }
-
-    grant.rawData = {
-      ...(grant.rawData ?? {}),
-      deadlineSource: {
-        method,
-        confidence: result.confidence,
-        reason: result.reason,
-        regexValue: regexDeadlineIso,
-        aiValue: aiDeadlineIso,
-      },
-    };
+    applyDeadlineResult(grants[indicesToCheck[k]], result, counts);
   }
 
   log("orchestrator", "Deadline reconcile complete", {
     checked: indicesToCheck.length,
-    overwritten,
-    filledEmpty,
-    disagreementsKept,
+    ...counts,
   });
+}
+
+function applyDeadlineResult(
+  grant: GrantData,
+  result: ExtractedDeadline,
+  counts: { overwritten: number; filledEmpty: number; disagreementsKept: number },
+): void {
+  const regexDeadlineIso = grant.deadline?.toISOString() ?? null;
+  const aiDeadlineIso = result.deadline?.toISOString() ?? null;
+  let method: "regex" | "ai" | "merged" = "regex";
+
+  if (result.confidence === "HIGH" && result.deadline) {
+    grant.deadline = result.deadline;
+    method = "ai";
+    counts.overwritten++;
+  } else if (result.confidence === "MEDIUM" && result.deadline && !grant.deadline) {
+    grant.deadline = result.deadline;
+    method = "ai";
+    counts.filledEmpty++;
+  } else if (result.confidence === "MEDIUM" && result.deadline && grant.deadline) {
+    method = "merged";
+    counts.disagreementsKept++;
+    logWarn("orchestrator", `Deadline disagreement kept regex value for "${grant.title}"`, {
+      regex: regexDeadlineIso,
+      ai: aiDeadlineIso,
+      reason: result.reason,
+    });
+  }
+
+  grant.rawData = {
+    ...(grant.rawData ?? {}),
+    deadlineSource: {
+      method,
+      confidence: result.confidence,
+      reason: result.reason,
+      regexValue: regexDeadlineIso,
+      aiValue: aiDeadlineIso,
+    },
+  };
 }
 
 async function upsertAndLog(

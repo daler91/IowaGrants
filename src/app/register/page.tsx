@@ -12,7 +12,7 @@ export default function RegisterPage() {
 }
 
 function getHashParam(key: string): string | null {
-  const hash = window.location.hash.replace(/^#/, "");
+  const hash = globalThis.location.hash.replace(/^#/, "");
   return new URLSearchParams(hash).get(key);
 }
 
