@@ -187,6 +187,159 @@ const IOWA_FOUNDATIONS: CommunityFoundation[] = [
 // Scrape a foundation page for grant-related links
 // ---------------------------------------------------------------------------
 
+const BUSINESS_KEYWORDS = [
+  "small business",
+  "business grant",
+  "economic development",
+  "entrepreneur",
+  "startup",
+  "workforce",
+  "business development",
+];
+
+function hasBusinessContent(text: string): boolean {
+  const lower = text.toLowerCase();
+  return BUSINESS_KEYWORDS.some((kw) => lower.includes(kw));
+}
+
+function extractGrantLinks($: cheerio.CheerioAPI, pageUrl: string): string[] {
+  const grantLinks: string[] = [];
+  $("a[href]").each((_, el) => {
+    const href = $(el).attr("href");
+    if (!href) return;
+
+    let fullUrl: string;
+    try {
+      fullUrl = new URL(href, pageUrl).href;
+    } catch {
+      return;
+    }
+
+    if (isGenericHomepage(fullUrl)) return;
+    const lower = fullUrl.toLowerCase();
+    const text = $(el).text().toLowerCase();
+
+    const isGrantRelated =
+      lower.includes("grant") ||
+      lower.includes("fund") ||
+      lower.includes("program") ||
+      lower.includes("apply") ||
+      text.includes("grant") ||
+      text.includes("apply") ||
+      text.includes("application");
+
+    if (isGrantRelated) grantLinks.push(fullUrl);
+  });
+  return grantLinks;
+}
+
+function buildFoundationGrant(
+  title: string,
+  description: string,
+  sourceUrl: string,
+  deadline: Date | undefined,
+  pageText: string,
+): GrantData {
+  return {
+    title,
+    description,
+    sourceUrl,
+    sourceName: "community-foundation",
+    grantType: "LOCAL",
+    status: deadline && deadline < new Date() ? "CLOSED" : "OPEN",
+    businessStage: "BOTH",
+    gender: "ANY",
+    locations: detectLocationScope(pageText),
+    industries: [],
+    deadline,
+    categories: ["Community Foundation"],
+    eligibleExpenses: [],
+  };
+}
+
+function tryExtractPageGrant(
+  $: cheerio.CheerioAPI,
+  html: string,
+  pageUrl: string,
+  pageText: string,
+  foundationName: string,
+): GrantData | null {
+  const lowerText = pageText.toLowerCase();
+  if (!lowerText.includes("grant") || !lowerText.includes("apply")) return null;
+
+  const pageTitle = $("h1").first().text().trim() || $("title").text().trim() || foundationName;
+  const deadline = extractDeadline(html);
+  const rawHtml = $("main, article, .content, body").first().html() || "";
+  const description = cleanHtmlToText(rawHtml, 800);
+
+  if (!description || description.length <= 50) return null;
+
+  return buildFoundationGrant(
+    `${foundationName} - ${pageTitle}`,
+    description,
+    pageUrl,
+    deadline,
+    pageText,
+  );
+}
+
+async function scrapeSubLinks(
+  grantLinks: string[],
+  excludeUrls: Set<string>,
+  foundationName: string,
+): Promise<GrantData[]> {
+  const grants: GrantData[] = [];
+
+  for (const link of grantLinks.slice(0, 5)) {
+    if (excludeUrls.has(link)) continue;
+    excludeUrls.add(link);
+
+    try {
+      await new Promise((r) => setTimeout(r, 1500));
+      const subResponse = await axios.get(link, {
+        headers: BROWSER_HEADERS,
+        timeout: SCRAPER_TIMEOUT_MS,
+        maxRedirects: 3,
+        validateStatus: (s: number) => s < 400,
+      });
+
+      if (typeof subResponse.data !== "string") continue;
+
+      const sub$ = cheerio.load(subResponse.data);
+      sub$("nav, footer, script, style, header").remove();
+
+      const subText = sub$("main, article, .content, body")
+        .first()
+        .text()
+        .replaceAll(/\s+/g, " ")
+        .trim();
+
+      if (!hasBusinessContent(subText)) continue;
+
+      const subTitle = sub$("h1").first().text().trim() || sub$("title").text().trim();
+      const subDeadline = extractDeadline(subResponse.data);
+      const subRawHtml = sub$("main, article, .content, body").first().html() || "";
+      const subDescription = cleanHtmlToText(subRawHtml, 800);
+
+      if (subDescription && subDescription.length > 50) {
+        grants.push(
+          buildFoundationGrant(
+            subTitle || `${foundationName} Grant`,
+            subDescription,
+            link,
+            subDeadline,
+            subText,
+          ),
+        );
+      }
+    } catch {
+      // Skip failed sub-pages
+    }
+  }
+
+  return grants;
+}
+
 async function scrapeFoundationForGrants(foundation: CommunityFoundation): Promise<GrantData[]> {
   const grants: GrantData[] = [];
   const pagesToCheck = [
@@ -196,7 +349,6 @@ async function scrapeFoundationForGrants(foundation: CommunityFoundation): Promi
     `${foundation.url}/apply`,
   ].filter((p): p is string => !!p);
 
-  // Deduplicate pages to check
   const uniquePages = Array.from(new Set(pagesToCheck));
 
   for (const pageUrl of uniquePages) {
@@ -219,133 +371,16 @@ async function scrapeFoundationForGrants(foundation: CommunityFoundation): Promi
         .replaceAll(/\s+/g, " ")
         .trim();
 
-      const lowerText = pageText.toLowerCase();
+      if (!hasBusinessContent(pageText)) continue;
 
-      // Look for small business / economic development grant keywords
-      const businessKeywords = [
-        "small business",
-        "business grant",
-        "economic development",
-        "entrepreneur",
-        "startup",
-        "workforce",
-        "business development",
-      ];
+      const grantLinks = extractGrantLinks($, pageUrl);
 
-      const hasBusinessGrants = businessKeywords.some((kw) => lowerText.includes(kw));
-      if (!hasBusinessGrants) continue;
+      const pageGrant = tryExtractPageGrant($, response.data, pageUrl, pageText, foundation.name);
+      if (pageGrant) grants.push(pageGrant);
 
-      // Extract grant program links
-      const grantLinks: string[] = [];
-      $("a[href]").each((_, el) => {
-        const href = $(el).attr("href");
-        if (!href) return;
-
-        let fullUrl: string;
-        try {
-          fullUrl = new URL(href, pageUrl).href;
-        } catch {
-          return;
-        }
-
-        if (isGenericHomepage(fullUrl)) return;
-        const lower = fullUrl.toLowerCase();
-        const text = $(el).text().toLowerCase();
-
-        if (
-          lower.includes("grant") ||
-          lower.includes("fund") ||
-          lower.includes("program") ||
-          lower.includes("apply") ||
-          text.includes("grant") ||
-          text.includes("apply") ||
-          text.includes("application")
-        ) {
-          grantLinks.push(fullUrl);
-        }
-      });
-
-      // If the page itself describes a grant, use it directly
-      if (lowerText.includes("grant") && lowerText.includes("apply")) {
-        const pageTitle =
-          $("h1").first().text().trim() || $("title").text().trim() || foundation.name;
-        const deadline = extractDeadline(response.data);
-        const rawHtml = $("main, article, .content, body").first().html() || "";
-        const description = cleanHtmlToText(rawHtml, 800);
-
-        if (description && description.length > 50) {
-          grants.push({
-            title: `${foundation.name} - ${pageTitle}`,
-            description,
-            sourceUrl: pageUrl,
-            sourceName: "community-foundation",
-            grantType: "LOCAL",
-            status: deadline && deadline < new Date() ? "CLOSED" : "OPEN",
-            businessStage: "BOTH",
-            gender: "ANY",
-            locations: detectLocationScope(pageText),
-            industries: [],
-            deadline,
-            categories: ["Community Foundation"],
-            eligibleExpenses: [],
-          });
-        }
-      }
-
-      // Scrape up to 5 grant-related links from this page
       const seen = new Set<string>(uniquePages);
-      for (const link of grantLinks.slice(0, 5)) {
-        if (seen.has(link)) continue;
-        seen.add(link);
-
-        try {
-          await new Promise((r) => setTimeout(r, 1500));
-          const subResponse = await axios.get(link, {
-            headers: BROWSER_HEADERS,
-            timeout: SCRAPER_TIMEOUT_MS,
-            maxRedirects: 3,
-            validateStatus: (s: number) => s < 400,
-          });
-
-          if (typeof subResponse.data !== "string") continue;
-
-          const sub$ = cheerio.load(subResponse.data);
-          sub$("nav, footer, script, style, header").remove();
-
-          const subText = sub$("main, article, .content, body")
-            .first()
-            .text()
-            .replaceAll(/\s+/g, " ")
-            .trim();
-
-          if (!businessKeywords.some((kw) => subText.toLowerCase().includes(kw))) continue;
-
-          const subTitle = sub$("h1").first().text().trim() || sub$("title").text().trim();
-          const subDeadline = extractDeadline(subResponse.data);
-          const subRawHtml = sub$("main, article, .content, body").first().html() || "";
-          const subDescription = cleanHtmlToText(subRawHtml, 800);
-
-          if (subDescription && subDescription.length > 50) {
-            grants.push({
-              title: subTitle || `${foundation.name} Grant`,
-              description: subDescription,
-              sourceUrl: link,
-              sourceName: "community-foundation",
-              grantType: "LOCAL",
-              status: subDeadline && subDeadline < new Date() ? "CLOSED" : "OPEN",
-              businessStage: "BOTH",
-              gender: "ANY",
-              locations: detectLocationScope(subText),
-              industries: [],
-              deadline: subDeadline,
-              categories: ["Community Foundation"],
-              eligibleExpenses: [],
-            });
-          }
-        } catch {
-          // Skip failed sub-pages
-        }
-      }
+      const subGrants = await scrapeSubLinks(grantLinks, seen, foundation.name);
+      grants.push(...subGrants);
 
       // Found business grants on this page — no need to try other URL patterns
       break;

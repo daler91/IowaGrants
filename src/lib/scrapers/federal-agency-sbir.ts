@@ -99,7 +99,7 @@ const OPPORTUNITY_PATTERNS = [
   /\bsttr\b/i,
   /topic/i,
   /solicitation/i,
-  /phase\s*[i1|ii2]/i,
+  /phase\s*(?:i{1,2}|[12])/i,
   /funding opportunity/i,
   /broad agency announcement/i,
   /request for proposals?/i,
@@ -162,6 +162,59 @@ function extractCandidateLinks(html: string, baseUrl: string): CandidateLink[] {
   return candidates;
 }
 
+function buildSbirGrant(
+  title: string,
+  description: string,
+  sourceUrl: string,
+  sourceName: string,
+  deadline: Date | undefined,
+  grantType: GrantType,
+): GrantData {
+  return {
+    title,
+    description,
+    sourceUrl,
+    sourceName,
+    deadline,
+    grantType,
+    status: "OPEN",
+    businessStage: "BOTH",
+    gender: "ANY",
+    locations: ["Nationwide"],
+    industries: [],
+    categories: ["SBIR/STTR"],
+    eligibleExpenses: [],
+  };
+}
+
+async function enrichCandidates(
+  candidates: CandidateLink[],
+  seenUrls: Set<string>,
+  agency: AgencySource,
+): Promise<GrantData[]> {
+  const grants: GrantData[] = [];
+
+  for (const candidate of candidates.slice(0, 12)) {
+    if (seenUrls.has(candidate.url)) continue;
+
+    const details = await fetchPageDetails(candidate.url);
+    if (!details) continue;
+
+    const description = details.description || candidate.context;
+    if (!description || description.length < 80) continue;
+    if (!isActualGrantPage(candidate.url, candidate.title, description)) continue;
+
+    grants.push(
+      buildSbirGrant(candidate.title, description, candidate.url, agency.sourceName, details.deadline, agency.grantType),
+    );
+    seenUrls.add(candidate.url);
+
+    await new Promise((r) => setTimeout(r, POLITE_DELAY_MS));
+  }
+
+  return grants;
+}
+
 async function scrapeAgency(agency: AgencySource): Promise<GrantData[]> {
   const grants: GrantData[] = [];
   const seenUrls = new Set<string>();
@@ -181,61 +234,17 @@ async function scrapeAgency(agency: AgencySource): Promise<GrantData[]> {
 
       const candidates = extractCandidateLinks(response.data, listingUrl);
 
-      // Also emit the listing page itself as a fallback entry with a
-      // descriptive title so even non-specific pages get captured.
-      const pageDeadline = extractDeadline(response.data);
       const pageText = cleanHtmlToText(response.data, 800);
       if (pageText.length > 100) {
-        grants.push({
-          title: `${agency.name} — Open Opportunities`,
-          description: pageText,
-          sourceUrl: listingUrl,
-          sourceName: agency.sourceName,
-          deadline: pageDeadline,
-          grantType: agency.grantType,
-          status: "OPEN",
-          businessStage: "BOTH",
-          gender: "ANY",
-          locations: ["Nationwide"],
-          industries: [],
-          categories: ["SBIR/STTR"],
-          eligibleExpenses: [],
-        });
+        const pageDeadline = extractDeadline(response.data);
+        grants.push(
+          buildSbirGrant(`${agency.name} — Open Opportunities`, pageText, listingUrl, agency.sourceName, pageDeadline, agency.grantType),
+        );
         seenUrls.add(listingUrl);
       }
 
-      // Enrich top candidates (limit to avoid long runtimes per agency)
-      const topCandidates = candidates.slice(0, 12);
-      for (const candidate of topCandidates) {
-        if (seenUrls.has(candidate.url)) continue;
-
-        const details = await fetchPageDetails(candidate.url);
-        if (!details) continue;
-
-        const description = details.description || candidate.context;
-        if (!description || description.length < 80) continue;
-
-        if (!isActualGrantPage(candidate.url, candidate.title, description)) continue;
-
-        grants.push({
-          title: candidate.title,
-          description,
-          sourceUrl: candidate.url,
-          sourceName: agency.sourceName,
-          deadline: details.deadline,
-          grantType: agency.grantType,
-          status: "OPEN",
-          businessStage: "BOTH",
-          gender: "ANY",
-          locations: ["Nationwide"],
-          industries: [],
-          categories: ["SBIR/STTR"],
-          eligibleExpenses: [],
-        });
-        seenUrls.add(candidate.url);
-
-        await new Promise((r) => setTimeout(r, POLITE_DELAY_MS));
-      }
+      const enriched = await enrichCandidates(candidates, seenUrls, agency);
+      grants.push(...enriched);
 
       log("federal-agency-sbir", "Scraped listing", {
         agency: agency.sourceName,

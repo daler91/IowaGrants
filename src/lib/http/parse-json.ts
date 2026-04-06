@@ -4,7 +4,7 @@ import type { z } from "zod/v4";
 export async function parseJson<T>(
   request: NextRequest,
   schema: z.ZodType<T>,
-): Promise<{ data: T; error?: undefined } | { data?: undefined; error: NextResponse }> {
+): Promise<{ data: T; error?: never } | { data?: never; error: NextResponse }> {
   let json: unknown;
   try {
     json = await request.json();

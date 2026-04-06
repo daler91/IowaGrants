@@ -128,12 +128,9 @@ function extractProgramLinks(html: string, baseUrl: string): ProgramLink[] {
   return links;
 }
 
-export async function scrapeIowaIedaPrograms(): Promise<GrantData[]> {
-  const allGrants: GrantData[] = [];
-  const seenUrls = new Set<string>();
+async function collectProgramLinks(): Promise<ProgramLink[]> {
   const programLinks: ProgramLink[] = [];
 
-  // Step 1: crawl each IEDA index page and collect program links
   for (const indexUrl of IEDA_INDEX_URLS) {
     if (!isSafeUrl(indexUrl)) continue;
 
@@ -153,47 +150,57 @@ export async function scrapeIowaIedaPrograms(): Promise<GrantData[]> {
         }
       }
 
-      log("iowa-ieda-programs", "Collected links from index", {
-        indexUrl,
-        count: links.length,
-      });
+      log("iowa-ieda-programs", "Collected links from index", { indexUrl, count: links.length });
     } catch (error) {
       logError("iowa-ieda-programs", `Error fetching index ${indexUrl}`, error);
     }
   }
 
-  // Step 2: fetch each program's detail page and build a GrantData entry
+  return programLinks;
+}
+
+async function enrichProgramLink(link: ProgramLink): Promise<GrantData | null> {
+  const details = await fetchPageDetails(link.url);
+  if (!details?.description || details.description.length < 80) return null;
+  if (!isActualGrantPage(link.url, link.title, details.description)) return null;
+
+  const parsedAmount = parseGrantAmount(details.description);
+
+  return {
+    title: link.title,
+    description: details.description,
+    sourceUrl: link.url,
+    sourceName: "ieda-programs",
+    deadline: details.deadline,
+    amountMin: parsedAmount?.min,
+    amountMax: parsedAmount?.max,
+    amount: parsedAmount?.raw,
+    grantType: "STATE",
+    status: "OPEN",
+    businessStage: "BOTH",
+    gender: "ANY",
+    locations: ["Iowa"],
+    industries: [],
+    categories: ["Iowa State Program"],
+    eligibleExpenses: [],
+  };
+}
+
+export async function scrapeIowaIedaPrograms(): Promise<GrantData[]> {
+  const allGrants: GrantData[] = [];
+  const seenUrls = new Set<string>();
+
+  const programLinks = await collectProgramLinks();
+
   for (const link of programLinks) {
     if (seenUrls.has(link.url)) continue;
 
     try {
-      const details = await fetchPageDetails(link.url);
-      if (!details?.description || details.description.length < 80) continue;
-
-      if (!isActualGrantPage(link.url, link.title, details.description)) continue;
-
-      const parsedAmount = parseGrantAmount(details.description);
-
-      allGrants.push({
-        title: link.title,
-        description: details.description,
-        sourceUrl: link.url,
-        sourceName: "ieda-programs",
-        deadline: details.deadline,
-        amountMin: parsedAmount?.min,
-        amountMax: parsedAmount?.max,
-        amount: parsedAmount?.raw,
-        grantType: "STATE",
-        status: "OPEN",
-        businessStage: "BOTH",
-        gender: "ANY",
-        locations: ["Iowa"],
-        industries: [],
-        categories: ["Iowa State Program"],
-        eligibleExpenses: [],
-      });
-      seenUrls.add(link.url);
-
+      const grant = await enrichProgramLink(link);
+      if (grant) {
+        allGrants.push(grant);
+        seenUrls.add(link.url);
+      }
       await new Promise((r) => setTimeout(r, POLITE_DELAY_MS));
     } catch (error) {
       logError("iowa-ieda-programs", `Error enriching ${link.url}`, error);

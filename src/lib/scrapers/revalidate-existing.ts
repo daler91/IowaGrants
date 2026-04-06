@@ -29,6 +29,91 @@ const BATCH_SIZE = 8;
  * Closing is non-destructive: the record is kept with status=CLOSED and a
  * `rawData.closedReason` entry explaining why.
  */
+type DbGrant = Awaited<ReturnType<typeof prisma.grant.findMany>>[number];
+
+async function triageHealthResults(
+  healthResults: Array<{ grant: DbGrant; health: Awaited<ReturnType<typeof checkUrlHealth>> }>,
+  summary: RevalidateSummary,
+): Promise<Array<{ grant: DbGrant; bodyText: string }>> {
+  const aliveEntries: Array<{ grant: DbGrant; bodyText: string }> = [];
+
+  for (const { grant, health } of healthResults) {
+    summary.checked++;
+    if (health.alive) {
+      aliveEntries.push({ grant, bodyText: health.bodyText });
+    } else {
+      try {
+        await closeGrant(grant.id, grant.rawData, {
+          method: "url-health",
+          status: health.status ?? null,
+          reason: health.reason,
+        });
+        summary.closed++;
+        log("revalidate-existing", "Closed dead URL", {
+          id: grant.id,
+          title: grant.title,
+          url: grant.sourceUrl,
+          status: health.status,
+          reason: health.reason,
+        });
+      } catch (error) {
+        summary.errors++;
+        logError("revalidate-existing", "Failed to close grant", error, { id: grant.id });
+      }
+    }
+  }
+
+  return aliveEntries;
+}
+
+async function validateAliveGrants(
+  aliveEntries: Array<{ grant: DbGrant; bodyText: string }>,
+  summary: RevalidateSummary,
+): Promise<void> {
+  if (aliveEntries.length === 0) return;
+
+  const projections: GrantData[] = aliveEntries.map(({ grant, bodyText }) =>
+    toGrantData(grant, bodyText),
+  );
+
+  let validated: GrantData[];
+  try {
+    validated = await validateGrants(projections);
+  } catch (error) {
+    summary.errors++;
+    logError("revalidate-existing", "Validator threw, keeping batch", error);
+    validated = projections;
+  }
+
+  const survivingUrls = new Set(validated.map((g) => g.sourceUrl));
+
+  for (const { grant } of aliveEntries) {
+    try {
+      if (survivingUrls.has(grant.sourceUrl)) {
+        await prisma.grant.update({
+          where: { id: grant.id },
+          data: { lastVerified: new Date() },
+        });
+        summary.kept++;
+      } else {
+        await closeGrant(grant.id, grant.rawData, {
+          method: "ai-revalidation",
+          reason: "AI classified live content as non-grant / expired",
+        });
+        summary.closed++;
+        log("revalidate-existing", "Closed by AI revalidation", {
+          id: grant.id,
+          title: grant.title,
+          url: grant.sourceUrl,
+        });
+      }
+    } catch (error) {
+      summary.errors++;
+      logError("revalidate-existing", "Failed to update grant", error, { id: grant.id });
+    }
+  }
+}
+
 export async function revalidateExistingGrants(
   options: RevalidateOptions = {},
 ): Promise<RevalidateSummary> {
@@ -51,95 +136,12 @@ export async function revalidateExistingGrants(
   for (let i = 0; i < grants.length; i += BATCH_SIZE) {
     const batch = grants.slice(i, i + BATCH_SIZE);
 
-    // Step 1: URL health in parallel
     const healthResults = await Promise.all(
       batch.map(async (g) => ({ grant: g, health: await checkUrlHealth(g.sourceUrl) })),
     );
 
-    // Step 2: Dead URLs → close immediately
-    const aliveEntries: Array<{
-      grant: (typeof batch)[number];
-      bodyText: string;
-    }> = [];
-
-    for (const { grant, health } of healthResults) {
-      summary.checked++;
-      if (!health.alive) {
-        try {
-          await closeGrant(grant.id, grant.rawData, {
-            method: "url-health",
-            status: health.status ?? null,
-            reason: health.reason,
-          });
-          summary.closed++;
-          log("revalidate-existing", "Closed dead URL", {
-            id: grant.id,
-            title: grant.title,
-            url: grant.sourceUrl,
-            status: health.status,
-            reason: health.reason,
-          });
-        } catch (error) {
-          summary.errors++;
-          logError("revalidate-existing", "Failed to close grant", error, { id: grant.id });
-        }
-      } else {
-        aliveEntries.push({ grant, bodyText: health.bodyText });
-      }
-    }
-
-    // Step 3: Alive grants → run AI validator against live content
-    if (aliveEntries.length > 0) {
-      const projections: GrantData[] = aliveEntries.map(({ grant, bodyText }) =>
-        toGrantData(grant, bodyText),
-      );
-
-      let validated: GrantData[];
-      try {
-        validated = await validateGrants(projections);
-      } catch (error) {
-        // Fail-open on unexpected validator errors: keep the grants and just
-        // refresh lastVerified so we don't churn on them.
-        summary.errors++;
-        logError("revalidate-existing", "Validator threw, keeping batch", error);
-        validated = projections;
-      }
-
-      const survivingUrls = new Set(validated.map((g) => g.sourceUrl));
-
-      for (const { grant } of aliveEntries) {
-        if (survivingUrls.has(grant.sourceUrl)) {
-          try {
-            await prisma.grant.update({
-              where: { id: grant.id },
-              data: { lastVerified: new Date() },
-            });
-            summary.kept++;
-          } catch (error) {
-            summary.errors++;
-            logError("revalidate-existing", "Failed to touch lastVerified", error, {
-              id: grant.id,
-            });
-          }
-        } else {
-          try {
-            await closeGrant(grant.id, grant.rawData, {
-              method: "ai-revalidation",
-              reason: "AI classified live content as non-grant / expired",
-            });
-            summary.closed++;
-            log("revalidate-existing", "Closed by AI revalidation", {
-              id: grant.id,
-              title: grant.title,
-              url: grant.sourceUrl,
-            });
-          } catch (error) {
-            summary.errors++;
-            logError("revalidate-existing", "Failed to close grant", error, { id: grant.id });
-          }
-        }
-      }
-    }
+    const aliveEntries = await triageHealthResults(healthResults, summary);
+    await validateAliveGrants(aliveEntries, summary);
 
     if (i + BATCH_SIZE < grants.length) {
       await new Promise((r) => setTimeout(r, AI_CALL_DELAY_MS));
@@ -164,8 +166,7 @@ async function closeGrant(
       ? (existingRawData as Record<string, unknown>)
       : {};
   // Strip transient liveBodyText so we don't persist a 4KB text blob.
-  const { liveBodyText: _liveBodyText, ...rest } = base;
-  void _liveBodyText;
+  const { liveBodyText: _, ...rest } = base;
   const nextRaw: Record<string, unknown> = {
     ...rest,
     closedReason: {

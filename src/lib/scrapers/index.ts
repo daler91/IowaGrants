@@ -253,7 +253,7 @@ function mergeGrantWithPdfParse(original: GrantData, parsed: GrantData): GrantDa
     sourceUrl: original.sourceUrl,
     sourceName: original.sourceName,
     // Preserve original rawData fields (e.g. articlePage) by merging instead of replacing
-    rawData: { ...(original.rawData ?? {}), ...(parsed.rawData ?? {}) },
+    rawData: { ...original.rawData, ...parsed.rawData },
   };
 }
 
@@ -268,33 +268,66 @@ function mergeGrantWithPdfParse(original: GrantData, parsed: GrantData): GrantDa
  *
  * Provenance is written into `grant.rawData.deadlineSource` for debugging.
  */
+function needsDeadlineCheck(grant: GrantData, now: number): boolean {
+  if (!grant.deadline || grant.deadline.getTime() < now) return true;
+
+  const haystack = `${grant.title} ${grant.description} ${grant.eligibility ?? ""}`;
+  const candidates = findAllDateCandidates(haystack);
+  if (candidates.length === 0) return false;
+
+  const stored = grant.deadline.getTime();
+  const dayMs = 24 * 60 * 60 * 1000;
+  return candidates.some((c) => Math.abs(c.getTime() - stored) > dayMs);
+}
+
+function applyDeadlineResult(
+  grant: GrantData,
+  result: { deadline: Date | null; confidence: "HIGH" | "MEDIUM" | "LOW"; reason: string },
+): { method: "regex" | "ai" | "merged"; outcome: "overwritten" | "filled" | "disagreement" | "none" } {
+  const regexDeadlineIso = grant.deadline?.toISOString() ?? null;
+  const aiDeadlineIso = result.deadline?.toISOString() ?? null;
+  let method: "regex" | "ai" | "merged" = "regex";
+  let outcome: "overwritten" | "filled" | "disagreement" | "none" = "none";
+
+  if (result.confidence === "HIGH" && result.deadline) {
+    grant.deadline = result.deadline;
+    method = "ai";
+    outcome = "overwritten";
+  } else if (result.confidence === "MEDIUM" && result.deadline && !grant.deadline) {
+    grant.deadline = result.deadline;
+    method = "ai";
+    outcome = "filled";
+  } else if (result.confidence === "MEDIUM" && result.deadline && grant.deadline) {
+    method = "merged";
+    outcome = "disagreement";
+    logWarn("orchestrator", `Deadline disagreement kept regex value for "${grant.title}"`, {
+      regex: regexDeadlineIso,
+      ai: aiDeadlineIso,
+      reason: result.reason,
+    });
+  }
+
+  grant.rawData = {
+    ...grant.rawData,
+    deadlineSource: {
+      method,
+      confidence: result.confidence,
+      reason: result.reason,
+      regexValue: regexDeadlineIso,
+      aiValue: aiDeadlineIso,
+    },
+  };
+
+  return { method, outcome };
+}
+
 async function reconcileDeadlines(grants: GrantData[], opts: { budget?: IntegrationBudget } = {}): Promise<void> {
   if (grants.length === 0) return;
 
   const now = Date.now();
-  const indicesToCheck: number[] = [];
-
-  for (let i = 0; i < grants.length; i++) {
-    const g = grants[i];
-    const deadlineMissing = !g.deadline;
-    const deadlinePast = !!g.deadline && g.deadline.getTime() < now;
-
-    if (deadlineMissing || deadlinePast) {
-      indicesToCheck.push(i);
-      continue;
-    }
-
-    // Regex sanity check: does the description mention a date that disagrees
-    // with the stored deadline? If so, ask the AI to adjudicate.
-    const haystack = `${g.title} ${g.description} ${g.eligibility ?? ""}`;
-    const candidates = findAllDateCandidates(haystack);
-    if (candidates.length > 0 && g.deadline) {
-      const stored = g.deadline.getTime();
-      const dayMs = 24 * 60 * 60 * 1000;
-      const hasDisagreement = candidates.some((c) => Math.abs(c.getTime() - stored) > dayMs);
-      if (hasDisagreement) indicesToCheck.push(i);
-    }
-  }
+  const indicesToCheck = grants
+    .map((g, i) => (needsDeadlineCheck(g, now) ? i : -1))
+    .filter((i) => i >= 0);
 
   if (indicesToCheck.length === 0) {
     log("orchestrator", "Deadline reconcile: no grants need AI check");
@@ -314,44 +347,13 @@ async function reconcileDeadlines(grants: GrantData[], opts: { budget?: Integrat
   let disagreementsKept = 0;
 
   for (let k = 0; k < indicesToCheck.length; k++) {
-    const i = indicesToCheck[k];
     const result = extracted[k];
     if (!result) continue;
 
-    const grant = grants[i];
-    const regexDeadlineIso = grant.deadline?.toISOString() ?? null;
-    const aiDeadlineIso = result.deadline?.toISOString() ?? null;
-
-    let method: "regex" | "ai" | "merged" = "regex";
-
-    if (result.confidence === "HIGH" && result.deadline) {
-      grant.deadline = result.deadline;
-      method = "ai";
-      overwritten++;
-    } else if (result.confidence === "MEDIUM" && result.deadline && !grant.deadline) {
-      grant.deadline = result.deadline;
-      method = "ai";
-      filledEmpty++;
-    } else if (result.confidence === "MEDIUM" && result.deadline && grant.deadline) {
-      method = "merged";
-      disagreementsKept++;
-      logWarn("orchestrator", `Deadline disagreement kept regex value for "${grant.title}"`, {
-        regex: regexDeadlineIso,
-        ai: aiDeadlineIso,
-        reason: result.reason,
-      });
-    }
-
-    grant.rawData = {
-      ...(grant.rawData ?? {}),
-      deadlineSource: {
-        method,
-        confidence: result.confidence,
-        reason: result.reason,
-        regexValue: regexDeadlineIso,
-        aiValue: aiDeadlineIso,
-      },
-    };
+    const { outcome } = applyDeadlineResult(grants[indicesToCheck[k]], result);
+    if (outcome === "overwritten") overwritten++;
+    else if (outcome === "filled") filledEmpty++;
+    else if (outcome === "disagreement") disagreementsKept++;
   }
 
   log("orchestrator", "Deadline reconcile complete", {
@@ -419,7 +421,7 @@ async function hydrateLiveContent(grants: GrantData[]): Promise<GrantData[]> {
       batch.map(async (grant) => {
         const existing =
           grant.rawData && typeof grant.rawData === "object"
-            ? (grant.rawData as Record<string, unknown>).liveBodyText
+            ? grant.rawData.liveBodyText
             : undefined;
         if (typeof existing === "string" && existing.length > 0) {
           return { keep: true as const, grant };
@@ -442,7 +444,7 @@ async function hydrateLiveContent(grants: GrantData[]): Promise<GrantData[]> {
           return { keep: false as const };
         }
         const nextRaw: Record<string, unknown> = {
-          ...((grant.rawData as Record<string, unknown> | undefined) ?? {}),
+          ...grant.rawData,
           liveBodyText: health.bodyText,
         };
         return { keep: true as const, grant: { ...grant, rawData: nextRaw } };

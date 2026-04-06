@@ -15,30 +15,25 @@ const BLOCKED_HOSTS = new Set([
  * Blocks private/link-local IPs, cloud metadata endpoints, and
  * non-HTTP(S) protocols to prevent SSRF.
  */
+function isPrivateIp(hostname: string): boolean {
+  const parts = hostname.split(".");
+  const first = Number.parseInt(parts[0]);
+  if (first === 10 || first === 127) return true;
+  if (first === 172) {
+    const second = Number.parseInt(parts[1]);
+    if (second >= 16 && second <= 31) return true;
+  }
+  if (hostname.startsWith("192.168.") || hostname.startsWith("169.254.")) return true;
+  if (hostname === "0.0.0.0") return true;
+  return false;
+}
+
 export function isSafeUrl(urlStr: string): boolean {
   try {
     const url = new URL(urlStr);
     if (url.protocol !== "https:" && url.protocol !== "http:") return false;
     if (BLOCKED_HOSTS.has(url.hostname)) return false;
-    if (isIP(url.hostname)) {
-      const parts = url.hostname.split(".");
-      const first = Number.parseInt(parts[0]);
-      // 10.x.x.x
-      if (first === 10) return false;
-      // 127.x.x.x
-      if (first === 127) return false;
-      // 172.16.0.0 – 172.31.255.255
-      if (first === 172) {
-        const second = Number.parseInt(parts[1]);
-        if (second >= 16 && second <= 31) return false;
-      }
-      // 192.168.x.x
-      if (url.hostname.startsWith("192.168.")) return false;
-      // 169.254.x.x (link-local)
-      if (url.hostname.startsWith("169.254.")) return false;
-      // 0.0.0.0
-      if (url.hostname === "0.0.0.0") return false;
-    }
+    if (isIP(url.hostname) && isPrivateIp(url.hostname)) return false;
     return true;
   } catch {
     return false;
