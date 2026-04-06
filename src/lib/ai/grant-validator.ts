@@ -1,11 +1,10 @@
-import Anthropic from "@anthropic-ai/sdk";
 import type { GrantData } from "@/lib/types";
 import { env } from "@/lib/env";
 import { VALIDATION_BATCH_SIZE, AI_CALL_DELAY_MS } from "@/lib/scrapers/config";
 import { log, logError, logWarn } from "@/lib/errors";
 import { ValidationResultArraySchema, type ValidationResult } from "./schemas";
-
-const anthropic = new Anthropic();
+import { getAnthropic } from "./client";
+import type { IntegrationBudget } from "./budget";
 
 const VALIDATION_PROMPT = `You are evaluating scraped grant listings to determine if they are real, active grant programs for small businesses.
 
@@ -79,7 +78,7 @@ async function validateBatch(
 
   for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
     try {
-      const response = await anthropic.messages.create({
+      const response = await getAnthropic().messages.create({
         model: "claude-haiku-4-5-20251001",
         max_tokens: 2000,
         messages: [{ role: "user", content: message }],
@@ -125,7 +124,10 @@ async function validateBatch(
  * ALL grants are validated — heuristic pre-filters in the orchestrator
  * reduce volume before grants reach this step.
  */
-export async function validateGrants(grants: GrantData[]): Promise<GrantData[]> {
+export async function validateGrants(
+  grants: GrantData[],
+  opts: { budget?: IntegrationBudget } = {},
+): Promise<GrantData[]> {
   if (!env.ANTHROPIC_API_KEY) {
     log("grant-validator", "ANTHROPIC_API_KEY not set — skipping validation");
     return grants;
@@ -142,10 +144,19 @@ export async function validateGrants(grants: GrantData[]): Promise<GrantData[]> 
   let filtered = 0;
 
   for (let i = 0; i < grants.length; i += BATCH_SIZE) {
+    if (opts.budget && !opts.budget.canCallAI()) {
+      log("grant-validator", "Budget exhausted — skipping remaining batches", {
+        processed: i,
+        total: grants.length,
+      });
+      break;
+    }
+
     const batch = grants.slice(i, i + BATCH_SIZE).map((grant, idx) => ({
       grant,
       originalIndex: i + idx,
     }));
+    opts.budget?.recordAICall();
     const results = await validateBatch(batch);
 
     // Fail-closed: if validation failed after retries, skip this batch entirely

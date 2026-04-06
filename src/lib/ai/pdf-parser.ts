@@ -1,4 +1,3 @@
-import Anthropic from "@anthropic-ai/sdk";
 import axios from "axios";
 import type { GrantData } from "@/lib/types";
 import { validateDeadline, isSafeUrl } from "@/lib/scrapers/utils";
@@ -6,8 +5,7 @@ import { env } from "@/lib/env";
 import { SCRAPER_USER_AGENT } from "@/lib/scrapers/config";
 import { log, logError, logWarn } from "@/lib/errors";
 import { ParsedGrantSchema } from "./schemas";
-
-const anthropic = new Anthropic();
+import { getAnthropic } from "./client";
 
 const EXTRACTION_PROMPT = `You are analyzing a grant program document. Extract the following information and return it as JSON:
 
@@ -91,7 +89,7 @@ export async function parsePdfFromUrl(
     const pdfBase64 = Buffer.from(pdfResponse.data).toString("base64");
 
     // Send to Claude with vision for table extraction
-    const message = await anthropic.messages.create({
+    const message = await getAnthropic().messages.create({
       model: "claude-sonnet-4-6",
       max_tokens: 2000,
       messages: [
@@ -143,7 +141,7 @@ export async function parseTextWithAI(
   }
 
   try {
-    const message = await anthropic.messages.create({
+    const message = await getAnthropic().messages.create({
       model: "claude-sonnet-4-6",
       max_tokens: 2000,
       messages: [

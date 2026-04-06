@@ -1,11 +1,10 @@
-import Anthropic from "@anthropic-ai/sdk";
 import type { GrantData } from "@/lib/types";
 import { env } from "@/lib/env";
 import { DESCRIPTION_BATCH_SIZE, AI_CALL_DELAY_MS } from "@/lib/scrapers/config";
 import { log, logError, logWarn } from "@/lib/errors";
 import { DescriptionResultArraySchema } from "./schemas";
-
-const anthropic = new Anthropic();
+import { getAnthropic } from "./client";
+import type { IntegrationBudget } from "./budget";
 
 const DESCRIPTION_PROMPT = `You are writing clear, helpful descriptions for grant programs aimed at Iowa small business owners.
 
@@ -62,7 +61,7 @@ async function generateBatchDescriptions(
 
   for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
     try {
-      const response = await anthropic.messages.create({
+      const response = await getAnthropic().messages.create({
         model: "claude-haiku-4-5-20251001",
         max_tokens: 4000,
         messages: [{ role: "user", content: message }],
@@ -108,7 +107,10 @@ async function generateBatchDescriptions(
  * scraped descriptions are kept. Original descriptions are preserved
  * in rawData.originalDescription for auditability.
  */
-export async function generateDescriptions(grants: GrantData[]): Promise<GrantData[]> {
+export async function generateDescriptions(
+  grants: GrantData[],
+  opts: { budget?: IntegrationBudget } = {},
+): Promise<GrantData[]> {
   if (!env.ANTHROPIC_API_KEY) {
     log("description-generator", "ANTHROPIC_API_KEY not set — skipping description generation");
     return grants;
@@ -123,7 +125,16 @@ export async function generateDescriptions(grants: GrantData[]): Promise<GrantDa
   let rewritten = 0;
 
   for (let i = 0; i < grants.length; i += DESCRIPTION_BATCH_SIZE) {
+    if (opts.budget && !opts.budget.canCallAI()) {
+      log("description-generator", "Budget exhausted — skipping remaining batches", {
+        processed: i,
+        total: grants.length,
+      });
+      break;
+    }
+
     const batch = grants.slice(i, i + DESCRIPTION_BATCH_SIZE);
+    opts.budget?.recordAICall();
     const results = await generateBatchDescriptions(batch);
 
     if (results) {

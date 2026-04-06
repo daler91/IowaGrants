@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { requireAdminOrResponse } from "@/lib/auth";
+import { requireAdmin, UnauthorizedError } from "@/lib/auth";
 import { GRANT_INCLUDE } from "@/lib/constants";
 import { parsePagination } from "@/lib/api-utils";
 import { buildGrantWhere } from "@/lib/grant-query";
 import { logError } from "@/lib/errors";
+import { parseJson } from "@/lib/http/parse-json";
+import { deleteIdsSchema } from "@/lib/http/schemas";
 
 export async function GET(request: NextRequest) {
   try {
@@ -39,38 +41,24 @@ export async function GET(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
-  const admin = await requireAdminOrResponse(request);
-  if (admin instanceof NextResponse) return admin;
-
-  let body: unknown;
   try {
-    body = await request.json();
-  } catch {
-    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
-  }
+    await requireAdmin(request);
 
-  const { ids } = body as { ids?: unknown };
+    const result = await parseJson(request, deleteIdsSchema);
+    if (result.error) return result.error;
 
-  if (
-    !Array.isArray(ids) ||
-    ids.length === 0 ||
-    ids.length > 100 ||
-    !ids.every((id) => typeof id === "string")
-  ) {
-    return NextResponse.json(
-      { error: "ids must be a non-empty array of strings (max 100)" },
-      { status: 400 },
-    );
-  }
+    const { ids } = result.data;
 
-  try {
-    const result = await prisma.grant.deleteMany({
+    const deleteResult = await prisma.grant.deleteMany({
       where: { id: { in: ids } },
     });
 
-    return NextResponse.json({ deleted: result.count });
-  } catch (error) {
-    logError("grants-api", "Failed to delete grants", error);
+    return NextResponse.json({ deleted: deleteResult.count });
+  } catch (err) {
+    if (err instanceof UnauthorizedError) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    logError("grants-api", "Failed to delete grants", err);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

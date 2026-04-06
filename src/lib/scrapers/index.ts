@@ -39,6 +39,8 @@ import {
   getUrlsNeedingReparse,
   markReparsed,
 } from "@/lib/change-detection/detector";
+import pLimit from "p-limit";
+import { IntegrationBudget } from "@/lib/ai/budget";
 import type { GrantData, ScraperResult } from "@/lib/types";
 
 async function ensureEligibleExpenses() {
@@ -192,25 +194,39 @@ function collectSourceResults(
 }
 
 async function processPdfGrants(allGrants: GrantData[], urlsToReparse: string[]): Promise<void> {
-  // Parse any PDFs that need reparsing
-  for (const url of urlsToReparse) {
-    if (url.endsWith(".pdf")) {
-      const parsed = await parsePdfFromUrl(url, "pdf-parse");
-      if (parsed) {
-        allGrants.push(parsed);
-      }
-      await markReparsed(url);
-    }
+  const limit = pLimit(4);
+
+  // Parse any PDFs that need reparsing (bounded concurrency)
+  const pdfUrls = urlsToReparse.filter((u) => u.endsWith(".pdf"));
+  const reparseResults = await Promise.all(
+    pdfUrls.map((url) =>
+      limit(async () => {
+        const parsed = await parsePdfFromUrl(url, "pdf-parse");
+        await markReparsed(url);
+        return parsed;
+      }),
+    ),
+  );
+  for (const parsed of reparseResults) {
+    if (parsed) allGrants.push(parsed);
   }
 
-  // Also parse PDFs found by scrapers
-  for (let i = 0; i < allGrants.length; i++) {
-    const grant = allGrants[i];
-    if (grant.pdfUrl) {
-      const parsed = await parsePdfFromUrl(grant.pdfUrl, grant.sourceName);
-      if (parsed) {
-        allGrants[i] = mergeGrantWithPdfParse(grant, parsed);
-      }
+  // Also parse PDFs found by scrapers (bounded concurrency)
+  const pdfIndices = allGrants
+    .map((grant, i) => (grant.pdfUrl ? i : -1))
+    .filter((i) => i >= 0);
+  const enrichResults = await Promise.all(
+    pdfIndices.map((i) =>
+      limit(async () => {
+        const grant = allGrants[i];
+        const parsed = await parsePdfFromUrl(grant.pdfUrl!, grant.sourceName);
+        return { index: i, parsed };
+      }),
+    ),
+  );
+  for (const { index, parsed } of enrichResults) {
+    if (parsed) {
+      allGrants[index] = mergeGrantWithPdfParse(allGrants[index], parsed);
     }
   }
 }
@@ -252,7 +268,7 @@ function mergeGrantWithPdfParse(original: GrantData, parsed: GrantData): GrantDa
  *
  * Provenance is written into `grant.rawData.deadlineSource` for debugging.
  */
-async function reconcileDeadlines(grants: GrantData[]): Promise<void> {
+async function reconcileDeadlines(grants: GrantData[], opts: { budget?: IntegrationBudget } = {}): Promise<void> {
   if (grants.length === 0) return;
 
   const now = Date.now();
@@ -291,7 +307,7 @@ async function reconcileDeadlines(grants: GrantData[]): Promise<void> {
   });
 
   const subset = indicesToCheck.map((i) => grants[i]);
-  const extracted = await extractDeadlinesWithAI(subset);
+  const extracted = await extractDeadlinesWithAI(subset, { budget: opts.budget });
 
   let overwritten = 0;
   let filledEmpty = 0;
@@ -454,6 +470,9 @@ export async function runFullScrape(scrapeRunId?: string): Promise<ScraperResult
   log("orchestrator", "Starting full scrape...");
   const results: ScraperResult[] = [];
 
+  // Global AI call budget for this scrape run (prevents unbounded spend)
+  const budget = new IntegrationBudget(200);
+
   // Ensure eligible expense categories exist
   await ensureEligibleExpenses();
 
@@ -534,7 +553,7 @@ export async function runFullScrape(scrapeRunId?: string): Promise<ScraperResult
   await processPdfGrants(allGrants, urlsToReparse);
 
   // Step 4b: Reconcile deadlines — use Claude to correct regex misses / wrong-cycle dates
-  await reconcileDeadlines(allGrants);
+  await reconcileDeadlines(allGrants, { budget });
 
   // Step 5: Run categorizer on all grants
   const categorized = categorizeAll(allGrants);
@@ -588,7 +607,7 @@ export async function runFullScrape(scrapeRunId?: string): Promise<ScraperResult
   const hydrated = await hydrateLiveContent(applicationFiltered);
 
   // Step 5c: AI-powered validation for ALL grants (filters non-real grants and wrong eligibility)
-  const validated = await validateGrants(hydrated);
+  const validated = await validateGrants(hydrated, { budget });
 
   // Step 6: Load blacklisted URLs
   const blacklistedUrls = new Set(
@@ -599,7 +618,7 @@ export async function runFullScrape(scrapeRunId?: string): Promise<ScraperResult
   }
 
   // Step 6b: AI-powered description generation for grants that passed all filters
-  const described = await generateDescriptions(validated);
+  const described = await generateDescriptions(validated, { budget });
 
   // Step 7: Upsert all grants and log results
   const totalNew = await upsertAndLog(described, results, blacklistedUrls);
