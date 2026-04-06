@@ -128,40 +128,46 @@ export default function InvitesPage() {
           <h2 className="text-lg font-semibold text-[var(--foreground)]">Invitation History</h2>
         </div>
 
-        {loading ? (
-          <div className="p-6 text-center text-[var(--muted)]">Loading...</div>
-        ) : invites.length === 0 ? (
-          <div className="p-6 text-center text-[var(--muted)]">No invitations sent yet.</div>
-        ) : (
-          <div className="divide-y divide-[var(--border)]">
-            {invites.map((invite) => {
-              const expired = !invite.usedAt && new Date(invite.expiresAt) < new Date();
-              let status = "Pending";
-              let statusColor = "text-amber-600";
-              if (invite.usedAt) {
-                status = "Used";
-                statusColor = "text-green-600";
-              } else if (expired) {
-                status = "Expired";
-                statusColor = "text-red-600";
-              }
-
-              return (
-                <div key={invite.id} className="px-6 py-4 flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-[var(--foreground)]">{invite.email}</p>
-                    <p className="text-xs text-[var(--muted)]">
-                      Invited by {invite.invitedBy} on{" "}
-                      {new Date(invite.createdAt).toLocaleDateString()}
-                    </p>
-                  </div>
-                  <span className={`text-sm font-medium ${statusColor}`}>{status}</span>
-                </div>
-              );
-            })}
-          </div>
-        )}
+        {renderInviteContent()}
       </div>
     </div>
   );
+
+  function renderInviteContent() {
+    if (loading) {
+      return <div className="p-6 text-center text-[var(--muted)]">Loading...</div>;
+    }
+    if (invites.length === 0) {
+      return <div className="p-6 text-center text-[var(--muted)]">No invitations sent yet.</div>;
+    }
+    return (
+      <div className="divide-y divide-[var(--border)]">
+        {invites.map((invite) => {
+          const expired = !invite.usedAt && new Date(invite.expiresAt) < new Date();
+          let status = "Pending";
+          let statusColor = "text-amber-600";
+          if (invite.usedAt) {
+            status = "Used";
+            statusColor = "text-green-600";
+          } else if (expired) {
+            status = "Expired";
+            statusColor = "text-red-600";
+          }
+
+          return (
+            <div key={invite.id} className="px-6 py-4 flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-[var(--foreground)]">{invite.email}</p>
+                <p className="text-xs text-[var(--muted)]">
+                  Invited by {invite.invitedBy} on{" "}
+                  {new Date(invite.createdAt).toLocaleDateString()}
+                </p>
+              </div>
+              <span className={`text-sm font-medium ${statusColor}`}>{status}</span>
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
 }

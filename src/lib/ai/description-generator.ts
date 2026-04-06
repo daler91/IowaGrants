@@ -42,7 +42,7 @@ function buildGrantSnippet(grant: GrantData, index: number): string {
   }
   const liveBodyText =
     grant.rawData && typeof grant.rawData === "object"
-      ? (grant.rawData as Record<string, unknown>).liveBodyText
+      ? grant.rawData.liveBodyText
       : undefined;
   if (typeof liveBodyText === "string" && liveBodyText.length > 0) {
     parts.push(`Live page excerpt: ${liveBodyText.slice(0, 1500)}`);
@@ -107,6 +107,25 @@ async function generateBatchDescriptions(
  * scraped descriptions are kept. Original descriptions are preserved
  * in rawData.originalDescription for auditability.
  */
+function applyBatchResults(
+  batch: GrantData[],
+  results: Array<{ index: number; description: string }>,
+): number {
+  let rewritten = 0;
+  for (const result of results) {
+    const grant = batch[result.index];
+    if (!grant) continue;
+
+    const rawData = grant.rawData ?? {};
+    rawData.originalDescription = grant.description;
+    grant.rawData = rawData;
+
+    grant.description = result.description;
+    rewritten++;
+  }
+  return rewritten;
+}
+
 export async function generateDescriptions(
   grants: GrantData[],
   opts: { budget?: IntegrationBudget } = {},
@@ -116,9 +135,7 @@ export async function generateDescriptions(
     return grants;
   }
 
-  if (grants.length === 0) {
-    return grants;
-  }
+  if (grants.length === 0) return grants;
 
   log("description-generator", `Generating descriptions for ${grants.length} grants`);
 
@@ -138,21 +155,9 @@ export async function generateDescriptions(
     const results = await generateBatchDescriptions(batch);
 
     if (results) {
-      for (const result of results) {
-        const grant = batch[result.index];
-        if (!grant) continue;
-
-        // Preserve original description in rawData
-        const rawData = (grant.rawData ?? {}) as Record<string, unknown>;
-        rawData.originalDescription = grant.description;
-        grant.rawData = rawData;
-
-        grant.description = result.description;
-        rewritten++;
-      }
+      rewritten += applyBatchResults(batch, results);
     }
 
-    // Brief delay between API calls
     if (i + DESCRIPTION_BATCH_SIZE < grants.length) {
       await new Promise((r) => setTimeout(r, AI_CALL_DELAY_MS));
     }

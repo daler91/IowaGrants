@@ -127,8 +127,8 @@ function MultiSelect({
       {open && (
         <div
           id={listboxId}
-          role="listbox"
-          aria-multiselectable="true"
+          role="group"
+          aria-label={label}
           className="absolute z-20 mt-1 w-full max-h-64 overflow-auto rounded-lg border border-[var(--border)] bg-white shadow-lg py-1"
         >
           {options.map((opt) => {

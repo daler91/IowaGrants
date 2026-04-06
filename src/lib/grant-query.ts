@@ -32,6 +32,43 @@ function parseMultiParam(
  * Shared between `GET /api/grants` and `GET /api/grants/export` so filter
  * semantics stay in a single place.
  */
+function existingAndClauses(where: Prisma.GrantWhereInput): Prisma.GrantWhereInput[] {
+  if (Array.isArray(where.AND)) return where.AND;
+  if (where.AND) return [where.AND];
+  return [];
+}
+
+function buildStatusClauses(statuses: string[]): Prisma.GrantWhereInput[] {
+  const now = new Date();
+  const clauses: Prisma.GrantWhereInput[] = [];
+
+  if (statuses.includes("OPEN")) {
+    clauses.push({
+      status: "OPEN",
+      OR: [{ deadline: null }, { deadline: { gte: now } }],
+    });
+  }
+
+  if (statuses.includes("CLOSED")) {
+    clauses.push({ status: "CLOSED" }, { status: "OPEN", deadline: { lt: now } });
+  }
+
+  if (statuses.includes("FORECASTED")) {
+    clauses.push({ status: "FORECASTED" });
+  }
+
+  return clauses;
+}
+
+function applyStatusFilter(where: Prisma.GrantWhereInput, statuses: string[]): void {
+  const statusClauses = buildStatusClauses(statuses);
+  if (statusClauses.length === 0) return;
+
+  const clause =
+    statusClauses.length === 1 ? statusClauses[0] : { OR: statusClauses };
+  where.AND = [...existingAndClauses(where), clause];
+}
+
 export function buildGrantWhere(params: URLSearchParams): Prisma.GrantWhereInput {
   const search = params.get("search") || undefined;
   const grantTypes = parseMultiParam(params, "grantType", VALID_GRANT_TYPES);
@@ -65,51 +102,9 @@ export function buildGrantWhere(params: URLSearchParams): Prisma.GrantWhereInput
     where.businessStage = { in: businessStages as Prisma.EnumBusinessStageFilter["in"] };
   }
 
-  if (location) {
-    where.locations = { has: location };
-  }
-
-  if (industry) {
-    where.industries = { has: industry };
-  }
-
-  if (statuses.length) {
-    const now = new Date();
-    const wantsOpen = statuses.includes("OPEN");
-    const wantsClosed = statuses.includes("CLOSED");
-    const wantsForecasted = statuses.includes("FORECASTED");
-
-    const statusClauses: Prisma.GrantWhereInput[] = [];
-
-    if (wantsOpen) {
-      // OPEN means DB status is OPEN *and* deadline hasn't passed
-      statusClauses.push({
-        status: "OPEN",
-        OR: [{ deadline: null }, { deadline: { gte: now } }],
-      });
-    }
-
-    if (wantsClosed) {
-      // CLOSED means DB status is CLOSED, or OPEN with a past deadline
-      statusClauses.push({ status: "CLOSED" }, { status: "OPEN", deadline: { lt: now } });
-    }
-
-    if (wantsForecasted) {
-      statusClauses.push({ status: "FORECASTED" });
-    }
-
-    if (statusClauses.length === 1) {
-      where.AND = [
-        ...(Array.isArray(where.AND) ? where.AND : where.AND ? [where.AND] : []),
-        statusClauses[0],
-      ];
-    } else if (statusClauses.length > 1) {
-      where.AND = [
-        ...(Array.isArray(where.AND) ? where.AND : where.AND ? [where.AND] : []),
-        { OR: statusClauses },
-      ];
-    }
-  }
+  if (location) where.locations = { has: location };
+  if (industry) where.industries = { has: industry };
+  if (statuses.length) applyStatusFilter(where, statuses);
 
   if (amountMin !== undefined && !Number.isNaN(amountMin)) {
     where.amountMax = { gte: amountMin };

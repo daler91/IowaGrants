@@ -102,6 +102,25 @@ export interface ExtractedDeadline {
  * Returns a parallel array — one result per input grant, in the same order.
  * Entries may be null if the batch failed after retries.
  */
+function parseExtractedItem(item: DeadlineExtraction): ExtractedDeadline {
+  const parsed = item.deadline ? new Date(`${item.deadline}T00:00:00Z`) : null;
+  const valid = parsed ? (validateDeadline(parsed) ?? null) : null;
+  return { deadline: valid, confidence: item.confidence, reason: item.reason };
+}
+
+function applyExtractionResults(
+  extracted: DeadlineExtraction[],
+  batchStart: number,
+  batchLength: number,
+  results: Array<ExtractedDeadline | null>,
+): void {
+  for (const item of extracted) {
+    if (item.index >= 0 && item.index < batchLength) {
+      results[batchStart + item.index] = parseExtractedItem(item);
+    }
+  }
+}
+
 export async function extractDeadlinesWithAI(
   grants: GrantData[],
   opts: { today?: Date; budget?: IntegrationBudget } = {},
@@ -138,16 +157,7 @@ export async function extractDeadlinesWithAI(
     opts.budget?.recordAICall();
     const extracted = await callClaudeForBatch(inputs, today);
     if (extracted) {
-      for (const item of extracted) {
-        if (item.index < 0 || item.index >= batch.length) continue;
-        const parsed = item.deadline ? new Date(`${item.deadline}T00:00:00Z`) : null;
-        const valid = parsed ? (validateDeadline(parsed) ?? null) : null;
-        results[batchStart + item.index] = {
-          deadline: valid,
-          confidence: item.confidence,
-          reason: item.reason,
-        };
-      }
+      applyExtractionResults(extracted, batchStart, batch.length, results);
     }
 
     if (batchStart + DEADLINE_AI_BATCH_SIZE < grants.length) {

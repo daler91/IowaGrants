@@ -58,7 +58,7 @@ function buildGrantSnippet(grant: GrantData, index: number): string {
   }
   const liveBodyText =
     grant.rawData && typeof grant.rawData === "object"
-      ? (grant.rawData as Record<string, unknown>).liveBodyText
+      ? grant.rawData.liveBodyText
       : undefined;
   if (typeof liveBodyText === "string" && liveBodyText.length > 0) {
     parts.push(`Live page excerpt: ${liveBodyText.slice(0, 1500)}`);
@@ -124,6 +124,49 @@ async function validateBatch(
  * ALL grants are validated — heuristic pre-filters in the orchestrator
  * reduce volume before grants reach this step.
  */
+const KNOWN_NON_GRANT_TYPES = new Set([
+  "awardee_announcement",
+  "news_article",
+  "info_page",
+  "expired_program",
+  "other",
+]);
+
+function isValidGrant(result: ValidationResult): boolean {
+  return (
+    result.is_real_grant &&
+    result.small_biz_eligible &&
+    !KNOWN_NON_GRANT_TYPES.has(result.content_type) &&
+    result.confidence !== "LOW"
+  );
+}
+
+function processBatchResults(
+  batch: Array<{ grant: GrantData; originalIndex: number }>,
+  results: ValidationResult[],
+  validated: GrantData[],
+): number {
+  let filtered = 0;
+  for (const result of results) {
+    const entry = batch[result.index];
+    if (!entry) continue;
+
+    if (isValidGrant(result)) {
+      validated.push(entry.grant);
+    } else {
+      filtered++;
+      log("grant-validator", `Filtered: "${entry.grant.title}"`, {
+        reason: result.reason,
+        contentType: result.content_type,
+        isRealGrant: result.is_real_grant,
+        eligible: result.small_biz_eligible,
+        confidence: result.confidence,
+      });
+    }
+  }
+  return filtered;
+}
+
 export async function validateGrants(
   grants: GrantData[],
   opts: { budget?: IntegrationBudget } = {},
@@ -133,9 +176,7 @@ export async function validateGrants(
     return grants;
   }
 
-  if (grants.length === 0) {
-    return grants;
-  }
+  if (grants.length === 0) return grants;
 
   log("grant-validator", `Validating ${grants.length} grants with AI`);
 
@@ -159,7 +200,6 @@ export async function validateGrants(
     opts.budget?.recordAICall();
     const results = await validateBatch(batch);
 
-    // Fail-closed: if validation failed after retries, skip this batch entirely
     if (results === null) {
       filtered += batch.length;
       logWarn("grant-validator", "Dropped batch due to validation failure", {
@@ -168,41 +208,8 @@ export async function validateGrants(
       continue;
     }
 
-    for (const result of results) {
-      const entry = batch[result.index];
-      if (!entry) continue;
+    filtered += processBatchResults(batch, results, validated);
 
-      // Fail-open: only reject on known non-grant content types. If content_type
-      // is missing, unexpected, or unrecognized, defer to is_real_grant instead
-      // of silently filtering on model format drift.
-      const KNOWN_NON_GRANT_TYPES = new Set([
-        "awardee_announcement",
-        "news_article",
-        "info_page",
-        "expired_program",
-        "other",
-      ]);
-      const isNonGrantType = KNOWN_NON_GRANT_TYPES.has(result.content_type);
-      if (
-        result.is_real_grant &&
-        result.small_biz_eligible &&
-        !isNonGrantType &&
-        result.confidence !== "LOW"
-      ) {
-        validated.push(entry.grant);
-      } else {
-        filtered++;
-        log("grant-validator", `Filtered: "${entry.grant.title}"`, {
-          reason: result.reason,
-          contentType: result.content_type,
-          isRealGrant: result.is_real_grant,
-          eligible: result.small_biz_eligible,
-          confidence: result.confidence,
-        });
-      }
-    }
-
-    // Brief delay between API calls
     if (i + BATCH_SIZE < grants.length) {
       await new Promise((r) => setTimeout(r, AI_CALL_DELAY_MS));
     }

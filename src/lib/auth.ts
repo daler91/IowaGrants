@@ -82,7 +82,7 @@ export async function requireAdmin(
 
   // Verify token version against DB to support revocation
   const admin = await prisma.adminUser.findUnique({ where: { id: claims.sub } });
-  if (!admin || admin.tokenVersion !== (claims.tokenVersion ?? 0)) {
+  if (admin?.tokenVersion !== (claims.tokenVersion ?? 0)) {
     throw new UnauthorizedError();
   }
 
