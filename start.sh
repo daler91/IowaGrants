@@ -13,7 +13,7 @@ fi
 
 # Resolve any previously failed migrations so migrate deploy can retry them
 echo "[start] Checking for failed migrations..."
-FAILED_MIGRATIONS=$(npx --yes prisma migrate status 2>&1 | grep "failed" | awk '{print $1}')
+FAILED_MIGRATIONS=$(npx --yes prisma migrate status 2>&1 | grep -oP '`\K[^`]+(?=`.*failed)')
 if [ -n "$FAILED_MIGRATIONS" ]; then
   for migration in $FAILED_MIGRATIONS; do
     echo "[start] Resolving failed migration: $migration"
