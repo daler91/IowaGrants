@@ -23,26 +23,35 @@ function cleanup() {
   keysToDelete.forEach((key) => hits.delete(key));
 }
 
-export function middleware(request: NextRequest) {
+/** Anti-CSRF origin check for state-changing requests. Returns a 403 response on failure, or null if OK. */
+function checkCsrfOrigin(request: NextRequest): NextResponse | null {
   const path = request.nextUrl.pathname;
-
-  // ── Anti-CSRF origin check for state-changing requests ──────────────
-  if (path.startsWith("/api/") && ["POST", "PUT", "DELETE"].includes(request.method)) {
-    // Scraper endpoint uses Bearer token auth, not cookies — skip origin check
-    if (path !== "/api/scraper") {
-      const origin = request.headers.get("origin");
-      if (!origin) {
-        return NextResponse.json({ error: "Missing origin header" }, { status: 403 });
-      }
-      try {
-        if (new URL(origin).origin !== request.nextUrl.origin) {
-          return NextResponse.json({ error: "Invalid origin" }, { status: 403 });
-        }
-      } catch {
-        return NextResponse.json({ error: "Invalid origin" }, { status: 403 });
-      }
-    }
+  if (!path.startsWith("/api/") || !["POST", "PUT", "DELETE"].includes(request.method)) {
+    return null;
   }
+  // Scraper endpoint uses Bearer token auth, not cookies — skip origin check
+  if (path === "/api/scraper") {
+    return null;
+  }
+  const origin = request.headers.get("origin");
+  if (!origin) {
+    return NextResponse.json({ error: "Missing origin header" }, { status: 403 });
+  }
+  try {
+    if (new URL(origin).origin !== request.nextUrl.origin) {
+      return NextResponse.json({ error: "Invalid origin" }, { status: 403 });
+    }
+  } catch {
+    return NextResponse.json({ error: "Invalid origin" }, { status: 403 });
+  }
+  return null;
+}
+
+export function middleware(request: NextRequest) {
+  const csrfError = checkCsrfOrigin(request);
+  if (csrfError) return csrfError;
+
+  const path = request.nextUrl.pathname;
 
   // ── Propagate request ID for correlated logging ─────────────────────
   const requestId = request.headers.get("x-request-id") || crypto.randomUUID();
