@@ -168,48 +168,105 @@ export function toText(
   grants: GrantExportRow[],
   filterSummary: string,
 ): ExportResult & { text: string } {
+  const sorted = sortForDecisionMaking(grants);
+  const stats = buildSummaryStats(sorted);
   const lines: string[] = [];
-  const headerTitle = "IOWA GRANTS EXPORT";
-  lines.push(headerTitle);
-  lines.push("=".repeat(headerTitle.length));
-  lines.push(
-    `Date: ${new Date().toLocaleDateString("en-US", {
-      weekday: "long",
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-    })}`,
-  );
-  lines.push(`Filters: ${filterSummary}`);
-  lines.push(`Grants: ${grants.length}`);
+  const sep = "═".repeat(60);
+  const thinSep = "─".repeat(60);
+  const today = new Date().toLocaleDateString("en-US", {
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
+
+  // ── Header ──
+  lines.push(sep);
+  lines.push("          IOWA GRANTS — OPPORTUNITY REPORT");
+  lines.push(sep);
+  lines.push(`  Date:      ${today}`);
+  lines.push(`  Filters:   ${filterSummary}`);
+  lines.push(`  Grants:    ${stats.total} total`);
   lines.push("");
 
-  grants.forEach((g, i) => {
-    const title = `${i + 1}. ${g.title}`;
-    lines.push(title);
-    lines.push("-".repeat(Math.min(title.length, 72)));
-    lines.push(`  Type:       ${g.grantType}`);
-    lines.push(`  Status:     ${g.status}`);
-    lines.push(`  Deadline:   ${formatDeadline(g.deadline)}`);
-    if (g.amount) lines.push(`  Amount:     ${g.amount}`);
-    lines.push(`  Stage:      ${prettyValue(g.businessStage)}`);
-    if (g.gender && g.gender !== "ANY" && g.gender !== "GENERAL") {
-      lines.push(`  Focus:      ${prettyValue(g.gender)}`);
-    }
-    if (g.locations.length) lines.push(`  Locations:  ${g.locations.join(", ")}`);
-    if (g.eligibleExpenses.length) {
-      lines.push(`  Uses:       ${g.eligibleExpenses.map((e) => e.label).join(", ")}`);
+  // ── Executive Summary ──
+  lines.push("  QUICK SUMMARY");
+  lines.push(`    Open:          ${stats.openCount} grant${stats.openCount === 1 ? "" : "s"}`);
+  lines.push(`    Forecasted:    ${stats.forecastedCount} grant${stats.forecastedCount === 1 ? "" : "s"}`);
+  lines.push(`    Closed:        ${stats.closedCount} grant${stats.closedCount === 1 ? "" : "s"}`);
+  if (stats.closingSoon.length > 0) {
+    lines.push(`    Closing soon:  ${stats.closingSoon.length} grant${stats.closingSoon.length === 1 ? "" : "s"} (within 30 days)`);
+  }
+  lines.push("");
+  const typeParts = Object.entries(stats.byType).map(([t, c]) => `${prettyValue(t)} (${c})`);
+  if (typeParts.length) {
+    lines.push(`    By type:  ${typeParts.join(" | ")}`);
+    lines.push("");
+  }
+
+  // ── Closing Soon callout ──
+  if (stats.closingSoon.length > 0) {
+    lines.push("  CLOSING SOON — ACTION REQUIRED");
+    for (const g of stats.closingSoon) {
+      const days = daysUntil(g.deadline!);
+      lines.push(`    • "${g.title}" — Apply by ${formatDeadline(g.deadline)} (${days} day${days === 1 ? "" : "s"})`);
     }
     lines.push("");
+  }
+
+  lines.push(sep);
+  lines.push("");
+
+  // ── Per-grant cards ──
+  sorted.forEach((g, i) => {
+    lines.push(thinSep);
+    lines.push(`  ${i + 1}. ${g.title}`);
+    lines.push(`     ${prettyValue(g.grantType)}  |  ${prettyValue(g.status)}  |  ${prettyValue(g.businessStage)}`);
+    lines.push(thinSep);
+
+    const urgency = deadlineUrgency(g.deadline);
+    const deadlineStr = formatDeadline(g.deadline) + (urgency ? ` [${urgency}]` : "");
+    lines.push(`  Deadline:      ${deadlineStr}`);
+    if (g.amount) lines.push(`  Amount:        ${g.amount}`);
+    if (g.locations.length) lines.push(`  Locations:     ${g.locations.join(", ")}`);
+    if (g.eligibleExpenses.length) {
+      lines.push(`  Use of Funds:  ${g.eligibleExpenses.map((e) => e.label).join(", ")}`);
+    }
+    if (g.gender && g.gender !== "ANY" && g.gender !== "GENERAL") {
+      lines.push(`  Focus:         ${prettyValue(g.gender)}`);
+    }
+    lines.push("");
+
+    if (g.eligibility) {
+      lines.push("  Eligibility:");
+      const wrapped = softWrap(g.eligibility, 72);
+      for (const wline of wrapped) lines.push(`    ${wline}`);
+      lines.push("");
+    }
+
+    const cats = formatCategories(g.categories);
+    if (cats) lines.push(`  Categories:    ${cats}`);
+    if (g.industries && g.industries.length) {
+      lines.push(`  Industries:    ${g.industries.join(", ")}`);
+    }
+    if (cats || (g.industries && g.industries.length)) lines.push("");
+
     lines.push("  Description:");
-    // Soft-wrap description at ~80 chars, indented.
-    const wrapped = softWrap(g.description, 76);
+    const wrapped = softWrap(g.description, 72);
     for (const wline of wrapped) lines.push(`    ${wline}`);
     lines.push("");
-    lines.push(`  Source: ${g.sourceName}`);
-    lines.push(`  Link:   ${g.sourceUrl}`);
+
+    lines.push(`  Source:      ${g.sourceName}`);
+    lines.push(`  Link:        ${g.sourceUrl}`);
+    if (g.pdfUrl) lines.push(`  Apply PDF:   ${g.pdfUrl}`);
     lines.push("");
   });
+
+  // ── Footer ──
+  lines.push(sep);
+  lines.push(`  End of report — ${stats.total} grant${stats.total === 1 ? "" : "s"} exported`);
+  lines.push(`  Generated by Iowa Grants on ${today}`);
+  lines.push(sep);
 
   const text = lines.join("\n");
   return {
@@ -218,6 +275,85 @@ export function toText(
     blob: new Blob([text], { type: "text/plain;charset=utf-8" }),
     text,
   };
+}
+
+// ── Decision-making helpers ────────────────────────────────────────────
+
+const STATUS_SORT_ORDER: Record<string, number> = { OPEN: 0, FORECASTED: 1, CLOSED: 2 };
+
+function sortForDecisionMaking(grants: GrantExportRow[]): GrantExportRow[] {
+  return [...grants].sort((a, b) => {
+    const sa = STATUS_SORT_ORDER[a.status] ?? 9;
+    const sb = STATUS_SORT_ORDER[b.status] ?? 9;
+    if (sa !== sb) return sa - sb;
+    // Within same status, sort by deadline ascending (nulls last)
+    const da = a.deadline ? new Date(a.deadline).getTime() : Infinity;
+    const db = b.deadline ? new Date(b.deadline).getTime() : Infinity;
+    return da - db;
+  });
+}
+
+interface SummaryStats {
+  total: number;
+  openCount: number;
+  forecastedCount: number;
+  closedCount: number;
+  closingSoon: GrantExportRow[];
+  byType: Record<string, number>;
+}
+
+function buildSummaryStats(grants: GrantExportRow[]): SummaryStats {
+  const now = Date.now();
+  const thirtyDays = 30 * 24 * 60 * 60 * 1000;
+  const stats: SummaryStats = {
+    total: grants.length,
+    openCount: 0,
+    forecastedCount: 0,
+    closedCount: 0,
+    closingSoon: [],
+    byType: {},
+  };
+  for (const g of grants) {
+    if (g.status === "OPEN") stats.openCount++;
+    else if (g.status === "FORECASTED") stats.forecastedCount++;
+    else if (g.status === "CLOSED") stats.closedCount++;
+
+    stats.byType[g.grantType] = (stats.byType[g.grantType] ?? 0) + 1;
+
+    if (g.status === "OPEN" && g.deadline) {
+      const dl = new Date(g.deadline).getTime();
+      if (!Number.isNaN(dl) && dl >= now && dl - now <= thirtyDays) {
+        stats.closingSoon.push(g);
+      }
+    }
+  }
+  // Sort closing-soon by deadline ascending
+  stats.closingSoon.sort((a, b) => {
+    return new Date(a.deadline!).getTime() - new Date(b.deadline!).getTime();
+  });
+  return stats;
+}
+
+function deadlineUrgency(deadline: string | null | undefined): string | null {
+  if (!deadline) return null;
+  const dl = new Date(deadline).getTime();
+  if (Number.isNaN(dl)) return null;
+  const days = Math.ceil((dl - Date.now()) / (24 * 60 * 60 * 1000));
+  if (days < 0) return "EXPIRED";
+  if (days <= 7) return "THIS WEEK";
+  if (days <= 14) return "NEXT WEEK";
+  if (days <= 30) return "THIS MONTH";
+  if (days <= 60) return "UPCOMING";
+  return null;
+}
+
+function daysUntil(deadline: string): number {
+  return Math.ceil((new Date(deadline).getTime() - Date.now()) / (24 * 60 * 60 * 1000));
+}
+
+function formatCategories(categories?: { name: string; label?: string }[]): string {
+  if (!categories || categories.length === 0) return "";
+  return categories.map((c) => c.label ?? prettyValue(c.name)).join(", ");
 }
 
 function softWrap(input: string, width: number): string[] {
@@ -261,6 +397,8 @@ const STATUS_PILL_COLORS: Record<string, PillColor> = {
 const DEFAULT_PILL: PillColor = { fill: [243, 244, 246], text: [55, 65, 81] };
 
 export function toPDF(grants: GrantExportRow[], filterSummary: string): ExportResult {
+  const sorted = sortForDecisionMaking(grants);
+  const stats = buildSummaryStats(sorted);
   const doc = new jsPDF({ unit: "pt", format: "letter" });
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
@@ -268,39 +406,8 @@ export function toPDF(grants: GrantExportRow[], filterSummary: string): ExportRe
   const contentWidth = pageWidth - margin * 2;
   let y = margin;
 
-  // ── Header ────────────────────────────────────────────────
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(20);
-  doc.setTextColor(30, 64, 175); // primary blue
-  doc.text("Iowa Grants Export", margin, y);
-  y += 24;
-
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(10);
-  doc.setTextColor(100, 116, 139); // slate-500
-  const today = new Date().toLocaleDateString("en-US", {
-    weekday: "long",
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  });
-  doc.text(`Generated: ${today}`, margin, y);
-  y += 14;
-
-  const filterLines = doc.splitTextToSize(`Filters: ${filterSummary}`, contentWidth) as string[];
-  doc.text(filterLines, margin, y);
-  y += filterLines.length * 12 + 2;
-  doc.text(`${grants.length} grant${grants.length === 1 ? "" : "s"}`, margin, y);
-  y += 18;
-
-  // Divider
-  doc.setDrawColor(226, 232, 240); // slate-200
-  doc.setLineWidth(1);
-  doc.line(margin, y, pageWidth - margin, y);
-  y += 20;
-
   const ensureSpace = (needed: number) => {
-    if (y + needed > pageHeight - margin) {
+    if (y + needed > pageHeight - margin - 20) {
       doc.addPage();
       y = margin;
     }
@@ -321,43 +428,208 @@ export function toPDF(grants: GrantExportRow[], filterSummary: string): ExportRe
     return w;
   };
 
-  for (let i = 0; i < grants.length; i++) {
-    const g = grants[i];
+  // ── Header ────────────────────────────────────────────────
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(22);
+  doc.setTextColor(30, 64, 175); // primary blue
+  doc.text("Iowa Grants — Opportunity Report", margin, y);
+  y += 26;
 
-    ensureSpace(90);
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(10);
+  doc.setTextColor(100, 116, 139); // slate-500
+  const today = new Date().toLocaleDateString("en-US", {
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
+  doc.text(`Generated: ${today}`, margin, y);
+  y += 14;
+
+  const filterLines = doc.splitTextToSize(`Filters: ${filterSummary}`, contentWidth) as string[];
+  doc.text(filterLines, margin, y);
+  y += filterLines.length * 12 + 4;
+
+  // Divider
+  doc.setDrawColor(226, 232, 240); // slate-200
+  doc.setLineWidth(1);
+  doc.line(margin, y, pageWidth - margin, y);
+  y += 16;
+
+  // ── Executive Summary Box ────────────────────────────────
+  const summaryBoxTop = y;
+  const summaryPadding = 12;
+
+  // Pre-calculate box content height
+  let summaryContentH = 0;
+  summaryContentH += 16; // "Executive Summary" heading
+  summaryContentH += 14; // status line
+  summaryContentH += 14; // type line
+  if (stats.closingSoon.length > 0) summaryContentH += 16; // closing soon line
+  const boxH = summaryContentH + summaryPadding * 2;
+
+  // Draw background
+  doc.setFillColor(248, 250, 252); // slate-50
+  doc.roundedRect(margin, summaryBoxTop, contentWidth, boxH, 6, 6, "F");
+  doc.setDrawColor(226, 232, 240);
+  doc.setLineWidth(0.5);
+  doc.roundedRect(margin, summaryBoxTop, contentWidth, boxH, 6, 6, "S");
+
+  y = summaryBoxTop + summaryPadding;
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(12);
+  doc.setTextColor(15, 23, 42); // slate-900
+  doc.text("Executive Summary", margin + summaryPadding, y + 10);
+  y += 18;
+
+  // Status breakdown
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(10);
+  doc.setTextColor(51, 65, 85); // slate-700
+  const statusLine = `${stats.total} grants total:  ${stats.openCount} Open  |  ${stats.forecastedCount} Forecasted  |  ${stats.closedCount} Closed`;
+  doc.text(statusLine, margin + summaryPadding, y + 10);
+  y += 14;
+
+  // Type breakdown
+  const typeParts = Object.entries(stats.byType)
+    .map(([t, c]) => `${prettyValue(t)} (${c})`)
+    .join("  |  ");
+  doc.text(`By type:  ${typeParts}`, margin + summaryPadding, y + 10);
+  y += 14;
+
+  // Closing soon callout
+  if (stats.closingSoon.length > 0) {
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(146, 64, 14); // amber-800
+    doc.text(
+      `${stats.closingSoon.length} grant${stats.closingSoon.length === 1 ? "" : "s"} closing within 30 days — action required`,
+      margin + summaryPadding,
+      y + 10,
+    );
+    y += 16;
+  }
+
+  y = summaryBoxTop + boxH + 16;
+
+  // ── Grant Index (if >10 grants) ──────────────────────────
+  if (sorted.length > 10) {
+    ensureSpace(60);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(12);
+    doc.setTextColor(15, 23, 42);
+    doc.text("Grant Index", margin, y);
+    y += 16;
+
+    doc.setFontSize(8);
+    for (let i = 0; i < sorted.length; i++) {
+      ensureSpace(11);
+      const g = sorted[i];
+      const indexStatus = prettyValue(g.status);
+      const indexDeadline = formatDeadline(g.deadline);
+      const indexLine = `${i + 1}. ${g.title}`;
+      const truncTitle = indexLine.length > 55 ? indexLine.slice(0, 52) + "..." : indexLine;
+
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(51, 65, 85);
+      doc.text(truncTitle, margin, y);
+
+      // Status in its color
+      const sColors = STATUS_PILL_COLORS[g.status] ?? DEFAULT_PILL;
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(sColors.text[0], sColors.text[1], sColors.text[2]);
+      doc.text(indexStatus, margin + 290, y);
+
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(100, 116, 139);
+      doc.text(indexDeadline, margin + 370, y);
+      y += 11;
+    }
+
+    y += 10;
+    doc.setDrawColor(226, 232, 240);
+    doc.setLineWidth(1);
+    doc.line(margin, y, pageWidth - margin, y);
+    y += 16;
+  }
+
+  // ── Per-grant cards ──────────────────────────────────────
+  const labelCol = margin + 16;
+  const valueCol = margin + 100;
+  const cardContentWidth = contentWidth - 32;
+
+  for (let i = 0; i < sorted.length; i++) {
+    const g = sorted[i];
+
+    ensureSpace(120);
+
+    // ── Card background ──
+    const cardTop = y - 6;
+    // We'll draw the background after calculating height — use a bookmark approach
+    // For simplicity, draw a light background first with estimated height, then overlay text
+    const estimatedCardH = 140 + (g.eligibility ? 40 : 0) + (g.categories?.length ? 14 : 0) + (g.industries?.length ? 14 : 0);
+    doc.setFillColor(249, 250, 251); // gray-50
+    doc.roundedRect(margin - 4, cardTop, contentWidth + 8, Math.min(estimatedCardH, pageHeight - margin - cardTop - 20), 6, 6, "F");
 
     // Title
     doc.setFont("helvetica", "bold");
     doc.setFontSize(13);
     doc.setTextColor(15, 23, 42); // slate-900
-    const titleLines = doc.splitTextToSize(`${i + 1}. ${g.title}`, contentWidth) as string[];
-    doc.text(titleLines, margin, y);
+    const titleLines = doc.splitTextToSize(`${i + 1}. ${g.title}`, contentWidth - 16) as string[];
+    doc.text(titleLines, margin + 8, y);
     y += titleLines.length * 16;
 
-    // Pills: type + status
+    // Pills: type + status + urgency
     const typeColors = TYPE_PILL_COLORS[g.grantType] ?? DEFAULT_PILL;
     const statusColors = STATUS_PILL_COLORS[g.status] ?? DEFAULT_PILL;
+    let pillX = margin + 8;
     const pillY = y;
-    const typeW = drawPill(g.grantType, margin, pillY, typeColors);
-    drawPill(g.status, margin + typeW + 6, pillY, statusColors);
+    pillX += drawPill(prettyValue(g.grantType), pillX, pillY, typeColors) + 6;
+    pillX += drawPill(prettyValue(g.status), pillX, pillY, statusColors) + 6;
+
+    const urgency = deadlineUrgency(g.deadline);
+    if (urgency) {
+      const urgencyColor: PillColor =
+        urgency === "EXPIRED"
+          ? { fill: [254, 226, 226], text: [153, 27, 27] }
+          : urgency === "THIS WEEK" || urgency === "NEXT WEEK"
+            ? { fill: [254, 243, 199], text: [146, 64, 14] }
+            : { fill: [219, 234, 254], text: [30, 64, 175] };
+      drawPill(urgency, pillX, pillY, urgencyColor);
+    }
     y += 22;
 
     // Meta rows
-    doc.setFont("helvetica", "normal");
     doc.setFontSize(10);
-    doc.setTextColor(51, 65, 85); // slate-700
 
     const metaRow = (label: string, value: string) => {
       ensureSpace(14);
       doc.setFont("helvetica", "bold");
-      doc.text(`${label}:`, margin, y);
+      doc.setTextColor(71, 85, 105); // slate-600
+      doc.text(`${label}:`, labelCol, y);
       doc.setFont("helvetica", "normal");
-      const valueLines = doc.splitTextToSize(value, contentWidth - 80) as string[];
-      doc.text(valueLines, margin + 70, y);
+      doc.setTextColor(51, 65, 85); // slate-700
+      const valueLines = doc.splitTextToSize(value, cardContentWidth - 90) as string[];
+      doc.text(valueLines, valueCol, y);
       y += valueLines.length * 13;
     };
 
-    metaRow("Deadline", formatDeadline(g.deadline));
+    // Deadline with urgency highlight
+    const deadlineDisplay = formatDeadline(g.deadline);
+    if (urgency && (urgency === "THIS WEEK" || urgency === "NEXT WEEK" || urgency === "EXPIRED")) {
+      ensureSpace(14);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(71, 85, 105);
+      doc.text("Deadline:", labelCol, y);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(146, 64, 14); // amber-800 for urgency
+      doc.text(deadlineDisplay, valueCol, y);
+      y += 13;
+    } else {
+      metaRow("Deadline", deadlineDisplay);
+    }
+
     if (g.amount) metaRow("Amount", g.amount);
     metaRow("Stage", prettyValue(g.businessStage));
     if (g.gender && g.gender !== "ANY" && g.gender !== "GENERAL") {
@@ -365,22 +637,47 @@ export function toPDF(grants: GrantExportRow[], filterSummary: string): ExportRe
     }
     if (g.locations.length) metaRow("Locations", g.locations.join(", "));
     if (g.eligibleExpenses.length) {
-      metaRow("Uses", g.eligibleExpenses.map((e) => e.label).join(", "));
+      metaRow("Use of Funds", g.eligibleExpenses.map((e) => e.label).join(", "));
     }
+
+    // Eligibility
+    if (g.eligibility) {
+      y += 4;
+      ensureSpace(30);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(10);
+      doc.setTextColor(15, 23, 42);
+      doc.text("Eligibility", labelCol, y);
+      y += 13;
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(71, 85, 105);
+      const eligLines = doc.splitTextToSize(g.eligibility, cardContentWidth) as string[];
+      for (const line of eligLines) {
+        ensureSpace(12);
+        doc.text(line, labelCol, y);
+        y += 12;
+      }
+    }
+
+    // Categories & Industries
+    const cats = formatCategories(g.categories);
+    if (cats) metaRow("Categories", cats);
+    if (g.industries && g.industries.length) metaRow("Industries", g.industries.join(", "));
 
     // Description
     y += 4;
     ensureSpace(30);
     doc.setFont("helvetica", "bold");
     doc.setFontSize(10);
-    doc.text("Description", margin, y);
+    doc.setTextColor(15, 23, 42);
+    doc.text("Description", labelCol, y);
     y += 13;
     doc.setFont("helvetica", "normal");
     doc.setTextColor(71, 85, 105); // slate-600
-    const descLines = doc.splitTextToSize(g.description, contentWidth) as string[];
+    const descLines = doc.splitTextToSize(g.description, cardContentWidth) as string[];
     for (const line of descLines) {
       ensureSpace(12);
-      doc.text(line, margin, y);
+      doc.text(line, labelCol, y);
       y += 12;
     }
 
@@ -388,24 +685,35 @@ export function toPDF(grants: GrantExportRow[], filterSummary: string): ExportRe
     y += 4;
     ensureSpace(14);
     doc.setFont("helvetica", "bold");
-    doc.setTextColor(51, 65, 85);
-    doc.text("Source:", margin, y);
+    doc.setTextColor(71, 85, 105);
+    doc.text("Source:", labelCol, y);
     doc.setFont("helvetica", "normal");
     doc.setTextColor(30, 64, 175); // link blue
-    const sourceLabel = `${g.sourceName}`;
-    doc.text(sourceLabel, margin + 46, y);
+    doc.text(g.sourceName, valueCol, y);
     y += 12;
     ensureSpace(14);
-    const urlLines = doc.splitTextToSize(g.sourceUrl, contentWidth) as string[];
+    const urlLines = doc.splitTextToSize(g.sourceUrl, cardContentWidth) as string[];
     for (const line of urlLines) {
       ensureSpace(12);
-      doc.textWithLink(line, margin, y, { url: g.sourceUrl });
+      doc.textWithLink(line, labelCol, y, { url: g.sourceUrl });
+      y += 12;
+    }
+
+    // Application PDF link
+    if (g.pdfUrl) {
+      ensureSpace(14);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(71, 85, 105);
+      doc.text("Apply PDF:", labelCol, y);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(30, 64, 175);
+      doc.textWithLink(g.pdfUrl, valueCol, y, { url: g.pdfUrl });
       y += 12;
     }
 
     // Separator between grants
-    y += 8;
-    if (i < grants.length - 1) {
+    y += 12;
+    if (i < sorted.length - 1) {
       ensureSpace(12);
       doc.setDrawColor(226, 232, 240);
       doc.setLineWidth(0.5);
@@ -421,9 +729,12 @@ export function toPDF(grants: GrantExportRow[], filterSummary: string): ExportRe
     doc.setFont("helvetica", "normal");
     doc.setFontSize(9);
     doc.setTextColor(148, 163, 184); // slate-400
-    doc.text(`Iowa Grants Export — Page ${p} of ${pageCount}`, pageWidth / 2, pageHeight - 20, {
-      align: "center",
-    });
+    doc.text(
+      `Iowa Grants — Opportunity Report  |  Page ${p} of ${pageCount}`,
+      pageWidth / 2,
+      pageHeight - 20,
+      { align: "center" },
+    );
   }
 
   const blob = doc.output("blob");
