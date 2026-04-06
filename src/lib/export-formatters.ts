@@ -178,10 +178,12 @@ export function toText(
   });
 
   // ── Compact header ──
-  lines.push("IOWA GRANT OPPORTUNITIES");
-  lines.push("========================");
-  lines.push(`${today} | ${stats.total} grants | ${filterSummary}`);
-  lines.push("");
+  lines.push(
+    "IOWA GRANT OPPORTUNITIES",
+    "========================",
+    `${today} | ${stats.total} grants | ${filterSummary}`,
+    "",
+  );
 
   // ── One-line summary ──
   const summaryParts = [`${stats.openCount} open`, `${stats.forecastedCount} forecasted`, `${stats.closedCount} closed`];
@@ -212,12 +214,12 @@ export function toText(
 
     // Eligibility — truncated to one line
     if (g.eligibility) {
-      const elig = g.eligibility.replace(/\s+/g, " ").trim();
+      const elig = g.eligibility.replaceAll(/\s+/g, " ").trim();
       lines.push(`   Eligibility: ${elig.length > 120 ? elig.slice(0, 117) + "..." : elig}`);
     }
 
     // Brief description — one line
-    const desc = g.description.replace(/\s+/g, " ").trim();
+    const desc = g.description.replaceAll(/\s+/g, " ").trim();
     lines.push(`   ${desc.length > 120 ? desc.slice(0, 117) + "..." : desc}`);
 
     lines.push(`   Link: ${g.sourceUrl}`);
@@ -226,8 +228,7 @@ export function toText(
   });
 
   // ── Footer ──
-  lines.push("---");
-  lines.push("Full details in the attached PDF.");
+  lines.push("---", "Full details in the attached PDF.");
 
   const text = lines.join("\n");
   return {
@@ -634,7 +635,7 @@ export function toPDF(grants: GrantExportRow[], filterSummary: string): ExportRe
     doc.setFont("helvetica", "normal");
     doc.setFontSize(10);
     doc.setTextColor(71, 85, 105);
-    const rawDesc = g.description.replace(/\s+/g, " ").trim();
+    const rawDesc = g.description.replaceAll(/\s+/g, " ").trim();
     const truncDesc = rawDesc.length > DESC_MAX_CHARS ? rawDesc.slice(0, DESC_MAX_CHARS - 3) + "..." : rawDesc;
     const descLines = doc.splitTextToSize(truncDesc, cardContentWidth) as string[];
     for (const line of descLines) {
