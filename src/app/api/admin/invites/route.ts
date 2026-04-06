@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { randomBytes, createHash } from "node:crypto";
 import { prisma } from "@/lib/db";
 import { requireAdmin, UnauthorizedError } from "@/lib/auth";
+import { errorResponse, log } from "@/lib/errors";
 import { parseJson } from "@/lib/http/parse-json";
 import { inviteSchema } from "@/lib/http/schemas";
 
@@ -28,7 +29,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ invites });
   } catch (err) {
     if (err instanceof UnauthorizedError) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return errorResponse(request, 401, "Unauthorized", "UNAUTHORIZED");
     }
     throw err;
   }
@@ -45,10 +46,7 @@ export async function POST(request: NextRequest) {
 
     const existing = await prisma.adminUser.findUnique({ where: { email } });
     if (existing) {
-      return NextResponse.json(
-        { error: "An admin with this email already exists" },
-        { status: 409 },
-      );
+      return errorResponse(request, 409, "An admin with this email already exists", "ADMIN_EXISTS");
     }
 
     const rawToken = randomBytes(32).toString("hex");
@@ -64,6 +62,8 @@ export async function POST(request: NextRequest) {
       },
     });
 
+    log("admin-audit", "Invite created", { admin: admin.email, invitedEmail: email });
+
     // Return raw token only once — it is stored as a SHA-256 hash
     return NextResponse.json({
       invite: {
@@ -75,7 +75,7 @@ export async function POST(request: NextRequest) {
     });
   } catch (err) {
     if (err instanceof UnauthorizedError) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return errorResponse(request, 401, "Unauthorized", "UNAUTHORIZED");
     }
     throw err;
   }

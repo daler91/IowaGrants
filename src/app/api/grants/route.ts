@@ -4,7 +4,7 @@ import { requireAdmin, UnauthorizedError } from "@/lib/auth";
 import { GRANT_INCLUDE } from "@/lib/constants";
 import { parsePagination } from "@/lib/api-utils";
 import { buildGrantWhere } from "@/lib/grant-query";
-import { logError } from "@/lib/errors";
+import { errorResponse, log, logError } from "@/lib/errors";
 import { parseJson } from "@/lib/http/parse-json";
 import { deleteIdsSchema } from "@/lib/http/schemas";
 
@@ -36,13 +36,13 @@ export async function GET(request: NextRequest) {
     return response;
   } catch (error) {
     logError("grants-api", "Failed to fetch grants", error);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    return errorResponse(request, 500, "Internal server error");
   }
 }
 
 export async function DELETE(request: NextRequest) {
   try {
-    await requireAdmin(request);
+    const admin = await requireAdmin(request);
 
     const result = await parseJson(request, deleteIdsSchema);
     if (result.error) return result.error;
@@ -53,12 +53,14 @@ export async function DELETE(request: NextRequest) {
       where: { id: { in: ids } },
     });
 
+    log("admin-audit", "Grants deleted", { admin: admin.email, deleted: deleteResult.count, ids });
+
     return NextResponse.json({ deleted: deleteResult.count });
   } catch (err) {
     if (err instanceof UnauthorizedError) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return errorResponse(request, 401, "Unauthorized", "UNAUTHORIZED");
     }
     logError("grants-api", "Failed to delete grants", err);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    return errorResponse(request, 500, "Internal server error");
   }
 }

@@ -3,7 +3,7 @@ import { prisma } from "@/lib/db";
 import { Prisma } from "@prisma/client";
 import { requireAdmin, UnauthorizedError } from "@/lib/auth";
 import { GRANT_INCLUDE } from "@/lib/constants";
-import { logError } from "@/lib/errors";
+import { errorResponse, log, logError } from "@/lib/errors";
 import { parseJson } from "@/lib/http/parse-json";
 import { grantUpdateSchema } from "@/lib/http/schemas";
 import { z } from "zod";
@@ -88,7 +88,7 @@ function buildUpdateData(body: GrantUpdatePayload) {
   return { data, parsedDeadline };
 }
 
-export async function GET(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
 
@@ -98,19 +98,19 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
     });
 
     if (!grant) {
-      return NextResponse.json({ error: "Grant not found" }, { status: 404 });
+      return errorResponse(request, 404, "Grant not found", "NOT_FOUND");
     }
 
     return NextResponse.json(grant);
   } catch (error) {
     logError("grants-api", "Failed to fetch grant", error);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    return errorResponse(request, 500, "Internal server error");
   }
 }
 
 export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    await requireAdmin(request);
+    const admin = await requireAdmin(request);
 
     const result = await parseJson(request, grantUpdateSchema);
     if (result.error) return result.error;
@@ -119,14 +119,14 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
 
     const existing = await prisma.grant.findUnique({ where: { id } });
     if (!existing) {
-      return NextResponse.json({ error: "Grant not found" }, { status: 404 });
+      return errorResponse(request, 404, "Grant not found", "NOT_FOUND");
     }
 
     const body = result.data;
     const { data, parsedDeadline } = buildUpdateData(body);
 
     if (parsedDeadline.error) {
-      return NextResponse.json({ error: parsedDeadline.error }, { status: 400 });
+      return errorResponse(request, 400, parsedDeadline.error, "INVALID_DEADLINE");
     }
 
     if (parsedDeadline.shouldSet) {
@@ -134,7 +134,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     }
 
     if (Object.keys(data).length === 0) {
-      return NextResponse.json({ error: "No valid fields to update" }, { status: 400 });
+      return errorResponse(request, 400, "No valid fields to update", "EMPTY_UPDATE");
     }
 
     const updated = await prisma.grant.update({
@@ -143,18 +143,22 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       include: GRANT_INCLUDE,
     });
 
+    log("admin-audit", "Grant updated", { admin: admin.email, grantId: id });
+
     return NextResponse.json(updated);
   } catch (error) {
     if (error instanceof UnauthorizedError) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return errorResponse(request, 401, "Unauthorized", "UNAUTHORIZED");
     }
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
-      return NextResponse.json(
-        { error: "A grant with this source URL already exists" },
-        { status: 409 },
+      return errorResponse(
+        request,
+        409,
+        "A grant with this source URL already exists",
+        "DUPLICATE_SOURCE",
       );
     }
     logError("grants-api", "Failed to update grant", error);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    return errorResponse(request, 500, "Internal server error");
   }
 }
