@@ -193,12 +193,12 @@ function ExportPageInner() {
 
   const handleOpenInEmail = () => {
     if (!textOutput) return;
-    window.location.href = buildMailto(textOutput, previewCount ?? 0);
+    globalThis.location.href = buildMailto(textOutput, previewCount ?? 0);
   };
 
   const handleCopyShareLink = async () => {
     try {
-      await navigator.clipboard.writeText(window.location.href);
+      await navigator.clipboard.writeText(globalThis.location.href);
       setShareStatus("copied");
       setTimeout(() => setShareStatus("idle"), 2000);
     } catch {
@@ -213,6 +213,21 @@ function ExportPageInner() {
     if (format === "json") return "Building JSON…";
     return "Building text…";
   })();
+
+  let previewSummary: JSX.Element | null = null;
+  if (countLoading) {
+    previewSummary = <span className="text-[var(--muted)]">Counting matching grants…</span>;
+  } else if (previewCount !== null) {
+    const pluralSuffix = previewCount === 1 ? "" : "s";
+    previewSummary = (
+      <span className="text-[var(--foreground)]">
+        <strong>{previewCount}</strong> grant{pluralSuffix} match your filters
+        {previewCount > 1000 && (
+          <span className="text-amber-700"> — only the first 1000 will be exported</span>
+        )}
+      </span>
+    );
+  }
 
   return (
     <div>
@@ -282,19 +297,7 @@ function ExportPageInner() {
               <div className="text-sm text-[var(--muted)] mb-1">Filters</div>
               <div className="text-sm text-[var(--foreground)]">{filterSummary}</div>
             </div>
-            <div className="mb-4 text-sm">
-              {countLoading ? (
-                <span className="text-[var(--muted)]">Counting matching grants…</span>
-              ) : previewCount !== null ? (
-                <span className="text-[var(--foreground)]">
-                  <strong>{previewCount}</strong> grant{previewCount === 1 ? "" : "s"} match your
-                  filters
-                  {previewCount > 1000 && (
-                    <span className="text-amber-700"> — only the first 1000 will be exported</span>
-                  )}
-                </span>
-              ) : null}
-            </div>
+            <div className="mb-4 text-sm">{previewSummary}</div>
 
             {truncated && (
               <div className="mb-4 p-3 rounded-lg bg-amber-50 border border-amber-200 text-sm text-amber-800">

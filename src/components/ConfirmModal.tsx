@@ -42,21 +42,24 @@ export default function ConfirmModal({
   if (!open) return null;
 
   return (
-    <div
-      role="presentation"
-      className="fixed inset-0 z-50 flex items-center justify-center"
-      onClick={() => { if (!loading) onCancel(); }}
-    >
-      <div className="absolute inset-0 bg-black/40" />
-      <div
-        role="dialog"
-        aria-modal="true"
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <button
+        type="button"
+        aria-label="Close confirmation modal"
+        className="absolute inset-0 bg-black/40"
+        disabled={loading}
+        onClick={onCancel}
+      />
+      <dialog
+        open
         aria-labelledby="confirm-modal-title"
         className="relative bg-white rounded-lg border border-[var(--border)] p-6 shadow-xl max-w-md w-full mx-4"
         onClick={(e: React.MouseEvent) => e.stopPropagation()}
-        onKeyDown={(e: React.KeyboardEvent) => e.stopPropagation()}
       >
-        <h2 id="confirm-modal-title" className="text-lg font-semibold text-[var(--foreground)] mb-2">
+        <h2
+          id="confirm-modal-title"
+          className="text-lg font-semibold text-[var(--foreground)] mb-2"
+        >
           {title}
         </h2>
         <p className="text-sm text-[var(--muted)] mb-6">{message}</p>
@@ -77,7 +80,7 @@ export default function ConfirmModal({
             {loading ? "Deleting..." : confirmLabel}
           </button>
         </div>
-      </div>
+      </dialog>
     </div>
   );
 }
