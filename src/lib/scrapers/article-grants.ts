@@ -141,6 +141,22 @@ function toGrantData(raw: RawGrant, page: ArticleGrantPage): GrantData | null {
 // Dedup + URL health check
 // ---------------------------------------------------------------------------
 
+async function resolveHealthyUrl(
+  sourceUrl: string,
+  candidates: string[],
+  fallbackUrl: string,
+): Promise<string> {
+  const isHealthy = await checkUrlHealth(sourceUrl);
+  if (isHealthy) return sourceUrl;
+
+  for (const candidate of candidates) {
+    if (candidate === sourceUrl || isGenericHomepage(candidate)) continue;
+    if (await checkUrlHealth(candidate)) return candidate;
+  }
+
+  return fallbackUrl;
+}
+
 async function collectNewGrants(
   rawGrants: RawGrant[],
   page: ArticleGrantPage,
@@ -157,23 +173,11 @@ async function collectNewGrants(
     if (seenUrls.has(grant.sourceUrl) || seenTitles.has(titleKey)) continue;
 
     if (grant.sourceUrl !== page.url) {
-      const isHealthy = await checkUrlHealth(grant.sourceUrl);
-      if (!isHealthy) {
-        const candidates = raw.candidateUrls || [];
-        let foundHealthy = false;
-        for (const candidate of candidates) {
-          if (candidate === grant.sourceUrl || isGenericHomepage(candidate)) continue;
-          const candidateHealthy = await checkUrlHealth(candidate);
-          if (candidateHealthy) {
-            grant.sourceUrl = candidate;
-            foundHealthy = true;
-            break;
-          }
-        }
-        if (!foundHealthy) {
-          grant.sourceUrl = page.url;
-        }
-      }
+      grant.sourceUrl = await resolveHealthyUrl(
+        grant.sourceUrl,
+        raw.candidateUrls || [],
+        page.url,
+      );
     }
 
     seenUrls.add(grant.sourceUrl);

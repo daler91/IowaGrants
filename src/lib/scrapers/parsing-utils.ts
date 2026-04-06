@@ -87,10 +87,14 @@ export function extractDeadline(html: string): Date | undefined {
 
   // Strategy 2: Flowing-text patterns — dates near deadline-related phrases
   const flowingPatterns = [
-    /(?:applications?\s+(?:are\s+)?due|deadline\s+(?:is|to\s+apply))\s+(?:by\s+|on\s+|:?\s*)/gi,
-    /(?:must\s+(?:be\s+)?(?:submitted?|received?)|submit\s+(?:your\s+)?applications?)\s+(?:by|before|no\s+later\s+than)\s+/gi,
-    /(?:closes?|closing)\s+(?:on\s+|date\s+(?:is\s+)?)/gi,
-    /(?:open|available|accepting\s+applications?)\s+(?:through|until|till)\s+/gi,
+    /applications?\s+(?:are\s+)?due\s+(?:by|on|:?\s*)\s*/gi,
+    /deadline\s+(?:is|to apply)\s+/gi,
+    /must\s+be\s+(?:submitted|received)\s+(?:by|before)\s+/gi,
+    /submit\s+(?:your\s+)?applications?\s+(?:by|before)\s+/gi,
+    /no\s+later\s+than\s+/gi,
+    /(?:closes?|closing)\s+(?:on\s+|date\s+)/gi,
+    /(?:open|available)\s+(?:through|until|till)\s+/gi,
+    /accepting\s+applications?\s+(?:through|until|till)\s+/gi,
     /(?:apply|register)\s+(?:by|before)\s+/gi,
   ];
 
@@ -166,9 +170,9 @@ export function normalizeTitle(title: string): string {
  * Returns null if no valid amount found or amount is suspiciously low (<$100).
  */
 export function parseGrantAmount(text: string): { raw: string; min: number; max: number } | null {
-  // Match dollar amounts with optional magnitude suffixes
+  // Match dollar amounts with optional magnitude suffixes (K, M, B, Million, Billion)
   const amountPattern =
-    /\$\s*([\d,]+(?:\.\d+)?)\s*([KkMmBb](?:illion|illion)?|[Kk]|[Mm]illion|[Bb]illion)?/g;
+    /\$\s*([\d,]+(?:\.\d+)?)\s*([KMBkmb](?:illion)?)?/g;
 
   const amounts: Array<{ value: number; raw: string }> = [];
   let match;
@@ -194,7 +198,7 @@ export function parseGrantAmount(text: string): { raw: string; min: number; max:
 
   // Check for range patterns in original text
   const rangePattern =
-    /\$\s*[\d,]+(?:\.\d+)?\s*[KkMmBb]?\w*\s*(?:to|-|–|—)\s*\$\s*[\d,]+(?:\.\d+)?\s*[KkMmBb]?\w*/;
+    /\$[\d,.\s]+[KkMmBb]?\w*\s*(?:to|-|–|—)\s*\$[\d,.\s]+[KkMmBb]?\w*/;
   const hasRange = rangePattern.test(text);
 
   if (hasRange && amounts.length >= 2) {

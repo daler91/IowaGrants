@@ -400,6 +400,51 @@ function parseStructuredSections($: CheerioAPI, grants: RawGrant[], siteDomain: 
   }
 }
 
+function collectHeadingContent(
+  $: CheerioAPI,
+  $heading: cheerio.Cheerio<AnyNode>,
+  siteDomain: string,
+): { description: string; candidateUrls: string[] } {
+  let description = "";
+  const candidateUrls: string[] = [];
+  let $el = $heading.next();
+  let collected = 0;
+
+  while ($el.length && collected < 10) {
+    const tag = ($el.prop("tagName") || "").toLowerCase();
+    if (tag === "h2" || tag === "h3") break;
+
+    description += $el.text().trim() + "\n";
+
+    $el.find("a[href]").each((_, a) => {
+      const href = $(a).attr("href") || "";
+      if (href.startsWith("http") && !href.includes(siteDomain) && !candidateUrls.includes(href)) {
+        candidateUrls.push(href);
+      }
+    });
+
+    $el = $el.next();
+    collected++;
+  }
+
+  return { description, candidateUrls };
+}
+
+function isGrantDescription(description: string): boolean {
+  const lower = description.toLowerCase();
+  const grantSignals = ["$", "grant", "award", "funding", "apply"];
+  const positiveCount = grantSignals.filter((s) => lower.includes(s)).length;
+  const isEducational = EDUCATIONAL_PATTERNS.some((p) => p.test(lower));
+  return positiveCount >= 2 && !isEducational;
+}
+
+function resolveDeadline(description: string): string | undefined {
+  const labeled = extractLabeledField(description, ["deadline", "due date"]);
+  if (labeled) return labeled;
+  const extracted = extractDeadline(description);
+  return extracted ? extracted.toISOString().split("T")[0] : undefined;
+}
+
 function parseHeadingSections($: CheerioAPI, grants: RawGrant[], siteDomain: string): void {
   const headings = $("h2, h3").toArray();
 
@@ -410,54 +455,16 @@ function parseHeadingSections($: CheerioAPI, grants: RawGrant[], siteDomain: str
     if (isGenericHeading(title)) continue;
     if (title.length < 5 || title.length > 200) continue;
 
-    let description = "";
-    const candidateUrls: string[] = [];
-    let $el = $heading.next();
-    let collected = 0;
+    const { description, candidateUrls } = collectHeadingContent($, $heading, siteDomain);
 
-    while ($el.length && collected < 10) {
-      const tag = ($el.prop("tagName") || "").toLowerCase();
-      if (tag === "h2" || tag === "h3") break;
-
-      description += $el.text().trim() + "\n";
-
-      $el.find("a[href]").each((_, a) => {
-        const href = $(a).attr("href") || "";
-        if (
-          href.startsWith("http") &&
-          !href.includes(siteDomain) &&
-          !candidateUrls.includes(href)
-        ) {
-          candidateUrls.push(href);
-        }
-      });
-
-      $el = $el.next();
-      collected++;
-    }
-
-    const lower = description.toLowerCase();
-    const grantSignals = ["$", "grant", "award", "funding", "apply"];
-    const positiveCount = grantSignals.filter((s) => lower.includes(s)).length;
-    const isEducational = EDUCATIONAL_PATTERNS.some((p) => p.test(lower));
-    const isGrant = positiveCount >= 2 && !isEducational;
-
-    if (!isGrant) continue;
-
-    let deadline = extractLabeledField(description, ["deadline", "due date"]);
-    if (!deadline) {
-      const extracted = extractDeadline(description);
-      if (extracted) {
-        deadline = extracted.toISOString().split("T")[0];
-      }
-    }
+    if (!isGrantDescription(description)) continue;
 
     grants.push({
       title,
       description: cleanHtmlToText(description, 1500),
       amount:
         extractLabeledField(description, ["amount", "award"]) || extractAmountFromText(description),
-      deadline,
+      deadline: resolveDeadline(description),
       eligibility: extractLabeledField(description, ["eligibility", "who can apply"]),
       applyUrl: candidateUrls[0],
       candidateUrls,

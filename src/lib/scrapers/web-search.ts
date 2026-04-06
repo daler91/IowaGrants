@@ -547,6 +547,61 @@ function resolveSearchProvider(results: SearchResult[], hasBrave: boolean): stri
 // Main entry point
 // ---------------------------------------------------------------------------
 
+async function executeQuery(
+  query: string,
+  index: number,
+  totalQueries: number,
+  hasGoogleCSE: boolean,
+  hasBrave: boolean,
+  hasSerpApi: boolean,
+): Promise<{ results: SearchResult[]; provider: string }> {
+  const useGoogleCSE = hasGoogleCSE && index >= totalQueries * 0.7;
+
+  if (useGoogleCSE) {
+    const cseResults = await searchGoogleCSE(query);
+    if (cseResults.length > 0) return { results: cseResults, provider: "google-cse" };
+    // Fall back to Brave/SerpAPI
+    const fallbackResults = await searchWeb(query, hasSerpApi);
+    return { results: fallbackResults, provider: resolveSearchProvider(fallbackResults, hasBrave) };
+  }
+
+  const results = await searchWeb(query, hasSerpApi);
+  return { results, provider: resolveSearchProvider(results, hasBrave) };
+}
+
+async function deepCrawlProductiveDomains(
+  allGrants: GrantData[],
+  seenUrls: Set<string>,
+): Promise<GrantData[]> {
+  const domainGrants = new Map<string, string[]>();
+  for (const grant of allGrants) {
+    try {
+      const domain = new URL(grant.sourceUrl).hostname.replace("www.", "");
+      if (!domainGrants.has(domain)) domainGrants.set(domain, []);
+      domainGrants.get(domain)!.push(grant.sourceUrl);
+    } catch {
+      /* skip invalid URLs */
+    }
+  }
+
+  const additional: GrantData[] = [];
+  let crawledDomains = 0;
+
+  for (const [domain, urls] of domainGrants.entries()) {
+    if (urls.length < 2 || crawledDomains >= 3) continue;
+    if (shouldSkipUrl(`https://${domain}/`)) continue;
+
+    crawledDomains++;
+    const grants = await crawlProductiveDomain(domain, urls, seenUrls);
+    if (grants.length > 0) {
+      log("web-search", `Deep crawl of ${domain} found additional grants`, { count: grants.length });
+      additional.push(...grants);
+    }
+  }
+
+  return additional;
+}
+
 export async function searchWebForGrants(): Promise<GrantData[]> {
   const hasBrave = !!env.BRAVE_SEARCH_API_KEY;
   const hasSerpApi = !!env.SERPAPI_API_KEY;
@@ -565,7 +620,6 @@ export async function searchWebForGrants(): Promise<GrantData[]> {
   if (hasGoogleCSE) providers.push("GoogleCSE");
   if (hasSerpApi) providers.push("SerpAPI");
 
-  // Select queries for this run using rotation
   const selectedQueries = selectQueriesForRun(QUERIES_PER_RUN);
   log("web-search", "Starting web search discovery", {
     providers: providers.join(", "),
@@ -577,69 +631,20 @@ export async function searchWebForGrants(): Promise<GrantData[]> {
   const seenUrls = new Set<string>();
 
   for (let i = 0; i < selectedQueries.length; i++) {
-    // Small delay between queries (Brave: 1 req/sec, SerpAPI: no strict limit)
-    if (i > 0) {
-      await delay(1500);
-    }
+    if (i > 0) await delay(1500);
 
     const { query } = selectedQueries[i];
-
-    // Assign ~30% of rotating queries to Google CSE for result diversity
-    const useGoogleCSE = hasGoogleCSE && i >= selectedQueries.length * 0.7;
-
-    let results: SearchResult[];
-    let provider: string;
-
-    if (useGoogleCSE) {
-      results = await searchGoogleCSE(query);
-      provider = results.length > 0 ? "google-cse" : "none";
-      // Fall back to Brave/SerpAPI if Google CSE returns nothing
-      if (results.length === 0) {
-        results = await searchWeb(query, hasSerpApi);
-        provider = resolveSearchProvider(results, hasBrave);
-      }
-    } else {
-      results = await searchWeb(query, hasSerpApi);
-      provider = resolveSearchProvider(results, hasBrave);
-    }
+    const { results, provider } = await executeQuery(
+      query, i, selectedQueries.length, hasGoogleCSE, hasBrave, hasSerpApi,
+    );
 
     log("web-search", `"${query}" → ${results.length} results`, { provider });
-
     const grants = await processSearchResults(results, seenUrls);
     allGrants.push(...grants);
   }
 
-  // Deep crawl: find domains that yielded multiple grants and crawl siblings
-  const domainGrants = new Map<string, { urls: string[]; grants: GrantData[] }>();
-  for (const grant of allGrants) {
-    try {
-      const domain = new URL(grant.sourceUrl).hostname.replace("www.", "");
-      if (!domainGrants.has(domain)) {
-        domainGrants.set(domain, { urls: [], grants: [] });
-      }
-      const entry = domainGrants.get(domain)!;
-      entry.urls.push(grant.sourceUrl);
-      entry.grants.push(grant);
-    } catch {
-      /* skip invalid URLs */
-    }
-  }
-
-  // Crawl up to 3 productive domains (2+ grants found)
-  let crawledDomains = 0;
-  for (const [domain, { urls }] of Array.from(domainGrants.entries())) {
-    if (urls.length < 2 || crawledDomains >= 3) continue;
-    if (shouldSkipUrl(`https://${domain}/`)) continue;
-
-    crawledDomains++;
-    const additionalGrants = await crawlProductiveDomain(domain, urls, seenUrls);
-    if (additionalGrants.length > 0) {
-      log("web-search", `Deep crawl of ${domain} found additional grants`, {
-        count: additionalGrants.length,
-      });
-      allGrants.push(...additionalGrants);
-    }
-  }
+  const additional = await deepCrawlProductiveDomains(allGrants, seenUrls);
+  allGrants.push(...additional);
 
   log("web-search", "Found grants from web search", { count: allGrants.length });
   return allGrants;

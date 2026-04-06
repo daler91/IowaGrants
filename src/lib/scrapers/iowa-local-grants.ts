@@ -335,7 +335,7 @@ function extractLinks(html: string, baseUrl: string, keywords: string[]): RawLin
   return links;
 }
 
-async function scrapeSource(source: LocalSource): Promise<GrantData[]> {
+async function collectLinks(source: LocalSource): Promise<RawLink[]> {
   const allLinks: RawLink[] = [];
   const seenUrls = new Set<string>();
 
@@ -363,63 +363,55 @@ async function scrapeSource(source: LocalSource): Promise<GrantData[]> {
       });
     }
 
-    // Polite delay between pages on same source
     await new Promise((r) => setTimeout(r, 1500));
   }
 
-  // Enrich first 10 links with page details
+  return allLinks;
+}
+
+async function enrichLink(link: RawLink, source: LocalSource): Promise<GrantData | null> {
+  const details = await fetchPageDetails(link.url);
+
+  if (!details?.description) {
+    log("iowa-local-grants", "Skipped empty/error page", { source: source.sourceName, title: link.title });
+    return null;
+  }
+
+  if (!isActualGrantPage(link.url, link.title, details.description)) {
+    log("iowa-local-grants", "Skipped non-grant page", { source: source.sourceName, title: link.title });
+    return null;
+  }
+
+  const parsedAmount = parseGrantAmount(details.description);
+
+  return {
+    title: link.title,
+    description: details.description,
+    sourceUrl: link.url,
+    sourceName: source.sourceName,
+    deadline: details.deadline,
+    grantType: source.grantType,
+    status: "OPEN",
+    businessStage: "BOTH",
+    gender: "ANY",
+    locations: ["Iowa"],
+    industries: [],
+    categories: ["Iowa Local"],
+    eligibleExpenses: [],
+    amountMin: parsedAmount?.min,
+    amountMax: parsedAmount?.max,
+    amount: parsedAmount?.raw,
+  };
+}
+
+async function scrapeSource(source: LocalSource): Promise<GrantData[]> {
+  const allLinks = await collectLinks(source);
   const grants: GrantData[] = [];
-  const toEnrich = allLinks.slice(0, 10);
 
-  for (const link of toEnrich) {
+  for (const link of allLinks.slice(0, 10)) {
     try {
-      const details = await fetchPageDetails(link.url);
-
-      // Skip pages that returned null (error/404 pages) or have no content
-      if (!details?.description) {
-        log("iowa-local-grants", "Skipped empty/error page", {
-          source: source.sourceName,
-          title: link.title,
-        });
-        continue;
-      }
-
-      // Skip pages that don't look like actual grant listings
-      if (!isActualGrantPage(link.url, link.title, details.description)) {
-        log("iowa-local-grants", "Skipped non-grant page", {
-          source: source.sourceName,
-          title: link.title,
-        });
-        continue;
-      }
-
-      const grant: GrantData = {
-        title: link.title,
-        description: details.description,
-        sourceUrl: link.url,
-        sourceName: source.sourceName,
-        deadline: details.deadline,
-        grantType: source.grantType,
-        status: "OPEN",
-        businessStage: "BOTH",
-        gender: "ANY",
-        locations: ["Iowa"],
-        industries: [],
-        categories: ["Iowa Local"],
-        eligibleExpenses: [],
-      };
-
-      // Try to extract dollar amounts from the description
-      const parsedAmount = parseGrantAmount(grant.description);
-      if (parsedAmount) {
-        grant.amountMin = parsedAmount.min;
-        grant.amountMax = parsedAmount.max;
-        grant.amount = parsedAmount.raw;
-      }
-
-      grants.push(grant);
-
-      // Polite delay
+      const grant = await enrichLink(link, source);
+      if (grant) grants.push(grant);
       await new Promise((r) => setTimeout(r, 1500));
     } catch (error) {
       log("iowa-local-grants", `Failed to enrich ${link.url}`, {
