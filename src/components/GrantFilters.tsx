@@ -125,12 +125,11 @@ function MultiSelect({
         </svg>
       </button>
       {open && (
-        <div
+        <fieldset
           id={listboxId}
-          role="group"
-          aria-label={label}
-          className="absolute z-20 mt-1 w-full max-h-64 overflow-auto rounded-lg border border-[var(--border)] bg-white shadow-lg py-1"
+          className="absolute z-20 mt-1 w-full max-h-64 overflow-auto rounded-lg border border-[var(--border)] bg-white shadow-lg py-1 m-0 min-w-0"
         >
+          <legend className="sr-only">{label}</legend>
           {options.map((opt) => {
             const checked = values.includes(opt.value);
             return (
@@ -157,7 +156,7 @@ function MultiSelect({
               Clear {label}
             </button>
           )}
-        </div>
+        </fieldset>
       )}
     </div>
   );

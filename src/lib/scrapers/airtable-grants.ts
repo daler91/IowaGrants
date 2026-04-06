@@ -60,7 +60,7 @@ function applyKMultiplier(value: number, originalStr: string): number {
 }
 
 const RANGE_PATTERN = /\$?([\d.]+)\s*[kK]?\s*(?:-|\u2013|\u2014|to)+\s*\$?([\d.]+)\s*[kK]?/;
-const UP_TO_PATTERN = /up\s+to\s+\$?([\d.]+)\s*[kK]?/i;
+const UP_TO_PATTERN = /up\s+to\s+\$?([\d.]+)\s*k?/i;
 const SINGLE_AMOUNT_PATTERN = /\$?([\d.]+)\s*[kK]?/;
 
 function parseAmounts(amountStr: string): {
