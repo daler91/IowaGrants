@@ -15,7 +15,7 @@ fi
 echo "[start] Running Prisma migrations..."
 npx --yes prisma migrate deploy 2>&1
 if [ $? -ne 0 ]; then
-  echo "[start] ERROR: Migration failed. Aborting startup."
+  echo "[start] ERROR: Migration failed. Aborting startup." >&2
   exit 1
 fi
 

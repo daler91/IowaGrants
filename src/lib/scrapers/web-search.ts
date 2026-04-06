@@ -151,7 +151,7 @@ function extractGrantLinksFromListPage($: cheerio.CheerioAPI, pageUrl: string): 
   // Extract external links from H2/H3 headings
   $("h2 a[href], h3 a[href]").each((_, el) => {
     const href = $(el).attr("href");
-    if (href && href.startsWith("http")) addLink(href);
+    if (href?.startsWith("http")) addLink(href);
   });
 
   // Extract action-oriented links following headings
@@ -163,7 +163,7 @@ function extractGrantLinksFromListPage($: cheerio.CheerioAPI, pageUrl: string): 
       if (tag === "h2" || tag === "h3") break;
       $el.find("a[href]").each((_, a) => {
         const href = $(a).attr("href");
-        if (!href || !href.startsWith("http")) return;
+        if (!href?.startsWith("http")) return;
         const linkText = $(a).text().toLowerCase();
         if (
           !linkText.includes("apply") &&
@@ -538,6 +538,11 @@ async function crawlProductiveDomain(
   }
 }
 
+function resolveSearchProvider(results: SearchResult[], hasBrave: boolean): string {
+  if (results.length === 0) return "none";
+  return hasBrave ? "brave" : "serpapi";
+}
+
 // ---------------------------------------------------------------------------
 // Main entry point
 // ---------------------------------------------------------------------------
@@ -591,11 +596,11 @@ export async function searchWebForGrants(): Promise<GrantData[]> {
       // Fall back to Brave/SerpAPI if Google CSE returns nothing
       if (results.length === 0) {
         results = await searchWeb(query, hasSerpApi);
-        provider = results.length > 0 ? (hasBrave ? "brave" : "serpapi") : "none";
+        provider = resolveSearchProvider(results, hasBrave);
       }
     } else {
       results = await searchWeb(query, hasSerpApi);
-      provider = results.length > 0 ? (hasBrave ? "brave" : "serpapi") : "none";
+      provider = resolveSearchProvider(results, hasBrave);
     }
 
     log("web-search", `"${query}" → ${results.length} results`, { provider });

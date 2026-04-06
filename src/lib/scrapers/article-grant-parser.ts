@@ -307,8 +307,8 @@ function findCandidateUrls(
       linkText.includes("visit")
     ) {
       if (!actionUrls.includes(href)) actionUrls.push(href);
-    } else {
-      if (!otherUrls.includes(href)) otherUrls.push(href);
+    } else if (!otherUrls.includes(href)) {
+      otherUrls.push(href);
     }
   });
 

@@ -59,7 +59,7 @@ function applyKMultiplier(value: number, originalStr: string): number {
   return value;
 }
 
-const RANGE_PATTERN = /\$?([\d.]+)\s*[kK]?\s*[-\u2013\u2014to]+\s*\$?([\d.]+)\s*[kK]?/;
+const RANGE_PATTERN = /\$?([\d.]+)\s*[kK]?\s*(?:[-\u2013\u2014]|to)+\s*\$?([\d.]+)\s*[kK]?/;
 const UP_TO_PATTERN = /up\s+to\s+\$?([\d.]+)\s*[kK]?/i;
 const SINGLE_AMOUNT_PATTERN = /\$?([\d.]+)\s*[kK]?/;
 
@@ -101,6 +101,7 @@ function parseAmounts(amountStr: string): {
 function parseDeadline(value: unknown): Date | undefined {
   if (!value) return undefined;
 
+  if (typeof value === "object") return undefined;
   const str = typeof value === "string" ? value.trim() : String(value).trim();
 
   // ISO date string from Airtable (YYYY-MM-DD)
@@ -281,9 +282,9 @@ function extractParsedJsonFromScript(content: string): AirtableRecord[] {
 
   try {
     const decoded = assignmentMatch[1]
-      .replaceAll('\\"', '"')
-      .replaceAll("\\'", "'")
-      .replaceAll("\\\\", "\\");
+      .replaceAll(String.raw`\"`, '"')
+      .replaceAll(String.raw`\'`, "'")
+      .replaceAll(String.raw`\\`, "\\");
     const data = JSON.parse(decoded);
     return extractFromDataPayload(data);
   } catch {

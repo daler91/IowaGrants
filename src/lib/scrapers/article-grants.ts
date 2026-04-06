@@ -12,12 +12,11 @@ import {
   parseGrantsFromHtml,
   parseAmount,
   parseDeadlineStr,
-  extractAmountFromText,
   type RawGrant,
 } from "./article-grant-parser";
 
 // Re-export for backward compatibility (used in tests)
-export { extractAmountFromText };
+export { extractAmountFromText } from "./article-grant-parser";
 
 // ---------------------------------------------------------------------------
 // Browser-like headers for Cloudflare / WAF bypass

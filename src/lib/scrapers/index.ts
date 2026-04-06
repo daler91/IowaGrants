@@ -253,7 +253,7 @@ function mergeGrantWithPdfParse(original: GrantData, parsed: GrantData): GrantDa
     sourceUrl: original.sourceUrl,
     sourceName: original.sourceName,
     // Preserve original rawData fields (e.g. articlePage) by merging instead of replacing
-    rawData: { ...(original.rawData ?? {}), ...(parsed.rawData ?? {}) },
+    rawData: { ...original.rawData, ...parsed.rawData },
   };
 }
 
@@ -343,7 +343,7 @@ async function reconcileDeadlines(grants: GrantData[], opts: { budget?: Integrat
     }
 
     grant.rawData = {
-      ...(grant.rawData ?? {}),
+      ...grant.rawData,
       deadlineSource: {
         method,
         confidence: result.confidence,
@@ -419,7 +419,7 @@ async function hydrateLiveContent(grants: GrantData[]): Promise<GrantData[]> {
       batch.map(async (grant) => {
         const existing =
           grant.rawData && typeof grant.rawData === "object"
-            ? (grant.rawData as Record<string, unknown>).liveBodyText
+            ? grant.rawData.liveBodyText
             : undefined;
         if (typeof existing === "string" && existing.length > 0) {
           return { keep: true as const, grant };
@@ -442,7 +442,7 @@ async function hydrateLiveContent(grants: GrantData[]): Promise<GrantData[]> {
           return { keep: false as const };
         }
         const nextRaw: Record<string, unknown> = {
-          ...((grant.rawData as Record<string, unknown> | undefined) ?? {}),
+          ...grant.rawData,
           liveBodyText: health.bodyText,
         };
         return { keep: true as const, grant: { ...grant, rawData: nextRaw } };

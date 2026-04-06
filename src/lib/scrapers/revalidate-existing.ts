@@ -64,7 +64,9 @@ export async function revalidateExistingGrants(
 
     for (const { grant, health } of healthResults) {
       summary.checked++;
-      if (!health.alive) {
+      if (health.alive) {
+        aliveEntries.push({ grant, bodyText: health.bodyText });
+      } else {
         try {
           await closeGrant(grant.id, grant.rawData, {
             method: "url-health",
@@ -83,8 +85,6 @@ export async function revalidateExistingGrants(
           summary.errors++;
           logError("revalidate-existing", "Failed to close grant", error, { id: grant.id });
         }
-      } else {
-        aliveEntries.push({ grant, bodyText: health.bodyText });
       }
     }
 
@@ -164,8 +164,7 @@ async function closeGrant(
       ? (existingRawData as Record<string, unknown>)
       : {};
   // Strip transient liveBodyText so we don't persist a 4KB text blob.
-  const { liveBodyText: _liveBodyText, ...rest } = base;
-  void _liveBodyText;
+  const { liveBodyText: _, ...rest } = base;
   const nextRaw: Record<string, unknown> = {
     ...rest,
     closedReason: {

@@ -99,7 +99,7 @@ const OPPORTUNITY_PATTERNS = [
   /\bsttr\b/i,
   /topic/i,
   /solicitation/i,
-  /phase\s*[i1|ii2]/i,
+  /phase\s*(?:i{1,2}|[12])/i,
   /funding opportunity/i,
   /broad agency announcement/i,
   /request for proposals?/i,

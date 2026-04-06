@@ -376,7 +376,7 @@ async function scrapeSource(source: LocalSource): Promise<GrantData[]> {
       const details = await fetchPageDetails(link.url);
 
       // Skip pages that returned null (error/404 pages) or have no content
-      if (!details || !details.description) {
+      if (!details?.description) {
         log("iowa-local-grants", "Skipped empty/error page", {
           source: source.sourceName,
           title: link.title,

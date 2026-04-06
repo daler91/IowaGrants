@@ -28,7 +28,7 @@ export const inviteSchema = z.object({
       const atIdx = trimmed.indexOf("@");
       return (
         atIdx > 0 &&
-        trimmed.indexOf("@", atIdx + 1) === -1 &&
+        !trimmed.includes("@", atIdx + 1) &&
         trimmed.indexOf(".", atIdx + 2) > atIdx &&
         !trimmed.includes(" ") &&
         trimmed.length <= 254

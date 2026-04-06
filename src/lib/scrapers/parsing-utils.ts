@@ -200,9 +200,9 @@ export function parseGrantAmount(text: string): { raw: string; min: number; max:
   if (hasRange && amounts.length >= 2) {
     const sorted = [...amounts].sort((a, b) => a.value - b.value);
     return {
-      raw: `$${sorted[0].value.toLocaleString()} - $${sorted[sorted.length - 1].value.toLocaleString()}`,
+      raw: `$${sorted[0].value.toLocaleString()} - $${sorted.at(-1)!.value.toLocaleString()}`,
       min: sorted[0].value,
-      max: sorted[sorted.length - 1].value,
+      max: sorted.at(-1)!.value,
     };
   }
 
