@@ -65,7 +65,7 @@ const FILTER_LABELS: Record<string, string> = {
 
 function prettyValue(value: string): string {
   return value
-    .replaceAll(/_/g, " ")
+    .replaceAll("_", " ")
     .toLowerCase()
     .replaceAll(/\b\w/g, (c) => c.toUpperCase());
 }
