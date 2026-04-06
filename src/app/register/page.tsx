@@ -1,7 +1,7 @@
 "use client";
 
-import { Suspense, useState } from "react";
-import { useSearchParams, useRouter } from "next/navigation";
+import { Suspense, useState, useSyncExternalStore } from "react";
+import { useRouter } from "next/navigation";
 
 export default function RegisterPage() {
   return (
@@ -11,10 +11,24 @@ export default function RegisterPage() {
   );
 }
 
+function getHashParam(key: string): string | null {
+  const hash = window.location.hash.replace(/^#/, "");
+  return new URLSearchParams(hash).get(key);
+}
+
+const subscribe = () => () => {};
+
+function useHashParam(key: string): string | null {
+  return useSyncExternalStore(
+    subscribe,
+    () => getHashParam(key),
+    () => null,
+  );
+}
+
 function RegisterForm() {
-  const searchParams = useSearchParams();
   const router = useRouter();
-  const token = searchParams.get("token");
+  const token = useHashParam("token");
 
   const [name, setName] = useState("");
   const [password, setPassword] = useState("");

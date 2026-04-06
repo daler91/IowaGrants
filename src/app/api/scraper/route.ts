@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { timingSafeEqual } from "crypto";
 import { prisma } from "@/lib/db";
 import { env } from "@/lib/env";
-import { requireAdminOrResponse } from "@/lib/auth";
+import { requireAdmin, UnauthorizedError } from "@/lib/auth";
 import { runFullScrape } from "@/lib/scrapers";
 import { log, logError } from "@/lib/errors";
 
@@ -18,8 +18,14 @@ export const maxDuration = 300; // 5 minute timeout for this route
 const STALE_LOCK_MS = 10 * 60 * 1000; // 10 minutes
 
 export async function GET(request: NextRequest) {
-  const admin = await requireAdminOrResponse(request);
-  if (admin instanceof NextResponse) return admin;
+  try {
+    await requireAdmin(request);
+  } catch (err) {
+    if (err instanceof UnauthorizedError) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    throw err;
+  }
 
   const latest = await prisma.scrapeRun.findFirst({
     orderBy: { startedAt: "desc" },

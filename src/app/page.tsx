@@ -9,6 +9,7 @@ import GrantList from "@/components/GrantList";
 import ConfirmModal from "@/components/ConfirmModal";
 import { useAdmin } from "@/lib/hooks/useAdmin";
 import type { GrantFilters as FilterType, GrantListItem, PaginatedResponse } from "@/lib/types";
+import { buildGrantQueryParams } from "@/lib/query-params";
 
 function parseList<T extends string = string>(raw: string | null): T[] | undefined {
   if (!raw) return undefined;
@@ -92,18 +93,7 @@ function Dashboard() {
   const fetchGrants = useCallback(async () => {
     setLoading(true);
     setError(null);
-    const params = new URLSearchParams();
-
-    if (search) params.set("search", search);
-    if (filters.grantType?.length) params.set("grantType", filters.grantType.join(","));
-    if (filters.gender?.length) params.set("gender", filters.gender.join(","));
-    if (filters.businessStage?.length) params.set("businessStage", filters.businessStage.join(","));
-    if (filters.status?.length) params.set("status", filters.status.join(","));
-    if (filters.eligibleExpense?.length)
-      params.set("eligibleExpense", filters.eligibleExpense.join(","));
-    if (filters.location) params.set("location", filters.location);
-    if (filters.amountMin) params.set("amountMin", filters.amountMin.toString());
-    if (filters.amountMax) params.set("amountMax", filters.amountMax.toString());
+    const params = buildGrantQueryParams(filters, search);
     params.set("page", (filters.page || 1).toString());
     params.set("limit", (filters.limit || 20).toString());
 
@@ -124,15 +114,7 @@ function Dashboard() {
 
   // Sync filters to URL search params
   useEffect(() => {
-    const params = new URLSearchParams();
-    if (search) params.set("search", search);
-    if (filters.grantType?.length) params.set("grantType", filters.grantType.join(","));
-    if (filters.gender?.length) params.set("gender", filters.gender.join(","));
-    if (filters.businessStage?.length) params.set("businessStage", filters.businessStage.join(","));
-    if (filters.status?.length) params.set("status", filters.status.join(","));
-    if (filters.eligibleExpense?.length)
-      params.set("eligibleExpense", filters.eligibleExpense.join(","));
-    if (filters.location) params.set("location", filters.location);
+    const params = buildGrantQueryParams(filters, search);
     if (filters.page && filters.page > 1) params.set("page", filters.page.toString());
     const paramStr = params.toString();
     const newUrl = paramStr ? `?${paramStr}` : "/";
@@ -207,16 +189,7 @@ function Dashboard() {
   };
 
   const exportHref = useMemo(() => {
-    const params = new URLSearchParams();
-    if (search) params.set("search", search);
-    if (filters.grantType?.length) params.set("grantType", filters.grantType.join(","));
-    if (filters.gender?.length) params.set("gender", filters.gender.join(","));
-    if (filters.businessStage?.length) params.set("businessStage", filters.businessStage.join(","));
-    if (filters.status?.length) params.set("status", filters.status.join(","));
-    if (filters.eligibleExpense?.length)
-      params.set("eligibleExpense", filters.eligibleExpense.join(","));
-    if (filters.location) params.set("location", filters.location);
-    const qs = params.toString();
+    const qs = buildGrantQueryParams(filters, search).toString();
     return qs ? `/export?${qs}` : "/export";
   }, [search, filters]);
 

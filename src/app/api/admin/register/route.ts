@@ -2,38 +2,18 @@ import { NextRequest, NextResponse } from "next/server";
 import { createHash } from "crypto";
 import { prisma } from "@/lib/db";
 import { hashPassword, signToken, setAuthCookie } from "@/lib/auth";
+import { parseJson } from "@/lib/http/parse-json";
+import { registerSchema } from "@/lib/http/schemas";
 
 function hashInviteToken(token: string): string {
   return createHash("sha256").update(token).digest("hex");
 }
 
 export async function POST(request: NextRequest) {
-  let body: unknown;
-  try {
-    body = await request.json();
-  } catch {
-    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
-  }
+  const result = await parseJson(request, registerSchema);
+  if (result.error) return result.error;
 
-  const { token, password, name } = body as {
-    token?: unknown;
-    password?: unknown;
-    name?: unknown;
-  };
-
-  if (!token || !password || typeof token !== "string" || typeof password !== "string") {
-    return NextResponse.json(
-      { error: "Token and password are required" },
-      { status: 400 },
-    );
-  }
-
-  if (password.length < 12) {
-    return NextResponse.json(
-      { error: "Password must be at least 12 characters" },
-      { status: 400 },
-    );
-  }
+  const { token, password, name } = result.data;
 
   const invite = await prisma.adminInvite.findUnique({ where: { token: hashInviteToken(token) } });
   if (!invite) {
@@ -69,7 +49,7 @@ export async function POST(request: NextRequest) {
       data: {
         email: invite.email,
         passwordHash,
-        name: typeof name === "string" ? name : null,
+        name: name ?? null,
         invitedBy: invite.invitedBy,
       },
     }),

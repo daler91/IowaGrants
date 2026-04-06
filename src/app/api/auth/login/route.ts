@@ -1,22 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { verifyPassword, signToken, setAuthCookie } from "@/lib/auth";
+import { parseJson } from "@/lib/http/parse-json";
+import { loginSchema } from "@/lib/http/schemas";
 
 export async function POST(request: NextRequest) {
-  let body: unknown;
-  try {
-    body = await request.json();
-  } catch {
-    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
-  }
+  const result = await parseJson(request, loginSchema);
+  if (result.error) return result.error;
 
-  const { email, password } = body as { email?: unknown; password?: unknown };
-  if (!email || !password || typeof email !== "string" || typeof password !== "string") {
-    return NextResponse.json(
-      { error: "Email and password are required" },
-      { status: 400 },
-    );
-  }
+  const { email, password } = result.data;
 
   const admin = await prisma.adminUser.findUnique({ where: { email } });
   if (!admin || !(await verifyPassword(password, admin.passwordHash))) {

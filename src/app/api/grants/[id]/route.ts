@@ -1,15 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { Prisma } from "@prisma/client";
-import { requireAdminOrResponse } from "@/lib/auth";
-import {
-  VALID_GRANT_TYPES,
-  VALID_GENDER_FOCUS,
-  VALID_BUSINESS_STAGE,
-  VALID_GRANT_STATUS,
-  GRANT_INCLUDE,
-} from "@/lib/constants";
+import { requireAdmin, UnauthorizedError } from "@/lib/auth";
+import { GRANT_INCLUDE } from "@/lib/constants";
 import { logError } from "@/lib/errors";
+import { parseJson } from "@/lib/http/parse-json";
+import { grantUpdateSchema } from "@/lib/http/schemas";
 
 export async function GET(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -32,140 +28,88 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
 }
 
 export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const admin = await requireAdminOrResponse(request);
-  if (admin instanceof NextResponse) return admin;
-
-  let body: Record<string, unknown>;
   try {
-    body = await request.json();
-  } catch {
-    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
-  }
+    await requireAdmin(request);
 
-  const { id } = await params;
+    const result = await parseJson(request, grantUpdateSchema);
+    if (result.error) return result.error;
 
-  const existing = await prisma.grant.findUnique({ where: { id } });
-  if (!existing) {
-    return NextResponse.json({ error: "Grant not found" }, { status: 404 });
-  }
+    const { id } = await params;
 
-  const data: Prisma.GrantUpdateInput = {};
-  const errors: string[] = [];
+    const existing = await prisma.grant.findUnique({ where: { id } });
+    if (!existing) {
+      return NextResponse.json({ error: "Grant not found" }, { status: 404 });
+    }
 
-  // Required string fields (cannot be empty if provided)
-  for (const field of ["title", "description", "sourceName", "sourceUrl"] as const) {
-    if (field in body) {
-      const val = body[field];
-      if (typeof val !== "string" || val.trim().length === 0) {
-        errors.push(`${field} must be a non-empty string`);
-      } else {
-        (data as Record<string, unknown>)[field] = val.trim();
+    const body = result.data;
+    const data: Prisma.GrantUpdateInput = {};
+
+    // Required string fields — trim when provided
+    for (const field of ["title", "description", "sourceName", "sourceUrl"] as const) {
+      if (body[field] !== undefined) {
+        (data as Record<string, unknown>)[field] = body[field]!.trim();
       }
     }
-  }
 
-  // Optional string fields (can be cleared by sending empty string or null)
-  for (const field of ["amount", "eligibility", "pdfUrl"] as const) {
-    if (field in body) {
-      const val = body[field];
-      if (val === null || val === "") {
-        (data as Record<string, unknown>)[field] = null;
-      } else if (typeof val === "string") {
-        (data as Record<string, unknown>)[field] = val.trim();
-      } else {
-        errors.push(`${field} must be a string or null`);
+    // Optional string fields (nullable)
+    for (const field of ["amount", "eligibility", "pdfUrl"] as const) {
+      if (body[field] !== undefined) {
+        const val = body[field];
+        (data as Record<string, unknown>)[field] =
+          val === null || val === "" ? null : val!.trim();
       }
     }
-  }
 
-  // Integer fields
-  for (const field of ["amountMin", "amountMax"] as const) {
-    if (field in body) {
-      const val = body[field];
-      if (val === null) {
-        (data as Record<string, unknown>)[field] = null;
-      } else if (typeof val === "number" && Number.isInteger(val) && val >= 0) {
-        (data as Record<string, unknown>)[field] = val;
-      } else {
-        errors.push(`${field} must be a non-negative integer or null`);
+    // Integer fields
+    for (const field of ["amountMin", "amountMax"] as const) {
+      if (body[field] !== undefined) {
+        (data as Record<string, unknown>)[field] = body[field];
       }
     }
-  }
 
-  // Deadline
-  if ("deadline" in body) {
-    const val = body.deadline;
-    if (val === null) {
-      data.deadline = null;
-    } else if (typeof val === "string") {
-      const date = new Date(val);
-      if (Number.isNaN(date.getTime())) {
-        errors.push("deadline must be a valid date string or null");
+    // Deadline
+    if (body.deadline !== undefined) {
+      if (body.deadline === null) {
+        data.deadline = null;
       } else {
+        const date = new Date(body.deadline);
+        if (Number.isNaN(date.getTime())) {
+          return NextResponse.json(
+            { error: "deadline must be a valid date string or null" },
+            { status: 400 },
+          );
+        }
         data.deadline = date;
       }
-    } else {
-      errors.push("deadline must be a date string or null");
     }
-  }
 
-  // Enum fields
-  if ("grantType" in body) {
-    if (VALID_GRANT_TYPES.includes(body.grantType as string)) {
+    // Enum fields
+    if (body.grantType !== undefined) {
       data.grantType = body.grantType as Prisma.EnumGrantTypeFieldUpdateOperationsInput["set"];
-    } else {
-      errors.push(`grantType must be one of: ${VALID_GRANT_TYPES.join(", ")}`);
     }
-  }
-
-  if ("status" in body) {
-    if (VALID_GRANT_STATUS.includes(body.status as string)) {
+    if (body.status !== undefined) {
       data.status = body.status as Prisma.EnumGrantStatusFieldUpdateOperationsInput["set"];
-    } else {
-      errors.push(`status must be one of: ${VALID_GRANT_STATUS.join(", ")}`);
     }
-  }
-
-  if ("businessStage" in body) {
-    if (VALID_BUSINESS_STAGE.includes(body.businessStage as string)) {
-      data.businessStage =
-        body.businessStage as Prisma.EnumBusinessStageFieldUpdateOperationsInput["set"];
-    } else {
-      errors.push(`businessStage must be one of: ${VALID_BUSINESS_STAGE.join(", ")}`);
+    if (body.businessStage !== undefined) {
+      data.businessStage = body.businessStage as Prisma.EnumBusinessStageFieldUpdateOperationsInput["set"];
     }
-  }
-
-  if ("gender" in body) {
-    if (VALID_GENDER_FOCUS.includes(body.gender as string)) {
+    if (body.gender !== undefined) {
       data.gender = body.gender as Prisma.EnumGenderFocusFieldUpdateOperationsInput["set"];
-    } else {
-      errors.push(`gender must be one of: ${VALID_GENDER_FOCUS.join(", ")}`);
     }
-  }
 
-  // String array fields
-  for (const field of ["locations", "industries"] as const) {
-    if (field in body) {
-      const val = body[field];
-      if (Array.isArray(val) && val.every((v) => typeof v === "string")) {
-        (data as Record<string, unknown>)[field] = val
+    // String arrays — trim and filter empty
+    for (const field of ["locations", "industries"] as const) {
+      if (body[field] !== undefined) {
+        (data as Record<string, unknown>)[field] = body[field]!
           .map((v: string) => v.trim())
           .filter((v: string) => v.length > 0);
-      } else {
-        errors.push(`${field} must be an array of strings`);
       }
     }
-  }
 
-  if (errors.length > 0) {
-    return NextResponse.json({ error: errors.join("; ") }, { status: 400 });
-  }
+    if (Object.keys(data).length === 0) {
+      return NextResponse.json({ error: "No valid fields to update" }, { status: 400 });
+    }
 
-  if (Object.keys(data).length === 0) {
-    return NextResponse.json({ error: "No valid fields to update" }, { status: 400 });
-  }
-
-  try {
     const updated = await prisma.grant.update({
       where: { id },
       data,
@@ -174,6 +118,9 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
 
     return NextResponse.json(updated);
   } catch (error) {
+    if (error instanceof UnauthorizedError) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
       return NextResponse.json(
         { error: "A grant with this source URL already exists" },

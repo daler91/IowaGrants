@@ -1,12 +1,11 @@
-import Anthropic from "@anthropic-ai/sdk";
 import type { GrantData } from "@/lib/types";
 import { env } from "@/lib/env";
 import { AI_CALL_DELAY_MS, DEADLINE_AI_BATCH_SIZE } from "@/lib/scrapers/config";
 import { validateDeadline } from "@/lib/scrapers/parsing-utils";
 import { log, logError } from "@/lib/errors";
 import { DeadlineExtractionArraySchema, type DeadlineExtraction } from "./schemas";
-
-const anthropic = new Anthropic();
+import { getAnthropic } from "./client";
+import type { IntegrationBudget } from "./budget";
 
 const DEADLINE_PROMPT = `You are extracting application deadlines from scraped grant listings.
 
@@ -65,7 +64,7 @@ async function callClaudeForBatch(
 
   for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
     try {
-      const response = await anthropic.messages.create({
+      const response = await getAnthropic().messages.create({
         model: "claude-haiku-4-5-20251001",
         max_tokens: 2000,
         messages: [{ role: "user", content: message }],
@@ -105,7 +104,7 @@ export interface ExtractedDeadline {
  */
 export async function extractDeadlinesWithAI(
   grants: GrantData[],
-  opts: { today?: Date } = {},
+  opts: { today?: Date; budget?: IntegrationBudget } = {},
 ): Promise<Array<ExtractedDeadline | null>> {
   if (!env.ANTHROPIC_API_KEY) {
     log("deadline-extractor", "ANTHROPIC_API_KEY not set — skipping AI deadline extraction");
@@ -119,6 +118,14 @@ export async function extractDeadlinesWithAI(
   log("deadline-extractor", `Extracting deadlines for ${grants.length} grants with AI`);
 
   for (let batchStart = 0; batchStart < grants.length; batchStart += DEADLINE_AI_BATCH_SIZE) {
+    if (opts.budget && !opts.budget.canCallAI()) {
+      log("deadline-extractor", "Budget exhausted — skipping remaining batches", {
+        processed: batchStart,
+        total: grants.length,
+      });
+      break;
+    }
+
     const batch = grants.slice(batchStart, batchStart + DEADLINE_AI_BATCH_SIZE);
     const inputs: DeadlineExtractionInput[] = batch.map((g, i) => ({
       index: i,
@@ -128,6 +135,7 @@ export async function extractDeadlinesWithAI(
       currentDeadline: g.deadline,
     }));
 
+    opts.budget?.recordAICall();
     const extracted = await callClaudeForBatch(inputs, today);
     if (extracted) {
       for (const item of extracted) {

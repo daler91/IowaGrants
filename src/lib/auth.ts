@@ -6,6 +6,8 @@ import { prisma } from "./db";
 
 const COOKIE_NAME = "admin_token";
 const TOKEN_EXPIRY = "7d";
+const JWT_ISSUER = "iowagrants-admin";
+const JWT_AUDIENCE = "iowagrants-web";
 
 function getSecret() {
   return new TextEncoder().encode(env.JWT_SECRET);
@@ -29,6 +31,8 @@ export async function signToken(payload: {
 }): Promise<string> {
   return new SignJWT(payload)
     .setProtectedHeader({ alg: "HS256" })
+    .setIssuer(JWT_ISSUER)
+    .setAudience(JWT_AUDIENCE)
     .setIssuedAt()
     .setExpirationTime(TOKEN_EXPIRY)
     .sign(getSecret());
@@ -38,7 +42,10 @@ export async function verifyToken(
   token: string,
 ): Promise<{ sub: string; email: string; tokenVersion: number } | null> {
   try {
-    const { payload } = await jwtVerify(token, getSecret());
+    const { payload } = await jwtVerify(token, getSecret(), {
+      issuer: JWT_ISSUER,
+      audience: JWT_AUDIENCE,
+    });
     return payload as unknown as { sub: string; email: string; tokenVersion: number };
   } catch {
     return null;
@@ -82,25 +89,6 @@ export async function requireAdmin(
   return claims;
 }
 
-/**
- * Wrapper that calls requireAdmin and converts UnauthorizedError
- * into a 401 NextResponse. Returns the admin claims on success,
- * or a NextResponse on auth failure.
- *
- * @deprecated Prefer try/catch with requireAdmin() directly.
- */
-export async function requireAdminOrResponse(
-  request: NextRequest,
-): Promise<{ sub: string; email: string } | NextResponse> {
-  try {
-    return await requireAdmin(request);
-  } catch (err) {
-    if (err instanceof UnauthorizedError) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-    throw err;
-  }
-}
 
 export function setAuthCookie(response: NextResponse, token: string) {
   response.cookies.set(COOKIE_NAME, token, {
