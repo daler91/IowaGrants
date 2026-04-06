@@ -11,6 +11,16 @@ else
   echo "[start] DATABASE_URL is set (length: ${#DATABASE_URL})"
 fi
 
+# Resolve any previously failed migrations so migrate deploy can retry them
+echo "[start] Checking for failed migrations..."
+FAILED_MIGRATIONS=$(npx --yes prisma migrate status 2>&1 | grep "failed" | awk '{print $1}')
+if [ -n "$FAILED_MIGRATIONS" ]; then
+  for migration in $FAILED_MIGRATIONS; do
+    echo "[start] Resolving failed migration: $migration"
+    npx --yes prisma migrate resolve --rolled-back "$migration" 2>&1
+  done
+fi
+
 # Run migrations - fail fast if migrations fail to prevent inconsistent state
 echo "[start] Running Prisma migrations..."
 npx --yes prisma migrate deploy 2>&1
