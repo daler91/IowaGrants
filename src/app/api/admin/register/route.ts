@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createHash } from "crypto";
+import { createHash } from "node:crypto";
 import { prisma } from "@/lib/db";
 import { hashPassword, signToken, setAuthCookie } from "@/lib/auth";
 import { parseJson } from "@/lib/http/parse-json";
@@ -20,26 +20,17 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Invalid invite token" }, { status: 400 });
   }
   if (invite.usedAt) {
-    return NextResponse.json(
-      { error: "This invite has already been used" },
-      { status: 400 },
-    );
+    return NextResponse.json({ error: "This invite has already been used" }, { status: 400 });
   }
   if (invite.expiresAt < new Date()) {
-    return NextResponse.json(
-      { error: "This invite has expired" },
-      { status: 400 },
-    );
+    return NextResponse.json({ error: "This invite has expired" }, { status: 400 });
   }
 
   const existing = await prisma.adminUser.findUnique({
     where: { email: invite.email },
   });
   if (existing) {
-    return NextResponse.json(
-      { error: "An admin with this email already exists" },
-      { status: 409 },
-    );
+    return NextResponse.json({ error: "An admin with this email already exists" }, { status: 409 });
   }
 
   const passwordHash = await hashPassword(password);
@@ -59,7 +50,11 @@ export async function POST(request: NextRequest) {
     }),
   ]);
 
-  const jwt = await signToken({ sub: admin.id, email: admin.email, tokenVersion: admin.tokenVersion });
+  const jwt = await signToken({
+    sub: admin.id,
+    email: admin.email,
+    tokenVersion: admin.tokenVersion,
+  });
   const response = NextResponse.json({
     success: true,
     admin: { id: admin.id, email: admin.email, name: admin.name },

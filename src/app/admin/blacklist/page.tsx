@@ -68,7 +68,8 @@ export default function BlacklistPage() {
       });
       if (!res.ok) throw new Error("Failed to add");
       const data = await res.json();
-      setSuccess(`Added ${data.created} URL(s)${data.duplicates > 0 ? `, ${data.duplicates} already blacklisted` : ""}.`);
+      const duplicatesText = data.duplicates > 0 ? `, ${data.duplicates} already blacklisted` : "";
+      setSuccess(`Added ${data.created} URL(s)${duplicatesText}.`);
       setNewUrl("");
       setReason("");
       fetchUrls();
@@ -95,11 +96,10 @@ export default function BlacklistPage() {
 
   return (
     <div>
-      <h1 className="text-3xl font-bold text-[var(--foreground)] mb-2">
-        URL Blacklist
-      </h1>
+      <h1 className="text-3xl font-bold text-[var(--foreground)] mb-2">URL Blacklist</h1>
       <p className="text-[var(--muted)] mb-8">
-        Blacklisted URLs will be skipped by the scraper on future runs. {total > 0 && `${total} URL(s) blacklisted.`}
+        Blacklisted URLs will be skipped by the scraper on future runs.{" "}
+        {total > 0 && `${total} URL(s) blacklisted.`}
       </p>
 
       <div className="bg-white rounded-lg border border-[var(--border)] p-6 mb-8">
@@ -108,7 +108,10 @@ export default function BlacklistPage() {
         </h2>
         <form onSubmit={handleAdd} className="space-y-4">
           <div>
-            <label htmlFor="urls" className="block text-sm font-medium text-[var(--foreground)] mb-1">
+            <label
+              htmlFor="urls"
+              className="block text-sm font-medium text-[var(--foreground)] mb-1"
+            >
               URLs (one per line)
             </label>
             <textarea
@@ -121,7 +124,10 @@ export default function BlacklistPage() {
             />
           </div>
           <div>
-            <label htmlFor="reason" className="block text-sm font-medium text-[var(--foreground)] mb-1">
+            <label
+              htmlFor="reason"
+              className="block text-sm font-medium text-[var(--foreground)] mb-1"
+            >
               Reason (optional)
             </label>
             <input
@@ -156,38 +162,43 @@ export default function BlacklistPage() {
 
       <div className="bg-white rounded-lg border border-[var(--border)]">
         <div className="px-6 py-4 border-b border-[var(--border)]">
-          <h2 className="text-lg font-semibold text-[var(--foreground)]">
-            Blacklisted URLs
-          </h2>
+          <h2 className="text-lg font-semibold text-[var(--foreground)]">Blacklisted URLs</h2>
         </div>
 
         {loading ? (
           <div className="p-6 text-center text-[var(--muted)]">Loading...</div>
-        ) : urls.length === 0 ? (
-          <div className="p-6 text-center text-[var(--muted)]">No blacklisted URLs yet.</div>
         ) : (
-          <div className="divide-y divide-[var(--border)]">
-            {urls.map((item) => (
-              <div key={item.id} className="px-6 py-4 flex items-start justify-between gap-4">
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-mono text-[var(--foreground)] truncate" title={item.url}>
-                    {item.url}
-                  </p>
-                  <div className="flex gap-4 mt-1 text-xs text-[var(--muted)]">
-                    {item.reason && <span>Reason: {item.reason}</span>}
-                    <span>By: {item.blacklistedBy}</span>
-                    <span>{new Date(item.createdAt).toLocaleDateString()}</span>
+          <>
+            {urls.length === 0 ? (
+              <div className="p-6 text-center text-[var(--muted)]">No blacklisted URLs yet.</div>
+            ) : (
+              <div className="divide-y divide-[var(--border)]">
+                {urls.map((item) => (
+                  <div key={item.id} className="px-6 py-4 flex items-start justify-between gap-4">
+                    <div className="min-w-0 flex-1">
+                      <p
+                        className="text-sm font-mono text-[var(--foreground)] truncate"
+                        title={item.url}
+                      >
+                        {item.url}
+                      </p>
+                      <div className="flex gap-4 mt-1 text-xs text-[var(--muted)]">
+                        {item.reason && <span>Reason: {item.reason}</span>}
+                        <span>By: {item.blacklistedBy}</span>
+                        <span>{new Date(item.createdAt).toLocaleDateString()}</span>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => handleRemove(item.id)}
+                      className="text-sm text-red-600 hover:text-red-800 font-medium flex-shrink-0"
+                    >
+                      Remove
+                    </button>
                   </div>
-                </div>
-                <button
-                  onClick={() => handleRemove(item.id)}
-                  className="text-sm text-red-600 hover:text-red-800 font-medium flex-shrink-0"
-                >
-                  Remove
-                </button>
+                ))}
               </div>
-            ))}
-          </div>
+            )}
+          </>
         )}
 
         {totalPages > 1 && (

@@ -3,7 +3,12 @@
 import { useState, useEffect, useCallback } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { VALID_GRANT_TYPES, VALID_GRANT_STATUS, VALID_BUSINESS_STAGE, VALID_GENDER_FOCUS } from "@/lib/constants";
+import {
+  VALID_GRANT_TYPES,
+  VALID_GRANT_STATUS,
+  VALID_BUSINESS_STAGE,
+  VALID_GENDER_FOCUS,
+} from "@/lib/constants";
 
 interface GrantFormData {
   title: string;
@@ -65,7 +70,7 @@ export default function EditGrantPage() {
         setNotFound(true);
         return;
       }
-      if (!res.ok) throw new Error("Failed to load grant");
+      if (res.ok === false) throw new Error("Failed to load grant");
       const data = await res.json();
       setForm({
         title: data.title || "",
@@ -115,8 +120,8 @@ export default function EditGrantPage() {
         sourceName: form.sourceName,
         sourceUrl: form.sourceUrl,
         amount: form.amount || null,
-        amountMin: form.amountMin ? parseInt(form.amountMin, 10) : null,
-        amountMax: form.amountMax ? parseInt(form.amountMax, 10) : null,
+        amountMin: form.amountMin ? Number.parseInt(form.amountMin, 10) : null,
+        amountMax: form.amountMax ? Number.parseInt(form.amountMax, 10) : null,
         deadline: form.deadline ? new Date(form.deadline + "T00:00:00Z").toISOString() : null,
         eligibility: form.eligibility || null,
         grantType: form.grantType,
@@ -164,9 +169,7 @@ export default function EditGrantPage() {
   if (notFound) {
     return (
       <div className="text-center py-20">
-        <h1 className="text-2xl font-bold text-[var(--foreground)] mb-4">
-          Grant Not Found
-        </h1>
+        <h1 className="text-2xl font-bold text-[var(--foreground)] mb-4">Grant Not Found</h1>
         <Link
           href="/"
           className="text-[var(--primary)] hover:text-[var(--primary-light)] font-medium"
@@ -185,9 +188,7 @@ export default function EditGrantPage() {
     <div>
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-3xl font-bold text-[var(--foreground)] mb-2">
-            Edit Grant
-          </h1>
+          <h1 className="text-3xl font-bold text-[var(--foreground)] mb-2">Edit Grant</h1>
           <p className="text-[var(--muted)]">
             Fix mistakes in grant details. Changes take effect immediately.
           </p>
@@ -271,9 +272,7 @@ export default function EditGrantPage() {
 
           {/* Funding */}
           <div>
-            <h2 className="text-lg font-semibold text-[var(--foreground)] mb-4">
-              Funding
-            </h2>
+            <h2 className="text-lg font-semibold text-[var(--foreground)] mb-4">Funding</h2>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
                 <label htmlFor="amount" className={labelClass}>
@@ -418,9 +417,7 @@ export default function EditGrantPage() {
 
           {/* Targeting */}
           <div>
-            <h2 className="text-lg font-semibold text-[var(--foreground)] mb-4">
-              Targeting
-            </h2>
+            <h2 className="text-lg font-semibold text-[var(--foreground)] mb-4">Targeting</h2>
             <div className="space-y-4">
               <div>
                 <label htmlFor="locations" className={labelClass}>
@@ -497,10 +494,7 @@ export default function EditGrantPage() {
           {success && (
             <div className="p-3 rounded bg-green-50 border border-green-200 text-sm text-green-700">
               {success}{" "}
-              <Link
-                href={`/grants/${id}`}
-                className="underline font-medium"
-              >
+              <Link href={`/grants/${id}`} className="underline font-medium">
                 View grant
               </Link>
             </div>

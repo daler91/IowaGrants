@@ -56,7 +56,7 @@ export default function InvitesPage() {
       }
 
       const data = await res.json();
-      const link = `${window.location.origin}/register#token=${data.invite.token}`;
+      const link = `${globalThis.location.origin}/register#token=${data.invite.token}`;
       setInviteLink(link);
       setEmail("");
       fetchInvites();
@@ -73,17 +73,14 @@ export default function InvitesPage() {
 
   return (
     <div>
-      <h1 className="text-3xl font-bold text-[var(--foreground)] mb-2">
-        Invite Admins
-      </h1>
+      <h1 className="text-3xl font-bold text-[var(--foreground)] mb-2">Invite Admins</h1>
       <p className="text-[var(--muted)] mb-8">
-        Invite other administrators by sending them a registration link. Invites expire after 72 hours.
+        Invite other administrators by sending them a registration link. Invites expire after 72
+        hours.
       </p>
 
       <div className="bg-white rounded-lg border border-[var(--border)] p-6 mb-8">
-        <h2 className="text-lg font-semibold text-[var(--foreground)] mb-4">
-          Send Invitation
-        </h2>
+        <h2 className="text-lg font-semibold text-[var(--foreground)] mb-4">Send Invitation</h2>
         <form onSubmit={handleInvite} className="flex gap-3">
           <input
             type="email"
@@ -128,9 +125,7 @@ export default function InvitesPage() {
 
       <div className="bg-white rounded-lg border border-[var(--border)]">
         <div className="px-6 py-4 border-b border-[var(--border)]">
-          <h2 className="text-lg font-semibold text-[var(--foreground)]">
-            Invitation History
-          </h2>
+          <h2 className="text-lg font-semibold text-[var(--foreground)]">Invitation History</h2>
         </div>
 
         {loading ? (
@@ -141,31 +136,26 @@ export default function InvitesPage() {
           <div className="divide-y divide-[var(--border)]">
             {invites.map((invite) => {
               const expired = !invite.usedAt && new Date(invite.expiresAt) < new Date();
-              const status = invite.usedAt
-                ? "Used"
-                : expired
-                  ? "Expired"
-                  : "Pending";
-              const statusColor = invite.usedAt
-                ? "text-green-600"
-                : expired
-                  ? "text-red-600"
-                  : "text-amber-600";
+              let status = "Pending";
+              let statusColor = "text-amber-600";
+              if (invite.usedAt) {
+                status = "Used";
+                statusColor = "text-green-600";
+              } else if (expired) {
+                status = "Expired";
+                statusColor = "text-red-600";
+              }
 
               return (
                 <div key={invite.id} className="px-6 py-4 flex items-center justify-between">
                   <div>
-                    <p className="text-sm font-medium text-[var(--foreground)]">
-                      {invite.email}
-                    </p>
+                    <p className="text-sm font-medium text-[var(--foreground)]">{invite.email}</p>
                     <p className="text-xs text-[var(--muted)]">
                       Invited by {invite.invitedBy} on{" "}
                       {new Date(invite.createdAt).toLocaleDateString()}
                     </p>
                   </div>
-                  <span className={`text-sm font-medium ${statusColor}`}>
-                    {status}
-                  </span>
+                  <span className={`text-sm font-medium ${statusColor}`}>{status}</span>
                 </div>
               );
             })}

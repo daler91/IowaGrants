@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { randomBytes, createHash } from "crypto";
+import { randomBytes, createHash } from "node:crypto";
 import { prisma } from "@/lib/db";
 import { requireAdmin, UnauthorizedError } from "@/lib/auth";
 import { parseJson } from "@/lib/http/parse-json";

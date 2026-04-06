@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useAdmin } from "@/lib/hooks/useAdmin";
 
-export default function AdminEditButton({ grantId }: { grantId: string }) {
+export default function AdminEditButton({ grantId }: Readonly<{ grantId: string }>) {
   const { isAuthenticated, loading } = useAdmin();
 
   if (loading || !isAuthenticated) return null;

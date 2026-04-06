@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
-export default function AdminLayout({ children }: { children: React.ReactNode }) {
+export default function AdminLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   const router = useRouter();
   const [authorized, setAuthorized] = useState(false);
 

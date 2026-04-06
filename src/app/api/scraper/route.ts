@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { timingSafeEqual } from "crypto";
+import { timingSafeEqual } from "node:crypto";
 import { prisma } from "@/lib/db";
 import { env } from "@/lib/env";
 import { requireAdmin, UnauthorizedError } from "@/lib/auth";

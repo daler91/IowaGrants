@@ -6,6 +6,87 @@ import { GRANT_INCLUDE } from "@/lib/constants";
 import { logError } from "@/lib/errors";
 import { parseJson } from "@/lib/http/parse-json";
 import { grantUpdateSchema } from "@/lib/http/schemas";
+import { z } from "zod";
+
+type GrantUpdatePayload = z.infer<typeof grantUpdateSchema>;
+
+const REQUIRED_STRING_FIELDS = ["title", "description", "sourceName", "sourceUrl"] as const;
+const OPTIONAL_STRING_FIELDS = ["amount", "eligibility", "pdfUrl"] as const;
+const INTEGER_FIELDS = ["amountMin", "amountMax"] as const;
+const ARRAY_FIELDS = ["locations", "industries"] as const;
+
+function setRequiredStrings(data: Prisma.GrantUpdateInput, body: GrantUpdatePayload) {
+  for (const field of REQUIRED_STRING_FIELDS) {
+    if (body[field] !== undefined) {
+      (data as Record<string, unknown>)[field] = body[field]!.trim();
+    }
+  }
+}
+
+function setOptionalStrings(data: Prisma.GrantUpdateInput, body: GrantUpdatePayload) {
+  for (const field of OPTIONAL_STRING_FIELDS) {
+    if (body[field] === undefined) continue;
+    const value = body[field];
+    (data as Record<string, unknown>)[field] = value === null || value === "" ? null : value.trim();
+  }
+}
+
+function setIntegerFields(data: Prisma.GrantUpdateInput, body: GrantUpdatePayload) {
+  for (const field of INTEGER_FIELDS) {
+    if (body[field] !== undefined) {
+      (data as Record<string, unknown>)[field] = body[field];
+    }
+  }
+}
+
+function parseDeadline(deadline: string | null | undefined) {
+  if (deadline === undefined) return { shouldSet: false as const };
+  if (deadline === null) return { shouldSet: true as const, value: null as Date | null };
+
+  const date = new Date(deadline);
+  if (Number.isNaN(date.getTime())) {
+    return { shouldSet: true as const, error: "deadline must be a valid date string or null" };
+  }
+
+  return { shouldSet: true as const, value: date };
+}
+
+function setEnumFields(data: Prisma.GrantUpdateInput, body: GrantUpdatePayload) {
+  if (body.grantType !== undefined) {
+    data.grantType = body.grantType as Prisma.EnumGrantTypeFieldUpdateOperationsInput["set"];
+  }
+  if (body.status !== undefined) {
+    data.status = body.status as Prisma.EnumGrantStatusFieldUpdateOperationsInput["set"];
+  }
+  if (body.businessStage !== undefined) {
+    data.businessStage =
+      body.businessStage as Prisma.EnumBusinessStageFieldUpdateOperationsInput["set"];
+  }
+  if (body.gender !== undefined) {
+    data.gender = body.gender as Prisma.EnumGenderFocusFieldUpdateOperationsInput["set"];
+  }
+}
+
+function setArrayFields(data: Prisma.GrantUpdateInput, body: GrantUpdatePayload) {
+  for (const field of ARRAY_FIELDS) {
+    if (body[field] === undefined) continue;
+    (data as Record<string, unknown>)[field] = body[field]
+      .map((value: string) => value.trim())
+      .filter((value: string) => value.length > 0);
+  }
+}
+
+function buildUpdateData(body: GrantUpdatePayload) {
+  const data: Prisma.GrantUpdateInput = {};
+  setRequiredStrings(data, body);
+  setOptionalStrings(data, body);
+  setIntegerFields(data, body);
+  setEnumFields(data, body);
+  setArrayFields(data, body);
+
+  const parsedDeadline = parseDeadline(body.deadline);
+  return { data, parsedDeadline };
+}
 
 export async function GET(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -42,68 +123,14 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     }
 
     const body = result.data;
-    const data: Prisma.GrantUpdateInput = {};
+    const { data, parsedDeadline } = buildUpdateData(body);
 
-    // Required string fields — trim when provided
-    for (const field of ["title", "description", "sourceName", "sourceUrl"] as const) {
-      if (body[field] !== undefined) {
-        (data as Record<string, unknown>)[field] = body[field]!.trim();
-      }
+    if (parsedDeadline.error) {
+      return NextResponse.json({ error: parsedDeadline.error }, { status: 400 });
     }
 
-    // Optional string fields (nullable)
-    for (const field of ["amount", "eligibility", "pdfUrl"] as const) {
-      if (body[field] !== undefined) {
-        const val = body[field];
-        (data as Record<string, unknown>)[field] =
-          val === null || val === "" ? null : val!.trim();
-      }
-    }
-
-    // Integer fields
-    for (const field of ["amountMin", "amountMax"] as const) {
-      if (body[field] !== undefined) {
-        (data as Record<string, unknown>)[field] = body[field];
-      }
-    }
-
-    // Deadline
-    if (body.deadline !== undefined) {
-      if (body.deadline === null) {
-        data.deadline = null;
-      } else {
-        const date = new Date(body.deadline);
-        if (Number.isNaN(date.getTime())) {
-          return NextResponse.json(
-            { error: "deadline must be a valid date string or null" },
-            { status: 400 },
-          );
-        }
-        data.deadline = date;
-      }
-    }
-
-    // Enum fields
-    if (body.grantType !== undefined) {
-      data.grantType = body.grantType as Prisma.EnumGrantTypeFieldUpdateOperationsInput["set"];
-    }
-    if (body.status !== undefined) {
-      data.status = body.status as Prisma.EnumGrantStatusFieldUpdateOperationsInput["set"];
-    }
-    if (body.businessStage !== undefined) {
-      data.businessStage = body.businessStage as Prisma.EnumBusinessStageFieldUpdateOperationsInput["set"];
-    }
-    if (body.gender !== undefined) {
-      data.gender = body.gender as Prisma.EnumGenderFocusFieldUpdateOperationsInput["set"];
-    }
-
-    // String arrays — trim and filter empty
-    for (const field of ["locations", "industries"] as const) {
-      if (body[field] !== undefined) {
-        (data as Record<string, unknown>)[field] = body[field]!
-          .map((v: string) => v.trim())
-          .filter((v: string) => v.length > 0);
-      }
+    if (parsedDeadline.shouldSet) {
+      data.deadline = parsedDeadline.value;
     }
 
     if (Object.keys(data).length === 0) {
