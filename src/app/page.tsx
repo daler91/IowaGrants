@@ -29,7 +29,7 @@ function parseFiltersFromParams(params: URLSearchParams): { filters: FilterType;
       businessStage: parseList<NonNullable<FilterType["businessStage"]>[number]>(
         params.get("businessStage"),
       ),
-      status: parseList<NonNullable<FilterType["status"]>[number]>(params.get("status")),
+      status: parseList<NonNullable<FilterType["status"]>[number]>(params.get("status")) || (["OPEN", "FORECASTED"] as NonNullable<FilterType["status"]>),
       eligibleExpense: parseList(params.get("eligibleExpense")),
       location: params.get("location") || undefined,
       page: Number.parseInt(params.get("page") || "1") || 1,
