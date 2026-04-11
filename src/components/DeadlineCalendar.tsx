@@ -99,16 +99,11 @@ export default function DeadlineCalendar() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Roving tabindex: exactly one cell has tabIndex=0 at any time. Starts
-  // at today if the calendar is open on the current month, otherwise the
-  // 1st of the visible month.
-  const [focusedDate, setFocusedDate] = useState<string>(() => {
-    const initialMatchesToday =
-      today.getFullYear() === today.getFullYear() && today.getMonth() + 1 === today.getMonth() + 1;
-    return initialMatchesToday
-      ? todayStr
-      : formatDateKey(today.getFullYear(), today.getMonth() + 1, 1);
-  });
+  // Roving tabindex: exactly one cell has tabIndex=0 at any time. On mount
+  // this is today because year/month are also initialized to today. When
+  // the user navigates months via the header buttons, jumpToMonth() resets
+  // focusedDate to the 1st of the new month.
+  const [focusedDate, setFocusedDate] = useState<string>(todayStr);
 
   // When moveFocus() decides to change months, we stash the date string
   // here and an effect moves focus to the matching button after the new
