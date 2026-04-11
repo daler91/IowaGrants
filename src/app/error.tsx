@@ -1,5 +1,7 @@
 "use client";
 
+import { Button } from "@/components/ui/Button";
+
 type AppErrorProps = Readonly<{
   error: Error & { digest?: string };
   reset: () => void;
@@ -10,7 +12,7 @@ export default function AppError({ error, reset }: AppErrorProps) {
   return (
     <div className="text-center py-16">
       <svg
-        className="mx-auto h-12 w-12 text-red-400"
+        className="mx-auto h-12 w-12 text-[var(--danger)]"
         fill="none"
         stroke="currentColor"
         viewBox="0 0 24 24"
@@ -27,12 +29,9 @@ export default function AppError({ error, reset }: AppErrorProps) {
       <p className="mt-2 text-sm text-[var(--muted)] max-w-md mx-auto">
         An unexpected error occurred. Please try again.
       </p>
-      <button
-        onClick={reset}
-        className="mt-6 px-6 py-2.5 bg-[var(--primary)] text-white rounded-lg font-medium hover:bg-[var(--primary-light)] transition-colors"
-      >
+      <Button onClick={reset} className="mt-6">
         Try again
-      </button>
+      </Button>
     </div>
   );
 }

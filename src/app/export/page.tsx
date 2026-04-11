@@ -4,7 +4,11 @@ import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import SearchBar from "@/components/SearchBar";
 import GrantFilters from "@/components/GrantFilters";
-import type { GrantFilters as FilterType } from "@/lib/types";
+import Alert from "@/components/ui/Alert";
+import { Button } from "@/components/ui/Button";
+import { toast } from "@/lib/toast";
+import { buildGrantQueryParams } from "@/lib/query-params";
+import type { GrantFilters as FilterType, GrantSortDir, GrantSortKey } from "@/lib/types";
 import {
   buildFilterSummary,
   buildMailto,
@@ -33,6 +37,29 @@ function parseList<T extends string = string>(raw: string | null): T[] | undefin
   return values.length ? values : undefined;
 }
 
+const VALID_SORT_KEYS: readonly GrantSortKey[] = [
+  "deadline",
+  "rollingFirst",
+  "amount",
+  "recent",
+  "title",
+];
+
+function parseSortKey(raw: string | null): GrantSortKey | undefined {
+  if (!raw) return undefined;
+  return (VALID_SORT_KEYS as readonly string[]).includes(raw) ? (raw as GrantSortKey) : undefined;
+}
+
+function parseSortDir(raw: string | null): GrantSortDir | undefined {
+  return raw === "asc" || raw === "desc" ? raw : undefined;
+}
+
+function parseOptionalNumber(raw: string | null): number | undefined {
+  if (!raw) return undefined;
+  const n = Number.parseInt(raw, 10);
+  return Number.isNaN(n) ? undefined : n;
+}
+
 function parseFiltersFromParams(params: URLSearchParams): {
   filters: FilterType;
   search: string;
@@ -51,20 +78,24 @@ function parseFiltersFromParams(params: URLSearchParams): {
       status: parseList<NonNullable<FilterType["status"]>[number]>(params.get("status")),
       eligibleExpense: parseList(params.get("eligibleExpense")),
       location: params.get("location") || undefined,
+      industry: params.get("industry") || undefined,
+      amountMin: parseOptionalNumber(params.get("amountMin")),
+      amountMax: parseOptionalNumber(params.get("amountMax")),
+      sort: parseSortKey(params.get("sort")),
+      dir: parseSortDir(params.get("dir")),
     },
   };
 }
 
+/**
+ * Serialize the current export-page state. Delegates to the canonical
+ * `buildGrantQueryParams` so any new filter dimension added to the
+ * dashboard is automatically supported here too — the export page used
+ * to ship its own duplicate serializer that silently dropped industry,
+ * amount, and sort.
+ */
 function buildQueryString(filters: FilterType, search: string, format?: ExportFormat): string {
-  const params = new URLSearchParams();
-  if (search) params.set("search", search);
-  if (filters.grantType?.length) params.set("grantType", filters.grantType.join(","));
-  if (filters.gender?.length) params.set("gender", filters.gender.join(","));
-  if (filters.businessStage?.length) params.set("businessStage", filters.businessStage.join(","));
-  if (filters.status?.length) params.set("status", filters.status.join(","));
-  if (filters.eligibleExpense?.length)
-    params.set("eligibleExpense", filters.eligibleExpense.join(","));
-  if (filters.location) params.set("location", filters.location);
+  const params = buildGrantQueryParams(filters, search);
   if (format) params.set("format", format);
   return params.toString();
 }
@@ -186,8 +217,9 @@ function ExportPageInner() {
       await navigator.clipboard.writeText(textOutput);
       setCopyStatus("copied");
       setTimeout(() => setCopyStatus("idle"), 2000);
+      toast.success("Copied to clipboard");
     } catch {
-      setError("Failed to copy to clipboard.");
+      toast.error("Failed to copy to clipboard");
     }
   };
 
@@ -201,8 +233,9 @@ function ExportPageInner() {
       await navigator.clipboard.writeText(globalThis.location.href);
       setShareStatus("copied");
       setTimeout(() => setShareStatus("idle"), 2000);
+      toast.success("Share link copied");
     } catch {
-      setError("Failed to copy share link.");
+      toast.error("Failed to copy share link");
     }
   };
 
@@ -238,13 +271,14 @@ function ExportPageInner() {
             Export filtered grants as PDF, CSV, JSON, or formatted text you can paste into an email.
           </p>
         </div>
-        <button
+        <Button
+          variant="secondary"
+          size="sm"
           onClick={handleCopyShareLink}
-          className="self-start px-3 py-2 text-sm rounded-lg border border-[var(--border)] bg-white hover:bg-gray-50 text-[var(--foreground)] font-medium transition-colors"
           title="Copy a link with these filters + format"
         >
           {shareStatus === "copied" ? "Link copied!" : "Copy share link"}
-        </button>
+        </Button>
       </div>
 
       <div className="mb-6">
@@ -252,11 +286,10 @@ function ExportPageInner() {
       </div>
 
       {error && (
-        <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700 flex items-center justify-between">
-          <span>{error}</span>
-          <button onClick={() => setError(null)} className="ml-2 text-red-500 hover:text-red-700">
-            Dismiss
-          </button>
+        <div className="mb-4">
+          <Alert variant="error" onDismiss={() => setError(null)}>
+            {error}
+          </Alert>
         </div>
       )}
 
@@ -267,7 +300,7 @@ function ExportPageInner() {
 
         <div className="flex-1 space-y-6">
           {/* Format selector */}
-          <div className="bg-white rounded-lg border border-[var(--border)] p-5">
+          <div className="bg-[var(--card)] rounded-lg border border-[var(--border)] p-5">
             <h2 className="font-semibold text-[var(--foreground)] mb-3">Export format</h2>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               {FORMATS.map((f) => {
@@ -276,10 +309,10 @@ function ExportPageInner() {
                   <button
                     key={f.value}
                     onClick={() => setFormat(f.value)}
-                    className={`text-left p-3 rounded-lg border transition-colors ${
+                    className={`text-left p-3 rounded-lg border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] ${
                       active
-                        ? "border-[var(--primary)] bg-blue-50 ring-2 ring-[var(--primary-light)]"
-                        : "border-[var(--border)] hover:border-gray-400"
+                        ? "border-[var(--primary)] bg-[var(--info-bg)] ring-2 ring-[var(--primary-light)]"
+                        : "border-[var(--border)] hover:border-[var(--muted)]"
                     }`}
                     aria-pressed={active}
                   >
@@ -292,7 +325,7 @@ function ExportPageInner() {
           </div>
 
           {/* Summary + download */}
-          <div className="bg-white rounded-lg border border-[var(--border)] p-5">
+          <div className="bg-[var(--card)] rounded-lg border border-[var(--border)] p-5">
             <div className="mb-3">
               <div className="text-sm text-[var(--muted)] mb-1">Filters</div>
               <div className="text-sm text-[var(--foreground)]">{filterSummary}</div>
@@ -300,44 +333,36 @@ function ExportPageInner() {
             <div className="mb-4 text-sm">{previewSummary}</div>
 
             {truncated && (
-              <div className="mb-4 p-3 rounded-lg bg-amber-50 border border-amber-200 text-sm text-amber-800">
-                Showing first 1000 results — narrow your filters to export more.
+              <div className="mb-4">
+                <Alert variant="warning">
+                  Showing first 1000 results — narrow your filters to export more.
+                </Alert>
               </div>
             )}
 
-            <button
-              onClick={handleDownload}
-              disabled={generating || previewCount === 0}
-              className="px-4 py-2 rounded-lg bg-[var(--primary)] text-white font-medium hover:bg-[var(--primary-light)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
+            <Button onClick={handleDownload} disabled={generating || previewCount === 0}>
               {generatingLabel ?? `Download ${format.toUpperCase()}`}
-            </button>
+            </Button>
           </div>
 
           {/* Formatted text preview + mailto */}
           {format === "text" && textOutput && (
-            <div className="bg-white rounded-lg border border-[var(--border)] p-5">
+            <div className="bg-[var(--card)] rounded-lg border border-[var(--border)] p-5">
               <div className="flex items-center justify-between mb-3">
                 <h2 className="font-semibold text-[var(--foreground)]">Email-ready text</h2>
                 <div className="flex gap-2">
-                  <button
-                    onClick={handleCopyText}
-                    className="px-3 py-1.5 text-sm rounded-lg border border-[var(--border)] bg-white hover:bg-gray-50 font-medium transition-colors"
-                  >
+                  <Button variant="secondary" size="sm" onClick={handleCopyText}>
                     {copyStatus === "copied" ? "Copied!" : "Copy to clipboard"}
-                  </button>
-                  <button
-                    onClick={handleOpenInEmail}
-                    className="px-3 py-1.5 text-sm rounded-lg bg-[var(--primary)] text-white font-medium hover:bg-[var(--primary-light)] transition-colors"
-                  >
+                  </Button>
+                  <Button size="sm" onClick={handleOpenInEmail}>
                     Open in email
-                  </button>
+                  </Button>
                 </div>
               </div>
               <textarea
                 readOnly
                 value={textOutput}
-                className="w-full h-80 p-3 rounded-lg border border-[var(--border)] bg-gray-50 font-mono text-xs text-[var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[var(--primary-light)]"
+                className="w-full h-80 p-3 rounded-lg border border-[var(--border)] bg-[var(--surface-hover)] font-mono text-xs text-[var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[var(--focus-ring)]"
               />
             </div>
           )}

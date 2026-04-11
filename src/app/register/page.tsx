@@ -2,6 +2,9 @@
 
 import { Suspense, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
+import { Button } from "@/components/ui/Button";
+import Alert from "@/components/ui/Alert";
+import FormField, { fieldInputClass } from "@/components/ui/FormField";
 
 export default function RegisterPage() {
   return (
@@ -97,35 +100,19 @@ function RegisterForm() {
         </h1>
         <form
           onSubmit={handleSubmit}
-          className="bg-white rounded-lg border border-[var(--border)] p-6 space-y-4"
+          className="bg-[var(--card)] rounded-lg border border-[var(--border)] p-6 space-y-4"
         >
-          {error && (
-            <div className="p-3 rounded bg-red-50 border border-red-200 text-sm text-red-700">
-              {error}
-            </div>
-          )}
-          <div>
-            <label
-              htmlFor="name"
-              className="block text-sm font-medium text-[var(--foreground)] mb-1"
-            >
-              Name (optional)
-            </label>
+          {error && <Alert variant="error">{error}</Alert>}
+          <FormField label="Name (optional)" htmlFor="name">
             <input
               id="name"
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="w-full px-3 py-2 border border-[var(--border)] rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--primary)]"
+              className={fieldInputClass}
             />
-          </div>
-          <div>
-            <label
-              htmlFor="password"
-              className="block text-sm font-medium text-[var(--foreground)] mb-1"
-            >
-              Password
-            </label>
+          </FormField>
+          <FormField label="Password" htmlFor="password" required>
             <input
               id="password"
               type="password"
@@ -133,16 +120,10 @@ function RegisterForm() {
               minLength={12}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full px-3 py-2 border border-[var(--border)] rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--primary)]"
+              className={fieldInputClass}
             />
-          </div>
-          <div>
-            <label
-              htmlFor="confirmPassword"
-              className="block text-sm font-medium text-[var(--foreground)] mb-1"
-            >
-              Confirm Password
-            </label>
+          </FormField>
+          <FormField label="Confirm Password" htmlFor="confirmPassword" required>
             <input
               id="confirmPassword"
               type="password"
@@ -150,16 +131,12 @@ function RegisterForm() {
               minLength={12}
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
-              className="w-full px-3 py-2 border border-[var(--border)] rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--primary)]"
+              className={fieldInputClass}
             />
-          </div>
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full py-2 px-4 bg-[var(--primary)] text-white rounded-lg font-medium hover:bg-[var(--primary-light)] disabled:opacity-50 transition-colors"
-          >
+          </FormField>
+          <Button type="submit" loading={loading} className="w-full">
             {loading ? "Creating account..." : "Create Account"}
-          </button>
+          </Button>
         </form>
       </div>
     </div>

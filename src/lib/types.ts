@@ -29,6 +29,12 @@ export interface GrantListItem {
   sourceName: string;
   grantType: string;
   status: string;
+  /**
+   * Server-computed: equal to `status` unless the deadline has passed,
+   * in which case it's "CLOSED". Use this for display — it's free of
+   * timezone drift that used to haunt the client-side recomputation.
+   */
+  displayStatus?: string;
   gender: string;
   businessStage: string;
   amount?: string | null;
@@ -36,6 +42,9 @@ export interface GrantListItem {
   locations: string[];
   eligibleExpenses: { name: string; label: string }[];
 }
+
+export type GrantSortKey = "deadline" | "rollingFirst" | "amount" | "recent" | "title";
+export type GrantSortDir = "asc" | "desc";
 
 export interface GrantFilters {
   search?: string;
@@ -48,6 +57,8 @@ export interface GrantFilters {
   amountMin?: number;
   amountMax?: number;
   eligibleExpense?: string[];
+  sort?: GrantSortKey;
+  dir?: GrantSortDir;
   page?: number;
   limit?: number;
 }

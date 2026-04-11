@@ -57,10 +57,55 @@ export function isDeadlinePassed(deadline: DeadlineInput): boolean {
   return !!d && d.getTime() < Date.now();
 }
 
+/**
+ * True when the grant has no (parseable) deadline. Rolling grants accept
+ * applications on an ongoing basis — they are a distinct product state,
+ * not missing data, and should be promoted visually via a "Rolling" badge.
+ */
+export function isRolling(deadline: DeadlineInput): boolean {
+  return toDate(deadline) === null;
+}
+
+/**
+ * Compute the user-visible status: if the stored status is OPEN but the
+ * deadline has passed, treat it as CLOSED. This is authoritative when
+ * computed on the server so the UI can trust the value instead of
+ * recomputing with client-local time (which drifts across timezones).
+ */
+export function computeDisplayStatus(status: string, deadline: DeadlineInput): string {
+  return isDeadlinePassed(deadline) ? "CLOSED" : status;
+}
+
 /** True if the deadline exists, is in the future, and is within 7 days. */
 export function isDeadlineUrgent(deadline: DeadlineInput): boolean {
   const d = toDate(deadline);
   if (!d) return false;
   const delta = d.getTime() - Date.now();
   return delta > 0 && delta < URGENT_THRESHOLD_MS;
+}
+
+/**
+ * Return the whole number of days remaining until the deadline, or null
+ * when there is no (parseable) deadline. Past deadlines yield a negative
+ * number. Rounding matches `formatDeadlineShort` so the "Nd left" copy
+ * agrees with the "Closing in Nd" badge on the urgent UI.
+ */
+export function daysUntilDeadline(deadline: DeadlineInput): number | null {
+  const d = toDate(deadline);
+  if (!d) return null;
+  return Math.ceil((d.getTime() - Date.now()) / MS_PER_DAY);
+}
+
+/**
+ * Short screen-reader and badge label for an urgent deadline.
+ * "Closing today" / "Closing tomorrow" / "Closing in Nd".
+ * Returns null if the deadline is not urgent.
+ */
+export function urgencyLabel(deadline: DeadlineInput): string | null {
+  if (!isDeadlineUrgent(deadline)) return null;
+  const days = daysUntilDeadline(deadline);
+  if (days === null) return null;
+  if (days <= 0) return "Closing today";
+  if (days === 1) return "Closing tomorrow";
+  return `Closing in ${days}d`;
 }

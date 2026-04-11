@@ -1,6 +1,10 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { Button } from "@/components/ui/Button";
+import Alert from "@/components/ui/Alert";
+import FormField, { fieldInputClass } from "@/components/ui/FormField";
+import { toast } from "@/lib/toast";
 
 interface BlacklistedUrl {
   id: string;
@@ -21,7 +25,6 @@ export default function BlacklistPage() {
   const [reason, setReason] = useState("");
   const [adding, setAdding] = useState(false);
   const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
 
   const fetchUrls = useCallback(async () => {
     setLoading(true);
@@ -46,7 +49,6 @@ export default function BlacklistPage() {
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
-    setSuccess("");
     setAdding(true);
 
     const urlList = newUrl
@@ -69,12 +71,12 @@ export default function BlacklistPage() {
       if (!res.ok) throw new Error("Failed to add");
       const data = await res.json();
       const duplicatesText = data.duplicates > 0 ? `, ${data.duplicates} already blacklisted` : "";
-      setSuccess(`Added ${data.created} URL(s)${duplicatesText}.`);
+      toast.success(`Added ${data.created} URL(s)${duplicatesText}.`);
       setNewUrl("");
       setReason("");
       fetchUrls();
     } catch {
-      setError("Failed to add URLs to blacklist.");
+      toast.error("Failed to add URLs to blacklist.");
     } finally {
       setAdding(false);
     }
@@ -88,9 +90,10 @@ export default function BlacklistPage() {
         body: JSON.stringify({ ids: [id] }),
       });
       if (!res.ok) throw new Error("Failed to remove");
+      toast.success("URL removed from blacklist");
       fetchUrls();
     } catch {
-      setError("Failed to remove URL from blacklist.");
+      toast.error("Failed to remove URL from blacklist.");
     }
   };
 
@@ -102,65 +105,44 @@ export default function BlacklistPage() {
         {total > 0 && `${total} URL(s) blacklisted.`}
       </p>
 
-      <div className="bg-white rounded-lg border border-[var(--border)] p-6 mb-8">
+      <div className="bg-[var(--card)] rounded-lg border border-[var(--border)] p-6 mb-8">
         <h2 className="text-lg font-semibold text-[var(--foreground)] mb-4">
           Add URLs to Blacklist
         </h2>
         <form onSubmit={handleAdd} className="space-y-4">
-          <div>
-            <label
-              htmlFor="urls"
-              className="block text-sm font-medium text-[var(--foreground)] mb-1"
-            >
-              URLs (one per line)
-            </label>
+          <FormField label="URLs (one per line)" htmlFor="urls">
             <textarea
               id="urls"
               rows={4}
               value={newUrl}
               onChange={(e) => setNewUrl(e.target.value)}
               placeholder={"https://example.com/grant-page-1\nhttps://example.com/grant-page-2"}
-              className="w-full px-3 py-2 border border-[var(--border)] rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--primary)] font-mono text-sm"
+              className={`${fieldInputClass} font-mono`}
             />
-          </div>
-          <div>
-            <label
-              htmlFor="reason"
-              className="block text-sm font-medium text-[var(--foreground)] mb-1"
-            >
-              Reason (optional)
-            </label>
+          </FormField>
+          <FormField label="Reason (optional)" htmlFor="reason">
             <input
               id="reason"
               type="text"
               value={reason}
               onChange={(e) => setReason(e.target.value)}
               placeholder="e.g., Not a real grant, duplicate, expired program"
-              className="w-full px-3 py-2 border border-[var(--border)] rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--primary)]"
+              className={fieldInputClass}
             />
-          </div>
-          <button
-            type="submit"
-            disabled={adding}
-            className="py-2 px-4 bg-[var(--primary)] text-white rounded-lg font-medium hover:bg-[var(--primary-light)] disabled:opacity-50 transition-colors"
-          >
+          </FormField>
+          <Button type="submit" loading={adding}>
             {adding ? "Adding..." : "Add to Blacklist"}
-          </button>
+          </Button>
         </form>
 
         {error && (
-          <div className="mt-4 p-3 rounded bg-red-50 border border-red-200 text-sm text-red-700">
-            {error}
-          </div>
-        )}
-        {success && (
-          <div className="mt-4 p-3 rounded bg-green-50 border border-green-200 text-sm text-green-700">
-            {success}
+          <div className="mt-4">
+            <Alert variant="error">{error}</Alert>
           </div>
         )}
       </div>
 
-      <div className="bg-white rounded-lg border border-[var(--border)]">
+      <div className="bg-[var(--card)] rounded-lg border border-[var(--border)]">
         <div className="px-6 py-4 border-b border-[var(--border)]">
           <h2 className="text-lg font-semibold text-[var(--foreground)]">Blacklisted URLs</h2>
         </div>
@@ -188,12 +170,14 @@ export default function BlacklistPage() {
                         <span>{new Date(item.createdAt).toLocaleDateString()}</span>
                       </div>
                     </div>
-                    <button
+                    <Button
+                      variant="ghost"
+                      size="sm"
                       onClick={() => handleRemove(item.id)}
-                      className="text-sm text-red-600 hover:text-red-800 font-medium flex-shrink-0"
+                      className="flex-shrink-0 text-[var(--danger)] hover:text-[var(--danger-hover)]"
                     >
                       Remove
-                    </button>
+                    </Button>
                   </div>
                 ))}
               </div>
@@ -203,23 +187,25 @@ export default function BlacklistPage() {
 
         {totalPages > 1 && (
           <div className="px-6 py-4 border-t border-[var(--border)] flex items-center justify-between">
-            <button
+            <Button
+              variant="secondary"
+              size="sm"
               onClick={() => setPage((p) => Math.max(1, p - 1))}
               disabled={page <= 1}
-              className="px-3 py-1 text-sm border border-[var(--border)] rounded disabled:opacity-50"
             >
               Previous
-            </button>
+            </Button>
             <span className="text-sm text-[var(--muted)]">
               Page {page} of {totalPages}
             </span>
-            <button
+            <Button
+              variant="secondary"
+              size="sm"
               onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
               disabled={page >= totalPages}
-              className="px-3 py-1 text-sm border border-[var(--border)] rounded disabled:opacity-50"
             >
               Next
-            </button>
+            </Button>
           </div>
         )}
       </div>

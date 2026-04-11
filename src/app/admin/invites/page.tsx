@@ -1,6 +1,10 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { Button } from "@/components/ui/Button";
+import Alert from "@/components/ui/Alert";
+import { fieldInputClass } from "@/components/ui/FormField";
+import { toast } from "@/lib/toast";
 
 interface Invite {
   id: string;
@@ -59,6 +63,7 @@ export default function InvitesPage() {
       const link = `${globalThis.location.origin}/register#token=${data.invite.token}`;
       setInviteLink(link);
       setEmail("");
+      toast.success("Invite created");
       fetchInvites();
     } catch {
       setError("Network error. Please try again.");
@@ -67,8 +72,13 @@ export default function InvitesPage() {
     }
   };
 
-  const copyLink = () => {
-    navigator.clipboard.writeText(inviteLink);
+  const copyLink = async () => {
+    try {
+      await navigator.clipboard.writeText(inviteLink);
+      toast.success("Invite link copied");
+    } catch {
+      toast.error("Failed to copy link");
+    }
   };
 
   return (
@@ -79,7 +89,7 @@ export default function InvitesPage() {
         hours.
       </p>
 
-      <div className="bg-white rounded-lg border border-[var(--border)] p-6 mb-8">
+      <div className="bg-[var(--card)] rounded-lg border border-[var(--border)] p-6 mb-8">
         <h2 className="text-lg font-semibold text-[var(--foreground)] mb-4">Send Invitation</h2>
         <form onSubmit={handleInvite} className="flex gap-3">
           <input
@@ -88,42 +98,38 @@ export default function InvitesPage() {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             placeholder="admin@example.com"
-            className="flex-1 px-3 py-2 border border-[var(--border)] rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--primary)]"
+            aria-label="Invitee email"
+            className={`${fieldInputClass} flex-1`}
           />
-          <button
-            type="submit"
-            disabled={sending}
-            className="py-2 px-4 bg-[var(--primary)] text-white rounded-lg font-medium hover:bg-[var(--primary-light)] disabled:opacity-50 transition-colors"
-          >
+          <Button type="submit" loading={sending}>
             {sending ? "Sending..." : "Invite"}
-          </button>
+          </Button>
         </form>
 
         {error && (
-          <div className="mt-4 p-3 rounded bg-red-50 border border-red-200 text-sm text-red-700">
-            {error}
+          <div className="mt-4">
+            <Alert variant="error">{error}</Alert>
           </div>
         )}
 
         {inviteLink && (
-          <div className="mt-4 p-3 rounded bg-green-50 border border-green-200">
-            <p className="text-sm text-green-700 mb-2">Invite created! Share this link:</p>
-            <div className="flex gap-2 items-center">
-              <code className="flex-1 text-xs bg-white p-2 rounded border border-green-200 truncate">
-                {inviteLink}
-              </code>
-              <button
-                onClick={copyLink}
-                className="px-3 py-1 text-sm bg-green-600 text-white rounded hover:bg-green-700 transition-colors"
-              >
-                Copy
-              </button>
-            </div>
+          <div className="mt-4">
+            <Alert variant="success">
+              <p className="mb-2">Invite created! Share this link:</p>
+              <div className="flex gap-2 items-center">
+                <code className="flex-1 text-xs bg-[var(--card)] p-2 rounded border border-[var(--success-border)] truncate text-[var(--foreground)]">
+                  {inviteLink}
+                </code>
+                <Button variant="primary" size="sm" onClick={copyLink}>
+                  Copy
+                </Button>
+              </div>
+            </Alert>
           </div>
         )}
       </div>
 
-      <div className="bg-white rounded-lg border border-[var(--border)]">
+      <div className="bg-[var(--card)] rounded-lg border border-[var(--border)]">
         <div className="px-6 py-4 border-b border-[var(--border)]">
           <h2 className="text-lg font-semibold text-[var(--foreground)]">Invitation History</h2>
         </div>
@@ -145,13 +151,13 @@ export default function InvitesPage() {
         {invites.map((invite) => {
           const expired = !invite.usedAt && new Date(invite.expiresAt) < new Date();
           let status = "Pending";
-          let statusColor = "text-amber-600";
+          let statusColor = "text-[var(--warning)]";
           if (invite.usedAt) {
             status = "Used";
-            statusColor = "text-green-600";
+            statusColor = "text-[var(--success)]";
           } else if (expired) {
             status = "Expired";
-            statusColor = "text-red-600";
+            statusColor = "text-[var(--danger)]";
           }
 
           return (
@@ -159,8 +165,7 @@ export default function InvitesPage() {
               <div>
                 <p className="text-sm font-medium text-[var(--foreground)]">{invite.email}</p>
                 <p className="text-xs text-[var(--muted)]">
-                  Invited by {invite.invitedBy} on{" "}
-                  {new Date(invite.createdAt).toLocaleDateString()}
+                  Invited by {invite.invitedBy} on {new Date(invite.createdAt).toLocaleDateString()}
                 </p>
               </div>
               <span className={`text-sm font-medium ${statusColor}`}>{status}</span>

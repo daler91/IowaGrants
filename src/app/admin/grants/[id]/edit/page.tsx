@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import { useParams } from "next/navigation";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   VALID_GRANT_TYPES,
@@ -9,6 +9,13 @@ import {
   VALID_BUSINESS_STAGE,
   VALID_GENDER_FOCUS,
 } from "@/lib/constants";
+import { Button, LinkButton } from "@/components/ui/Button";
+import Alert from "@/components/ui/Alert";
+import ConfirmModal from "@/components/ConfirmModal";
+import { fieldInputClass } from "@/components/ui/FormField";
+import TagInput from "@/components/ui/TagInput";
+import { useMetaValues } from "@/lib/hooks/useMetaValues";
+import { toast } from "@/lib/toast";
 
 interface GrantFormData {
   title: string;
@@ -36,13 +43,34 @@ function toDateInputValue(isoString: string | null): string {
   return date.toISOString().split("T")[0];
 }
 
+function parseCsvToTags(csv: string): string[] {
+  return csv
+    .split(",")
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+}
+
+function tagsToCsv(tags: string[]): string {
+  return tags.join(", ");
+}
+
 export default function EditGrantPage() {
   const { id } = useParams<{ id: string }>();
+  const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [confirmLeave, setConfirmLeave] = useState(false);
+
+  const { values: locationSuggestions } = useMetaValues("/api/meta/locations", "locations");
+  const { values: industrySuggestions } = useMetaValues("/api/meta/industries", "industries");
+
+  // Snapshot of the fetched form so we can detect dirty changes. Stored
+  // in a ref to avoid triggering a re-render when we update it after
+  // a successful save.
+  const initialFormRef = useRef<GrantFormData | null>(null);
 
   const [form, setForm] = useState<GrantFormData>({
     title: "",
@@ -72,7 +100,7 @@ export default function EditGrantPage() {
       }
       if (res.ok === false) throw new Error("Failed to load grant");
       const data = await res.json();
-      setForm({
+      const loaded: GrantFormData = {
         title: data.title || "",
         description: data.description || "",
         sourceName: data.sourceName || "",
@@ -89,7 +117,9 @@ export default function EditGrantPage() {
         locations: (data.locations || []).join(", "),
         industries: (data.industries || []).join(", "),
         pdfUrl: data.pdfUrl || "",
-      });
+      };
+      setForm(loaded);
+      initialFormRef.current = loaded;
     } catch {
       setError("Failed to load grant data.");
     } finally {
@@ -106,6 +136,23 @@ export default function EditGrantPage() {
   ) => {
     setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
   };
+
+  // Dirty = current form differs from the snapshot loaded from the server.
+  // JSON.stringify is fine for a 15-field flat object of strings.
+  const dirty =
+    initialFormRef.current !== null &&
+    JSON.stringify(form) !== JSON.stringify(initialFormRef.current);
+
+  // Warn on browser tab close / reload when there are unsaved changes.
+  useEffect(() => {
+    if (!dirty) return;
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [dirty]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -150,9 +197,15 @@ export default function EditGrantPage() {
         throw new Error(data.error || "Failed to update grant");
       }
 
+      toast.success("Grant updated successfully");
       setSuccess("Grant updated successfully.");
+      // Refresh the snapshot so `dirty` resets and the beforeunload
+      // warning goes away until the next edit.
+      initialFormRef.current = form;
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to update grant.");
+      const message = err instanceof Error ? err.message : "Failed to update grant.";
+      setError(message);
+      toast.error(message);
     } finally {
       setSaving(false);
     }
@@ -180,8 +233,7 @@ export default function EditGrantPage() {
     );
   }
 
-  const inputClass =
-    "w-full px-3 py-2 border border-[var(--border)] rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--primary)]";
+  const inputClass = fieldInputClass;
   const labelClass = "block text-sm font-medium text-[var(--foreground)] mb-1";
 
   return (
@@ -201,7 +253,7 @@ export default function EditGrantPage() {
         </Link>
       </div>
 
-      <div className="bg-white rounded-lg border border-[var(--border)] p-6">
+      <div className="bg-[var(--card)] rounded-lg border border-[var(--border)] p-6">
         <form onSubmit={handleSubmit} className="space-y-6">
           {/* Basic Info */}
           <div>
@@ -420,31 +472,27 @@ export default function EditGrantPage() {
             <h2 className="text-lg font-semibold text-[var(--foreground)] mb-4">Targeting</h2>
             <div className="space-y-4">
               <div>
-                <label htmlFor="locations" className={labelClass}>
-                  Locations (comma-separated)
-                </label>
-                <input
-                  id="locations"
-                  name="locations"
-                  type="text"
-                  value={form.locations}
-                  onChange={handleChange}
-                  placeholder="e.g., Iowa, Des Moines, Cedar Rapids"
-                  className={inputClass}
+                <span id="locations-label" className={labelClass}>
+                  Locations
+                </span>
+                <TagInput
+                  ariaLabel="Locations"
+                  values={parseCsvToTags(form.locations)}
+                  suggestions={locationSuggestions}
+                  placeholder="e.g., Iowa, Des Moines"
+                  onChange={(next) => setForm((prev) => ({ ...prev, locations: tagsToCsv(next) }))}
                 />
               </div>
               <div>
-                <label htmlFor="industries" className={labelClass}>
-                  Industries (comma-separated)
-                </label>
-                <input
-                  id="industries"
-                  name="industries"
-                  type="text"
-                  value={form.industries}
-                  onChange={handleChange}
-                  placeholder="e.g., Agriculture, Technology, Healthcare"
-                  className={inputClass}
+                <span id="industries-label" className={labelClass}>
+                  Industries
+                </span>
+                <TagInput
+                  ariaLabel="Industries"
+                  values={parseCsvToTags(form.industries)}
+                  suggestions={industrySuggestions}
+                  placeholder="e.g., Agriculture, Technology"
+                  onChange={(next) => setForm((prev) => ({ ...prev, industries: tagsToCsv(next) }))}
                 />
               </div>
             </div>
@@ -486,37 +534,53 @@ export default function EditGrantPage() {
             </div>
           </div>
 
-          {error && (
-            <div className="p-3 rounded bg-red-50 border border-red-200 text-sm text-red-700">
-              {error}
-            </div>
-          )}
+          {error && <Alert variant="error">{error}</Alert>}
           {success && (
-            <div className="p-3 rounded bg-green-50 border border-green-200 text-sm text-green-700">
+            <Alert variant="success">
               {success}{" "}
               <Link href={`/grants/${id}`} className="underline font-medium">
                 View grant
               </Link>
-            </div>
+            </Alert>
           )}
 
           <div className="flex items-center gap-4 pt-2">
-            <button
-              type="submit"
-              disabled={saving}
-              className="py-2 px-6 bg-[var(--primary)] text-white rounded-lg font-medium hover:bg-[var(--primary-light)] disabled:opacity-50 transition-colors"
-            >
+            <Button type="submit" loading={saving}>
               {saving ? "Saving..." : "Save Changes"}
-            </button>
-            <Link
-              href={`/grants/${id}`}
-              className="py-2 px-6 border border-[var(--border)] text-[var(--foreground)] rounded-lg font-medium hover:bg-gray-50 transition-colors"
-            >
-              Cancel
-            </Link>
+            </Button>
+            {dirty ? (
+              <Button
+                variant="secondary"
+                onClick={(e) => {
+                  e.preventDefault();
+                  setConfirmLeave(true);
+                }}
+              >
+                Cancel
+              </Button>
+            ) : (
+              <LinkButton variant="secondary" href={`/grants/${id}`}>
+                Cancel
+              </LinkButton>
+            )}
           </div>
         </form>
       </div>
+
+      <ConfirmModal
+        open={confirmLeave}
+        title="Discard unsaved changes?"
+        message="You have edited this grant. Leaving now will discard your changes."
+        confirmLabel="Discard"
+        onConfirm={() => {
+          setConfirmLeave(false);
+          // Clear the snapshot so `dirty` goes false and beforeunload
+          // doesn't fire on the pending navigation.
+          initialFormRef.current = form;
+          router.push(`/grants/${id}`);
+        }}
+        onCancel={() => setConfirmLeave(false)}
+      />
     </div>
   );
 }

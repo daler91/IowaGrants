@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useCallback, useRef } from "react";
+import { Button } from "@/components/ui/Button";
 
 interface ConfirmModalProps {
   open: boolean;
@@ -53,7 +54,7 @@ export default function ConfirmModal({
       <dialog
         open
         aria-labelledby="confirm-modal-title"
-        className="relative bg-white rounded-lg border border-[var(--border)] p-6 shadow-xl max-w-md w-full mx-4"
+        className="relative bg-[var(--card)] rounded-lg border border-[var(--border)] p-6 shadow-xl max-w-md w-full mx-4"
       >
         <h2
           id="confirm-modal-title"
@@ -63,21 +64,12 @@ export default function ConfirmModal({
         </h2>
         <p className="text-sm text-[var(--muted)] mb-6">{message}</p>
         <div className="flex justify-end gap-3">
-          <button
-            ref={cancelRef}
-            onClick={onCancel}
-            disabled={loading}
-            className="px-4 py-2 rounded-lg border border-[var(--border)] text-sm font-medium hover:bg-gray-50 transition-colors disabled:opacity-50"
-          >
+          <Button ref={cancelRef} variant="secondary" onClick={onCancel} disabled={loading}>
             Cancel
-          </button>
-          <button
-            onClick={onConfirm}
-            disabled={loading}
-            className="px-4 py-2 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700 transition-colors disabled:opacity-50"
-          >
+          </Button>
+          <Button variant="danger" onClick={onConfirm} disabled={loading}>
             {loading ? "Deleting..." : confirmLabel}
-          </button>
+          </Button>
         </div>
       </dialog>
     </div>
