@@ -3,7 +3,14 @@
 import type { GrantFilters as FilterType } from "@/lib/types";
 import Tag from "@/components/ui/Tag";
 import { Button } from "@/components/ui/Button";
-import { isDefaultStatus } from "@/lib/filter-defaults";
+import { DEFAULT_STATUS_FILTER, isDefaultStatus } from "@/lib/filter-defaults";
+
+/**
+ * Sentinel value we attach to the "All statuses" chip so
+ * removeChipFromFilters knows to restore the default set instead of
+ * filtering an array by it.
+ */
+export const ALL_STATUSES_SENTINEL = "__all_statuses__";
 import {
   labelForBusinessStage,
   labelForExpense,
@@ -88,14 +95,29 @@ export function computeActiveChips(filters: FilterType, search: string): ActiveC
   });
 
   if (!isDefaultStatus(filters.status)) {
-    filters.status?.forEach((v) => {
+    const status = filters.status;
+    if (!status || status.length === 0) {
+      // User deliberately un-set the default status via "Clear Status"
+      // in the MultiSelect. The backend now returns *every* status, so
+      // the user is seeing closed + open + forecasted. Surface this as
+      // a removable chip so they aren't silently viewing more than the
+      // default while activeFilterCount reports 0.
       chips.push({
-        key: `status:${v}`,
-        label: labelForStatus(v),
+        key: "status:all",
+        label: "All statuses",
         dimension: "status",
-        value: v,
+        value: ALL_STATUSES_SENTINEL,
       });
-    });
+    } else {
+      status.forEach((v) => {
+        chips.push({
+          key: `status:${v}`,
+          label: labelForStatus(v),
+          dimension: "status",
+          value: v,
+        });
+      });
+    }
   }
 
   filters.eligibleExpense?.forEach((v) => {
@@ -156,21 +178,37 @@ export function removeChipFromFilters(filters: FilterType, chip: ActiveChip): Fi
       return { ...filters, industry: undefined, page: 1 };
     case "amount":
       return { ...filters, amountMin: undefined, amountMax: undefined, page: 1 };
+    case "status":
+      // Removing the "All statuses" sentinel means "go back to the
+      // default Open + Forecasted view" — the inverse of clicking
+      // Clear Status in the MultiSelect.
+      if (chip.value === ALL_STATUSES_SENTINEL) {
+        return {
+          ...filters,
+          status: [...DEFAULT_STATUS_FILTER] as NonNullable<FilterType["status"]>,
+          page: 1,
+        };
+      }
+      return removeFromMultiValue(filters, "status", chip.value);
     case "grantType":
     case "gender":
     case "businessStage":
-    case "status":
-    case "eligibleExpense": {
-      const current = filters[chip.dimension] as string[] | undefined;
-      if (!current || !chip.value) return filters;
-      const next = current.filter((v) => v !== chip.value);
-      return {
-        ...filters,
-        [chip.dimension]: (next.length ? next : undefined) as FilterType[typeof chip.dimension],
-        page: 1,
-      };
-    }
+    case "eligibleExpense":
+      return removeFromMultiValue(filters, chip.dimension, chip.value);
   }
+}
+
+function removeFromMultiValue<
+  K extends "grantType" | "gender" | "businessStage" | "status" | "eligibleExpense",
+>(filters: FilterType, dimension: K, value: string | undefined): FilterType {
+  const current = filters[dimension] as string[] | undefined;
+  if (!current || !value) return filters;
+  const next = current.filter((v) => v !== value);
+  return {
+    ...filters,
+    [dimension]: (next.length ? next : undefined) as FilterType[K],
+    page: 1,
+  };
 }
 
 export default function ActiveFilterChips({

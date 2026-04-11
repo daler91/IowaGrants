@@ -60,9 +60,35 @@ export default function Combobox({
   const filtered = filterOptions(options, query);
 
   const commit = (next: string | undefined) => {
-    onChange(next);
-    setQuery(next ?? "");
+    const normalized = next?.trim();
+    onChange(normalized && normalized.length > 0 ? normalized : undefined);
+    setQuery(normalized ?? "");
     setOpen(false);
+  };
+
+  /**
+   * Commit whatever's currently visible. Prefers the highlighted
+   * suggestion (when the list is open and one is active) but otherwise
+   * commits the raw typed text — crucial when the meta endpoint returns
+   * no suggestions (API failure, cold start) or the user wants a value
+   * that isn't in the canonical list. The backend accepts any string
+   * for `location`/`industry` (array containment), so free text is
+   * valid and just filters to empty when no grant matches.
+   */
+  const commitCurrent = () => {
+    if (open && filtered[activeIndex]) {
+      commit(filtered[activeIndex]);
+      return;
+    }
+    const trimmed = query.trim();
+    if (trimmed.length > 0) {
+      commit(trimmed);
+    } else if (value) {
+      // Field was cleared by typing then deleting — propagate that too.
+      commit(undefined);
+    } else {
+      setOpen(false);
+    }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -74,12 +100,31 @@ export default function Combobox({
       e.preventDefault();
       setActiveIndex((i) => Math.max(0, i - 1));
     } else if (e.key === "Enter") {
-      if (open && filtered[activeIndex]) {
-        e.preventDefault();
-        commit(filtered[activeIndex]);
-      }
+      e.preventDefault();
+      commitCurrent();
     } else if (e.key === "Escape") {
+      // Cancel the in-progress edit and revert the visible text to the
+      // last-committed value. Does NOT call onChange.
+      e.preventDefault();
+      setQuery(value ?? "");
       setOpen(false);
+    }
+  };
+
+  const handleBlur = (e: React.FocusEvent<HTMLInputElement>) => {
+    // If focus is moving into a suggestion (mousedown on an <li>), let
+    // the option handler commit; don't double-fire. relatedTarget will
+    // be inside containerRef in that case.
+    if (containerRef.current?.contains(e.relatedTarget as Node | null)) return;
+    const trimmed = query.trim();
+    if (trimmed === (value ?? "")) {
+      setOpen(false);
+      return;
+    }
+    if (trimmed.length === 0) {
+      commit(undefined);
+    } else {
+      commit(trimmed);
     }
   };
 
@@ -99,6 +144,7 @@ export default function Combobox({
             setActiveIndex(0);
           }}
           onFocus={() => setOpen(true)}
+          onBlur={handleBlur}
           onKeyDown={handleKeyDown}
           aria-autocomplete="list"
           aria-expanded={open}
