@@ -27,8 +27,10 @@ function normalizeSort(raw: string | null): GrantSortKey {
 /**
  * Default direction per sort key. Picking "amount" → desc is more natural
  * than asc (users want biggest first); "recent" similarly.
+ * Exported so UI code (GrantList's sort dropdown) can mirror the same
+ * defaulting as the server without reinventing it.
  */
-function defaultDirFor(sort: GrantSortKey): GrantSortDir {
+export function defaultDirFor(sort: GrantSortKey): GrantSortDir {
   return sort === "amount" || sort === "recent" ? "desc" : "asc";
 }
 

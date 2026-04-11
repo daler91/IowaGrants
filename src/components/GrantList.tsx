@@ -2,6 +2,7 @@
 
 import GrantCard from "./GrantCard";
 import { Button, LinkButton } from "@/components/ui/Button";
+import { DEFAULT_SORT, defaultDirFor } from "@/lib/grant-sort";
 import type { GrantListItem, GrantSortKey, GrantSortDir } from "@/lib/types";
 
 interface GrantListProps {
@@ -41,8 +42,17 @@ const SORT_OPTIONS: { value: string; label: string; sort: GrantSortKey; dir: Gra
   { value: "title-asc", label: "Title (A–Z)", sort: "title", dir: "asc" },
 ];
 
+/**
+ * Map the effective (sort, dir) pair to a dropdown option value. When
+ * either is undefined we mirror `parseSortParams`'s defaulting exactly —
+ * notably, omitted `dir` uses `defaultDirFor(effectiveSort)`, which is
+ * `desc` for `amount`/`recent`. Without this, a URL like `?sort=amount`
+ * would render the select as the non-existent `amount-asc`.
+ */
 function encodeSortValue(sort: GrantSortKey | undefined, dir: GrantSortDir | undefined): string {
-  return `${sort ?? "deadline"}-${dir ?? "asc"}`;
+  const effectiveSort = sort ?? DEFAULT_SORT;
+  const effectiveDir = dir ?? defaultDirFor(effectiveSort);
+  return `${effectiveSort}-${effectiveDir}`;
 }
 
 export default function GrantList({

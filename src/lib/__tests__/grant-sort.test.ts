@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseSortParams, buildOrderBy, isDefaultSort } from "../grant-sort";
+import { parseSortParams, buildOrderBy, isDefaultSort, defaultDirFor } from "../grant-sort";
 
 function params(input: Record<string, string>): URLSearchParams {
   const p = new URLSearchParams();
@@ -82,5 +82,30 @@ describe("isDefaultSort", () => {
 
   it("is false for deadline/desc", () => {
     expect(isDefaultSort("deadline", "desc")).toBe(false);
+  });
+});
+
+describe("defaultDirFor", () => {
+  it("returns desc for amount and recent", () => {
+    expect(defaultDirFor("amount")).toBe("desc");
+    expect(defaultDirFor("recent")).toBe("desc");
+  });
+
+  it("returns asc for deadline / rollingFirst / title", () => {
+    expect(defaultDirFor("deadline")).toBe("asc");
+    expect(defaultDirFor("rollingFirst")).toBe("asc");
+    expect(defaultDirFor("title")).toBe("asc");
+  });
+
+  it("agrees with parseSortParams for every sort", () => {
+    // Regression guard: if parseSortParams's per-sort default changes,
+    // defaultDirFor (used by GrantList's encodeSortValue) must change
+    // with it or the sort dropdown value will mismatch the server.
+    const sorts = ["deadline", "rollingFirst", "amount", "recent", "title"] as const;
+    for (const sort of sorts) {
+      const params = new URLSearchParams();
+      params.set("sort", sort);
+      expect(parseSortParams(params).dir).toBe(defaultDirFor(sort));
+    }
   });
 });

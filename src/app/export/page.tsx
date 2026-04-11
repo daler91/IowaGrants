@@ -7,7 +7,8 @@ import GrantFilters from "@/components/GrantFilters";
 import Alert from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { toast } from "@/lib/toast";
-import type { GrantFilters as FilterType } from "@/lib/types";
+import { buildGrantQueryParams } from "@/lib/query-params";
+import type { GrantFilters as FilterType, GrantSortDir, GrantSortKey } from "@/lib/types";
 import {
   buildFilterSummary,
   buildMailto,
@@ -36,6 +37,29 @@ function parseList<T extends string = string>(raw: string | null): T[] | undefin
   return values.length ? values : undefined;
 }
 
+const VALID_SORT_KEYS: readonly GrantSortKey[] = [
+  "deadline",
+  "rollingFirst",
+  "amount",
+  "recent",
+  "title",
+];
+
+function parseSortKey(raw: string | null): GrantSortKey | undefined {
+  if (!raw) return undefined;
+  return (VALID_SORT_KEYS as readonly string[]).includes(raw) ? (raw as GrantSortKey) : undefined;
+}
+
+function parseSortDir(raw: string | null): GrantSortDir | undefined {
+  return raw === "asc" || raw === "desc" ? raw : undefined;
+}
+
+function parseOptionalNumber(raw: string | null): number | undefined {
+  if (!raw) return undefined;
+  const n = Number.parseInt(raw, 10);
+  return Number.isNaN(n) ? undefined : n;
+}
+
 function parseFiltersFromParams(params: URLSearchParams): {
   filters: FilterType;
   search: string;
@@ -54,20 +78,24 @@ function parseFiltersFromParams(params: URLSearchParams): {
       status: parseList<NonNullable<FilterType["status"]>[number]>(params.get("status")),
       eligibleExpense: parseList(params.get("eligibleExpense")),
       location: params.get("location") || undefined,
+      industry: params.get("industry") || undefined,
+      amountMin: parseOptionalNumber(params.get("amountMin")),
+      amountMax: parseOptionalNumber(params.get("amountMax")),
+      sort: parseSortKey(params.get("sort")),
+      dir: parseSortDir(params.get("dir")),
     },
   };
 }
 
+/**
+ * Serialize the current export-page state. Delegates to the canonical
+ * `buildGrantQueryParams` so any new filter dimension added to the
+ * dashboard is automatically supported here too — the export page used
+ * to ship its own duplicate serializer that silently dropped industry,
+ * amount, and sort.
+ */
 function buildQueryString(filters: FilterType, search: string, format?: ExportFormat): string {
-  const params = new URLSearchParams();
-  if (search) params.set("search", search);
-  if (filters.grantType?.length) params.set("grantType", filters.grantType.join(","));
-  if (filters.gender?.length) params.set("gender", filters.gender.join(","));
-  if (filters.businessStage?.length) params.set("businessStage", filters.businessStage.join(","));
-  if (filters.status?.length) params.set("status", filters.status.join(","));
-  if (filters.eligibleExpense?.length)
-    params.set("eligibleExpense", filters.eligibleExpense.join(","));
-  if (filters.location) params.set("location", filters.location);
+  const params = buildGrantQueryParams(filters, search);
   if (format) params.set("format", format);
   return params.toString();
 }
