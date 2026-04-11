@@ -1,7 +1,12 @@
 import { memo } from "react";
 import Link from "next/link";
 import type { GrantListItem } from "@/lib/types";
-import { TYPE_COLORS, STATUS_COLORS } from "@/lib/constants";
+import Badge, {
+  typeBadgeVariant,
+  statusBadgeVariant,
+  demographicBadgeVariant,
+  stageBadgeVariant,
+} from "@/components/ui/Badge";
 import { formatDeadlineShort, isDeadlinePassed, isDeadlineUrgent } from "@/lib/deadline";
 
 interface GrantCardProps {
@@ -23,11 +28,13 @@ export default memo(function GrantCard({
   const deadlinePassed = isDeadlinePassed(grant.deadline);
   const displayStatus = deadlinePassed ? "CLOSED" : grant.status;
   const isUrgent = isDeadlineUrgent(grant.deadline);
+  const demographicVariant = demographicBadgeVariant(grant.gender);
+  const stageVariant = stageBadgeVariant(grant.businessStage);
 
   return (
     <Link href={`/grants/${grant.id}`} className="block">
       <div
-        className={`relative bg-white rounded-lg border p-5 hover:shadow-md transition-shadow h-full flex flex-col ${selected ? "ring-2 ring-blue-500 border-blue-300" : "border-[var(--border)]"}`}
+        className={`relative bg-[var(--card)] rounded-lg border p-5 hover:shadow-md transition-shadow h-full flex flex-col ${selected ? "ring-2 ring-[var(--selected-ring)] border-[var(--selected-border)]" : "border-[var(--border)]"}`}
       >
         {selectable && (
           <div className="absolute top-3 right-3 z-10 flex items-center gap-1">
@@ -37,7 +44,7 @@ export default memo(function GrantCard({
                 e.stopPropagation();
                 onDelete?.(grant.id, grant.title);
               }}
-              className="p-1 rounded hover:bg-red-50 text-gray-400 hover:text-red-600 transition-colors"
+              className="p-1 rounded text-[var(--muted)] hover:text-[var(--danger)] hover:bg-[var(--danger-bg)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]"
               aria-label={`Delete ${grant.title}`}
               title="Delete grant"
             >
@@ -60,30 +67,20 @@ export default memo(function GrantCard({
               onClick={(e: React.MouseEvent) => {
                 e.stopPropagation();
               }}
-              className="w-4 h-4 rounded border-gray-300 text-blue-600 cursor-pointer"
+              className="w-4 h-4 rounded border-[var(--border)] text-[var(--primary)] cursor-pointer"
             />
           </div>
         )}
         <div className="flex flex-wrap gap-2 mb-3">
-          <span
-            className={`px-2 py-0.5 rounded-full text-xs font-medium ${TYPE_COLORS[grant.grantType] || "bg-gray-100 text-gray-800"}`}
-          >
-            {grant.grantType}
-          </span>
-          <span
-            className={`px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[displayStatus] || "bg-gray-100 text-gray-800"}`}
-          >
-            {displayStatus}
-          </span>
-          {grant.gender !== "ANY" && grant.gender !== "GENERAL" && (
-            <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-pink-100 text-pink-800">
-              {grant.gender.replace("_", " ")}
-            </span>
+          <Badge variant={typeBadgeVariant(grant.grantType)}>{grant.grantType}</Badge>
+          <Badge variant={statusBadgeVariant(displayStatus)}>{displayStatus}</Badge>
+          {demographicVariant && (
+            <Badge variant={demographicVariant}>{grant.gender.replace("_", " ")}</Badge>
           )}
-          {grant.businessStage !== "BOTH" && (
-            <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800">
+          {stageVariant && (
+            <Badge variant={stageVariant}>
               {grant.businessStage === "STARTUP" ? "Startup" : "Existing Biz"}
-            </span>
+            </Badge>
           )}
         </div>
 
@@ -104,7 +101,7 @@ export default memo(function GrantCard({
           <div className="flex items-center gap-2 text-sm">
             <span className="text-[var(--muted)]">Deadline:</span>
             <span
-              className={`font-medium ${isUrgent ? "text-red-600" : "text-[var(--foreground)]"}`}
+              className={`font-medium ${isUrgent ? "text-[var(--danger)]" : "text-[var(--foreground)]"}`}
             >
               {deadlineStr}
             </span>
@@ -115,13 +112,13 @@ export default memo(function GrantCard({
               {grant.eligibleExpenses.slice(0, 3).map((exp) => (
                 <span
                   key={exp.name}
-                  className="px-1.5 py-0.5 rounded text-xs bg-gray-100 text-gray-600"
+                  className="px-1.5 py-0.5 rounded text-xs bg-[var(--tag-bg)] text-[var(--muted)]"
                 >
                   {exp.label}
                 </span>
               ))}
               {grant.eligibleExpenses.length > 3 && (
-                <span className="px-1.5 py-0.5 rounded text-xs bg-gray-100 text-gray-600">
+                <span className="px-1.5 py-0.5 rounded text-xs bg-[var(--tag-bg)] text-[var(--muted)]">
                   +{grant.eligibleExpenses.length - 3} more
                 </span>
               )}

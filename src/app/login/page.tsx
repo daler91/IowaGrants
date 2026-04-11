@@ -2,6 +2,9 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { Button } from "@/components/ui/Button";
+import Alert from "@/components/ui/Alert";
+import FormField, { fieldInputClass } from "@/components/ui/FormField";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -42,45 +45,34 @@ export default function LoginPage() {
         <h1 className="text-2xl font-bold text-[var(--foreground)] mb-6 text-center">
           Admin Login
         </h1>
-        <form onSubmit={handleSubmit} className="bg-white rounded-lg border border-[var(--border)] p-6 space-y-4">
-          {error && (
-            <div className="p-3 rounded bg-red-50 border border-red-200 text-sm text-red-700">
-              {error}
-            </div>
-          )}
-          <div>
-            <label htmlFor="email" className="block text-sm font-medium text-[var(--foreground)] mb-1">
-              Email
-            </label>
+        <form
+          onSubmit={handleSubmit}
+          className="bg-[var(--card)] rounded-lg border border-[var(--border)] p-6 space-y-4"
+        >
+          {error && <Alert variant="error">{error}</Alert>}
+          <FormField label="Email" htmlFor="email" required>
             <input
               id="email"
               type="email"
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full px-3 py-2 border border-[var(--border)] rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--primary)]"
+              className={fieldInputClass}
             />
-          </div>
-          <div>
-            <label htmlFor="password" className="block text-sm font-medium text-[var(--foreground)] mb-1">
-              Password
-            </label>
+          </FormField>
+          <FormField label="Password" htmlFor="password" required>
             <input
               id="password"
               type="password"
               required
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full px-3 py-2 border border-[var(--border)] rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--primary)]"
+              className={fieldInputClass}
             />
-          </div>
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full py-2 px-4 bg-[var(--primary)] text-white rounded-lg font-medium hover:bg-[var(--primary-light)] disabled:opacity-50 transition-colors"
-          >
+          </FormField>
+          <Button type="submit" loading={loading} className="w-full">
             {loading ? "Signing in..." : "Sign In"}
-          </button>
+          </Button>
         </form>
       </div>
     </div>

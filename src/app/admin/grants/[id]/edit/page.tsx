@@ -9,6 +9,9 @@ import {
   VALID_BUSINESS_STAGE,
   VALID_GENDER_FOCUS,
 } from "@/lib/constants";
+import { Button, LinkButton } from "@/components/ui/Button";
+import Alert from "@/components/ui/Alert";
+import { fieldInputClass } from "@/components/ui/FormField";
 
 interface GrantFormData {
   title: string;
@@ -180,8 +183,7 @@ export default function EditGrantPage() {
     );
   }
 
-  const inputClass =
-    "w-full px-3 py-2 border border-[var(--border)] rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--primary)]";
+  const inputClass = fieldInputClass;
   const labelClass = "block text-sm font-medium text-[var(--foreground)] mb-1";
 
   return (
@@ -201,7 +203,7 @@ export default function EditGrantPage() {
         </Link>
       </div>
 
-      <div className="bg-white rounded-lg border border-[var(--border)] p-6">
+      <div className="bg-[var(--card)] rounded-lg border border-[var(--border)] p-6">
         <form onSubmit={handleSubmit} className="space-y-6">
           {/* Basic Info */}
           <div>
@@ -486,34 +488,23 @@ export default function EditGrantPage() {
             </div>
           </div>
 
-          {error && (
-            <div className="p-3 rounded bg-red-50 border border-red-200 text-sm text-red-700">
-              {error}
-            </div>
-          )}
+          {error && <Alert variant="error">{error}</Alert>}
           {success && (
-            <div className="p-3 rounded bg-green-50 border border-green-200 text-sm text-green-700">
+            <Alert variant="success">
               {success}{" "}
               <Link href={`/grants/${id}`} className="underline font-medium">
                 View grant
               </Link>
-            </div>
+            </Alert>
           )}
 
           <div className="flex items-center gap-4 pt-2">
-            <button
-              type="submit"
-              disabled={saving}
-              className="py-2 px-6 bg-[var(--primary)] text-white rounded-lg font-medium hover:bg-[var(--primary-light)] disabled:opacity-50 transition-colors"
-            >
+            <Button type="submit" loading={saving}>
               {saving ? "Saving..." : "Save Changes"}
-            </button>
-            <Link
-              href={`/grants/${id}`}
-              className="py-2 px-6 border border-[var(--border)] text-[var(--foreground)] rounded-lg font-medium hover:bg-gray-50 transition-colors"
-            >
+            </Button>
+            <LinkButton variant="secondary" href={`/grants/${id}`}>
               Cancel
-            </Link>
+            </LinkButton>
           </div>
         </form>
       </div>

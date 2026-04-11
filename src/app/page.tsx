@@ -7,6 +7,7 @@ import SearchBar from "@/components/SearchBar";
 import GrantFilters from "@/components/GrantFilters";
 import GrantList from "@/components/GrantList";
 import ConfirmModal from "@/components/ConfirmModal";
+import Alert from "@/components/ui/Alert";
 import { useAdmin } from "@/lib/hooks/useAdmin";
 import type { GrantFilters as FilterType, GrantListItem, PaginatedResponse } from "@/lib/types";
 import { buildGrantQueryParams } from "@/lib/query-params";
@@ -29,7 +30,9 @@ function parseFiltersFromParams(params: URLSearchParams): { filters: FilterType;
       businessStage: parseList<NonNullable<FilterType["businessStage"]>[number]>(
         params.get("businessStage"),
       ),
-      status: parseList<NonNullable<FilterType["status"]>[number]>(params.get("status")) || (["OPEN", "FORECASTED"] as NonNullable<FilterType["status"]>),
+      status:
+        parseList<NonNullable<FilterType["status"]>[number]>(params.get("status")) ||
+        (["OPEN", "FORECASTED"] as NonNullable<FilterType["status"]>),
       eligibleExpense: parseList(params.get("eligibleExpense")),
       location: params.get("location") || undefined,
       page: Number.parseInt(params.get("page") || "1") || 1,
@@ -50,17 +53,17 @@ function DashboardSkeleton() {
   return (
     <div>
       <div className="mb-8">
-        <div className="h-9 w-72 bg-gray-200 rounded animate-pulse mb-2" />
-        <div className="h-5 w-96 bg-gray-200 rounded animate-pulse" />
+        <div className="h-9 w-72 bg-[var(--surface-hover)] rounded animate-pulse mb-2" />
+        <div className="h-5 w-96 bg-[var(--surface-hover)] rounded animate-pulse" />
       </div>
       <div className="mb-6">
-        <div className="h-12 bg-gray-200 rounded-lg animate-pulse" />
+        <div className="h-12 bg-[var(--surface-hover)] rounded-lg animate-pulse" />
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {Array.from({ length: 4 }, (_, i) => (
           <div
             key={i}
-            className="bg-white rounded-lg border border-[var(--border)] p-5 animate-pulse h-48"
+            className="bg-[var(--card)] rounded-lg border border-[var(--border)] p-5 animate-pulse h-48"
           />
         ))}
       </div>
@@ -207,7 +210,7 @@ function Dashboard() {
         </div>
         <Link
           href={exportHref}
-          className="self-start inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-[var(--border)] bg-white hover:bg-gray-50 text-[var(--foreground)] font-medium transition-colors"
+          className="self-start inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-[var(--border)] bg-[var(--card)] hover:bg-[var(--surface-hover)] text-[var(--foreground)] font-medium transition-colors"
           title="Export these filtered grants"
         >
           <svg
@@ -233,11 +236,10 @@ function Dashboard() {
       </div>
 
       {error && (
-        <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700 flex items-center justify-between">
-          <span>{error}</span>
-          <button onClick={() => setError(null)} className="ml-2 text-red-500 hover:text-red-700">
-            Dismiss
-          </button>
+        <div className="mb-4">
+          <Alert variant="error" onDismiss={() => setError(null)}>
+            {error}
+          </Alert>
         </div>
       )}
 

@@ -4,6 +4,8 @@ import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import SearchBar from "@/components/SearchBar";
 import GrantFilters from "@/components/GrantFilters";
+import Alert from "@/components/ui/Alert";
+import { Button } from "@/components/ui/Button";
 import type { GrantFilters as FilterType } from "@/lib/types";
 import {
   buildFilterSummary,
@@ -238,13 +240,14 @@ function ExportPageInner() {
             Export filtered grants as PDF, CSV, JSON, or formatted text you can paste into an email.
           </p>
         </div>
-        <button
+        <Button
+          variant="secondary"
+          size="sm"
           onClick={handleCopyShareLink}
-          className="self-start px-3 py-2 text-sm rounded-lg border border-[var(--border)] bg-white hover:bg-gray-50 text-[var(--foreground)] font-medium transition-colors"
           title="Copy a link with these filters + format"
         >
           {shareStatus === "copied" ? "Link copied!" : "Copy share link"}
-        </button>
+        </Button>
       </div>
 
       <div className="mb-6">
@@ -252,11 +255,10 @@ function ExportPageInner() {
       </div>
 
       {error && (
-        <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700 flex items-center justify-between">
-          <span>{error}</span>
-          <button onClick={() => setError(null)} className="ml-2 text-red-500 hover:text-red-700">
-            Dismiss
-          </button>
+        <div className="mb-4">
+          <Alert variant="error" onDismiss={() => setError(null)}>
+            {error}
+          </Alert>
         </div>
       )}
 
@@ -267,7 +269,7 @@ function ExportPageInner() {
 
         <div className="flex-1 space-y-6">
           {/* Format selector */}
-          <div className="bg-white rounded-lg border border-[var(--border)] p-5">
+          <div className="bg-[var(--card)] rounded-lg border border-[var(--border)] p-5">
             <h2 className="font-semibold text-[var(--foreground)] mb-3">Export format</h2>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               {FORMATS.map((f) => {
@@ -276,10 +278,10 @@ function ExportPageInner() {
                   <button
                     key={f.value}
                     onClick={() => setFormat(f.value)}
-                    className={`text-left p-3 rounded-lg border transition-colors ${
+                    className={`text-left p-3 rounded-lg border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] ${
                       active
-                        ? "border-[var(--primary)] bg-blue-50 ring-2 ring-[var(--primary-light)]"
-                        : "border-[var(--border)] hover:border-gray-400"
+                        ? "border-[var(--primary)] bg-[var(--info-bg)] ring-2 ring-[var(--primary-light)]"
+                        : "border-[var(--border)] hover:border-[var(--muted)]"
                     }`}
                     aria-pressed={active}
                   >
@@ -292,7 +294,7 @@ function ExportPageInner() {
           </div>
 
           {/* Summary + download */}
-          <div className="bg-white rounded-lg border border-[var(--border)] p-5">
+          <div className="bg-[var(--card)] rounded-lg border border-[var(--border)] p-5">
             <div className="mb-3">
               <div className="text-sm text-[var(--muted)] mb-1">Filters</div>
               <div className="text-sm text-[var(--foreground)]">{filterSummary}</div>
@@ -300,44 +302,36 @@ function ExportPageInner() {
             <div className="mb-4 text-sm">{previewSummary}</div>
 
             {truncated && (
-              <div className="mb-4 p-3 rounded-lg bg-amber-50 border border-amber-200 text-sm text-amber-800">
-                Showing first 1000 results — narrow your filters to export more.
+              <div className="mb-4">
+                <Alert variant="warning">
+                  Showing first 1000 results — narrow your filters to export more.
+                </Alert>
               </div>
             )}
 
-            <button
-              onClick={handleDownload}
-              disabled={generating || previewCount === 0}
-              className="px-4 py-2 rounded-lg bg-[var(--primary)] text-white font-medium hover:bg-[var(--primary-light)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
+            <Button onClick={handleDownload} disabled={generating || previewCount === 0}>
               {generatingLabel ?? `Download ${format.toUpperCase()}`}
-            </button>
+            </Button>
           </div>
 
           {/* Formatted text preview + mailto */}
           {format === "text" && textOutput && (
-            <div className="bg-white rounded-lg border border-[var(--border)] p-5">
+            <div className="bg-[var(--card)] rounded-lg border border-[var(--border)] p-5">
               <div className="flex items-center justify-between mb-3">
                 <h2 className="font-semibold text-[var(--foreground)]">Email-ready text</h2>
                 <div className="flex gap-2">
-                  <button
-                    onClick={handleCopyText}
-                    className="px-3 py-1.5 text-sm rounded-lg border border-[var(--border)] bg-white hover:bg-gray-50 font-medium transition-colors"
-                  >
+                  <Button variant="secondary" size="sm" onClick={handleCopyText}>
                     {copyStatus === "copied" ? "Copied!" : "Copy to clipboard"}
-                  </button>
-                  <button
-                    onClick={handleOpenInEmail}
-                    className="px-3 py-1.5 text-sm rounded-lg bg-[var(--primary)] text-white font-medium hover:bg-[var(--primary-light)] transition-colors"
-                  >
+                  </Button>
+                  <Button size="sm" onClick={handleOpenInEmail}>
                     Open in email
-                  </button>
+                  </Button>
                 </div>
               </div>
               <textarea
                 readOnly
                 value={textOutput}
-                className="w-full h-80 p-3 rounded-lg border border-[var(--border)] bg-gray-50 font-mono text-xs text-[var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[var(--primary-light)]"
+                className="w-full h-80 p-3 rounded-lg border border-[var(--border)] bg-[var(--surface-hover)] font-mono text-xs text-[var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[var(--focus-ring)]"
               />
             </div>
           )}

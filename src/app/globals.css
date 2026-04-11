@@ -2,16 +2,187 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ── Design tokens (light theme) ────────────────────────────────────────
+   Semantic tokens are the only way components should reference color.
+   Avoid raw Tailwind color classes (bg-red-600, etc.) in app code.
+*/
 :root {
+  /* Surface + text */
   --background: #f8fafc;
   --foreground: #0f172a;
-  --primary: #1e40af;
-  --primary-light: #3b82f6;
-  --accent: #f59e0b;
-  --success: #16a34a;
+  --card: #ffffff;
   --muted: #64748b;
   --border: #e2e8f0;
-  --card: #ffffff;
+
+  /* Brand */
+  --primary: #1e40af;
+  --primary-light: #3b82f6;
+  --primary-contrast: #ffffff;
+  --accent: #f59e0b;
+
+  /* Status */
+  --success: #16a34a;
+  --success-bg: #ecfdf5;
+  --success-border: #a7f3d0;
+  --success-fg: #065f46;
+
+  --danger: #dc2626;
+  --danger-hover: #b91c1c;
+  --danger-bg: #fef2f2;
+  --danger-border: #fecaca;
+  --danger-fg: #991b1b;
+
+  --warning: #d97706;
+  --warning-bg: #fffbeb;
+  --warning-border: #fcd34d;
+  --warning-fg: #92400e;
+
+  --info: #2563eb;
+  --info-bg: #eff6ff;
+  --info-border: #bfdbfe;
+  --info-fg: #1e3a8a;
+
+  /* Focus ring */
+  --focus-ring: #3b82f6;
+
+  /* Surface variants */
+  --surface-hover: #f1f5f9;
+  --selected-ring: #3b82f6;
+  --selected-border: #93c5fd;
+
+  /* Badge — grant types */
+  --type-federal-bg: #dbeafe;
+  --type-federal-fg: #1e40af;
+  --type-state-bg: #dcfce7;
+  --type-state-fg: #166534;
+  --type-local-bg: #ffedd5;
+  --type-local-fg: #9a3412;
+  --type-private-bg: #f3e8ff;
+  --type-private-fg: #6b21a8;
+
+  /* Calendar dots (solid fills, distinct from badges) */
+  --type-federal-dot: #3b82f6;
+  --type-state-dot: #22c55e;
+  --type-local-dot: #f97316;
+  --type-private-dot: #a855f7;
+
+  /* Badge — grant status */
+  --status-open-bg: #d1fae5;
+  --status-open-fg: #065f46;
+  --status-closed-bg: #fee2e2;
+  --status-closed-fg: #991b1b;
+  --status-forecasted-bg: #fef3c7;
+  --status-forecasted-fg: #92400e;
+
+  /* Badge — demographics */
+  --badge-women-bg: #fce7f3;
+  --badge-women-fg: #9d174d;
+  --badge-veteran-bg: #e0e7ff;
+  --badge-veteran-fg: #3730a3;
+  --badge-minority-bg: #cffafe;
+  --badge-minority-fg: #155e75;
+
+  /* Badge — business stage */
+  --badge-startup-bg: #e0e7ff;
+  --badge-startup-fg: #3730a3;
+  --badge-existing-bg: #f1f5f9;
+  --badge-existing-fg: #334155;
+
+  /* Badge — deadline states */
+  --badge-rolling-bg: #d1fae5;
+  --badge-rolling-fg: #065f46;
+  --badge-urgent-bg: #fee2e2;
+  --badge-urgent-fg: #991b1b;
+
+  /* Generic tag (locations, industries, etc.) */
+  --tag-bg: #f1f5f9;
+  --tag-fg: #0f172a;
+}
+
+/* ── Dark theme ────────────────────────────────────────────────────────
+   Triggered automatically by OS preference. No manual toggle today.
+*/
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0f172a;
+    --foreground: #f1f5f9;
+    --card: #1e293b;
+    --muted: #94a3b8;
+    --border: #334155;
+
+    --primary: #60a5fa;
+    --primary-light: #93c5fd;
+    --primary-contrast: #0f172a;
+    --accent: #fbbf24;
+
+    --success: #34d399;
+    --success-bg: #064e3b;
+    --success-border: #065f46;
+    --success-fg: #a7f3d0;
+
+    --danger: #f87171;
+    --danger-hover: #ef4444;
+    --danger-bg: #450a0a;
+    --danger-border: #7f1d1d;
+    --danger-fg: #fecaca;
+
+    --warning: #fbbf24;
+    --warning-bg: #451a03;
+    --warning-border: #78350f;
+    --warning-fg: #fde68a;
+
+    --info: #60a5fa;
+    --info-bg: #172554;
+    --info-border: #1e3a8a;
+    --info-fg: #bfdbfe;
+
+    --focus-ring: #60a5fa;
+
+    --surface-hover: #334155;
+    --selected-ring: #60a5fa;
+    --selected-border: #3b82f6;
+
+    --type-federal-bg: #1e3a8a;
+    --type-federal-fg: #bfdbfe;
+    --type-state-bg: #14532d;
+    --type-state-fg: #bbf7d0;
+    --type-local-bg: #7c2d12;
+    --type-local-fg: #fed7aa;
+    --type-private-bg: #581c87;
+    --type-private-fg: #e9d5ff;
+
+    --type-federal-dot: #60a5fa;
+    --type-state-dot: #4ade80;
+    --type-local-dot: #fb923c;
+    --type-private-dot: #c084fc;
+
+    --status-open-bg: #064e3b;
+    --status-open-fg: #a7f3d0;
+    --status-closed-bg: #450a0a;
+    --status-closed-fg: #fecaca;
+    --status-forecasted-bg: #451a03;
+    --status-forecasted-fg: #fde68a;
+
+    --badge-women-bg: #500724;
+    --badge-women-fg: #fbcfe8;
+    --badge-veteran-bg: #1e1b4b;
+    --badge-veteran-fg: #c7d2fe;
+    --badge-minority-bg: #083344;
+    --badge-minority-fg: #a5f3fc;
+
+    --badge-startup-bg: #1e1b4b;
+    --badge-startup-fg: #c7d2fe;
+    --badge-existing-bg: #1e293b;
+    --badge-existing-fg: #cbd5e1;
+
+    --badge-rolling-bg: #064e3b;
+    --badge-rolling-fg: #a7f3d0;
+    --badge-urgent-bg: #450a0a;
+    --badge-urgent-fg: #fecaca;
+
+    --tag-bg: #1e293b;
+    --tag-fg: #e2e8f0;
+  }
 }
 
 body {

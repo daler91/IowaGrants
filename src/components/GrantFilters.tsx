@@ -109,7 +109,7 @@ function MultiSelect({
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-controls={listboxId}
-        className="w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg border border-[var(--border)] bg-white text-left text-sm text-[var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[var(--primary-light)]"
+        className="w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg border border-[var(--border)] bg-[var(--card)] text-left text-sm text-[var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[var(--focus-ring)]"
       >
         <span className={`truncate ${values.length === 0 ? "text-[var(--muted)]" : ""}`}>
           {summary}
@@ -127,7 +127,7 @@ function MultiSelect({
       {open && (
         <fieldset
           id={listboxId}
-          className="absolute z-20 mt-1 w-full max-h-64 overflow-auto rounded-lg border border-[var(--border)] bg-white shadow-lg py-1 m-0 min-w-0"
+          className="absolute z-20 mt-1 w-full max-h-64 overflow-auto rounded-lg border border-[var(--border)] bg-[var(--card)] shadow-lg py-1 m-0 min-w-0"
         >
           <legend className="sr-only">{label}</legend>
           {options.map((opt) => {
@@ -135,13 +135,13 @@ function MultiSelect({
             return (
               <label
                 key={opt.value}
-                className="flex items-center gap-2 px-3 py-2 text-sm text-[var(--foreground)] hover:bg-gray-50 cursor-pointer"
+                className="flex items-center gap-2 px-3 py-2 text-sm text-[var(--foreground)] hover:bg-[var(--surface-hover)] cursor-pointer"
               >
                 <input
                   type="checkbox"
                   checked={checked}
                   onChange={() => toggleValue(opt.value)}
-                  className="w-4 h-4 rounded border-gray-300 text-[var(--primary)] focus:ring-[var(--primary-light)]"
+                  className="w-4 h-4 rounded border-[var(--border)] text-[var(--primary)] focus:ring-[var(--focus-ring)]"
                 />
                 <span className="truncate">{opt.label}</span>
               </label>
@@ -151,7 +151,7 @@ function MultiSelect({
             <button
               type="button"
               onClick={() => onChange([])}
-              className="w-full text-left px-3 py-2 text-xs text-[var(--primary)] hover:bg-gray-50 border-t border-[var(--border)]"
+              className="w-full text-left px-3 py-2 text-xs text-[var(--primary)] hover:bg-[var(--surface-hover)] border-t border-[var(--border)]"
             >
               Clear {label}
             </button>
@@ -172,7 +172,7 @@ export default function GrantFilters({ filters, onChange }: Readonly<GrantFilter
   };
 
   return (
-    <div className="bg-white rounded-lg border border-[var(--border)] p-4">
+    <div className="bg-[var(--card)] rounded-lg border border-[var(--border)] p-4">
       <h3 className="font-semibold text-[var(--foreground)] mb-4">Filters</h3>
       <div className="space-y-4">
         <MultiSelect

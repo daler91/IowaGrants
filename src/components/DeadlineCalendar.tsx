@@ -13,25 +13,41 @@ interface CalendarGrant {
 }
 
 const TYPE_DOT_COLORS: Record<string, string> = {
-  FEDERAL: "bg-blue-500",
-  STATE: "bg-green-500",
-  LOCAL: "bg-orange-500",
-  PRIVATE: "bg-purple-500",
+  FEDERAL: "bg-[var(--type-federal-dot)]",
+  STATE: "bg-[var(--type-state-dot)]",
+  LOCAL: "bg-[var(--type-local-dot)]",
+  PRIVATE: "bg-[var(--type-private-dot)]",
 };
 
 const MONTH_NAMES = [
-  "January", "February", "March", "April", "May", "June",
-  "July", "August", "September", "October", "November", "December",
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
 ];
 
 const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
-function getCellBorderClass(isSelected: boolean, isUrgent: boolean, isToday: boolean, hasGrants: boolean): string {
-  if (isSelected) return "border-[var(--primary)] bg-blue-50 ring-2 ring-[var(--primary-light)]";
-  if (isUrgent) return "border-red-200 bg-red-50";
-  if (isToday) return "border-[var(--primary-light)] bg-blue-50";
-  if (hasGrants) return "border-[var(--border)] bg-white hover:bg-gray-50";
-  return "border-transparent bg-gray-50/50";
+function getCellBorderClass(
+  isSelected: boolean,
+  isUrgent: boolean,
+  isToday: boolean,
+  hasGrants: boolean,
+): string {
+  if (isSelected)
+    return "border-[var(--primary)] bg-[var(--info-bg)] ring-2 ring-[var(--primary-light)]";
+  if (isUrgent) return "border-[var(--danger-border)] bg-[var(--danger-bg)]";
+  if (isToday) return "border-[var(--primary-light)] bg-[var(--info-bg)]";
+  if (hasGrants) return "border-[var(--border)] bg-[var(--card)] hover:bg-[var(--surface-hover)]";
+  return "border-transparent bg-[var(--surface-hover)]/50";
 }
 
 export default function DeadlineCalendar() {
@@ -48,9 +64,7 @@ export default function DeadlineCalendar() {
       setLoading(true);
       setError(null);
       try {
-        const res = await fetch(
-          `/api/grants/calendar?year=${year}&month=${month}`
-        );
+        const res = await fetch(`/api/grants/calendar?year=${year}&month=${month}`);
         if (!res.ok) throw new Error("Failed to load calendar data");
         const data = await res.json();
         setGrants(data.grants || {});
@@ -110,10 +124,21 @@ export default function DeadlineCalendar() {
           <button
             onClick={prevMonth}
             aria-label="Previous month"
-            className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
+            className="p-2 rounded-lg hover:bg-[var(--surface-hover)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]"
           >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            <svg
+              className="w-5 h-5"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+              aria-hidden="true"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M15 19l-7-7 7-7"
+              />
             </svg>
           </button>
           <h2 className="text-xl font-bold text-[var(--foreground)]">
@@ -122,9 +147,15 @@ export default function DeadlineCalendar() {
           <button
             onClick={nextMonth}
             aria-label="Next month"
-            className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
+            className="p-2 rounded-lg hover:bg-[var(--surface-hover)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]"
           >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+            <svg
+              className="w-5 h-5"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+              aria-hidden="true"
+            >
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
             </svg>
           </button>
@@ -133,10 +164,7 @@ export default function DeadlineCalendar() {
         {/* Day headers */}
         <div className="grid grid-cols-7 gap-1 mb-1">
           {DAY_NAMES.map((day) => (
-            <div
-              key={day}
-              className="text-center text-xs font-medium text-[var(--muted)] py-2"
-            >
+            <div key={day} className="text-center text-xs font-medium text-[var(--muted)] py-2">
               {day}
             </div>
           ))}
@@ -144,17 +172,14 @@ export default function DeadlineCalendar() {
 
         {/* Calendar grid */}
         {error && (
-          <div className="text-center py-12 text-sm text-red-600 bg-red-50 rounded-lg border border-red-200">
+          <div className="text-center py-12 text-sm text-[var(--danger-fg)] bg-[var(--danger-bg)] rounded-lg border border-[var(--danger-border)]">
             {error}
           </div>
         )}
         {!error && loading && (
           <div className="grid grid-cols-7 gap-1">
             {Array.from({ length: 35 }, (_, i) => `skeleton-${i}`).map((key) => (
-              <div
-                key={key}
-                className="h-20 rounded-lg bg-gray-50 animate-pulse"
-              />
+              <div key={key} className="h-20 rounded-lg bg-[var(--surface-hover)] animate-pulse" />
             ))}
           </div>
         )}
@@ -173,7 +198,7 @@ export default function DeadlineCalendar() {
               // Check if deadline is within 7 days from today
               const dayDate = new Date(cell.dateStr);
               const diffDays = Math.ceil(
-                (dayDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
+                (dayDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24),
               );
               const isUrgent = hasGrants && diffDays >= 0 && diffDays <= 7;
 
@@ -187,20 +212,14 @@ export default function DeadlineCalendar() {
               return (
                 <button
                   key={cell.key}
-                  onClick={() =>
-                    setSelectedDate(
-                      isSelected ? null : cell.dateStr
-                    )
-                  }
+                  onClick={() => setSelectedDate(isSelected ? null : cell.dateStr)}
                   aria-label={ariaLabel}
                   aria-pressed={isSelected}
                   className={`h-20 rounded-lg p-1.5 text-left transition-all border ${getCellBorderClass(isSelected, isUrgent, isToday, hasGrants)}`}
                 >
                   <span
                     className={`text-sm font-medium ${
-                      isToday
-                        ? "text-[var(--primary)]"
-                        : "text-[var(--foreground)]"
+                      isToday ? "text-[var(--primary)]" : "text-[var(--foreground)]"
                     }`}
                   >
                     {cell.day}
@@ -210,14 +229,12 @@ export default function DeadlineCalendar() {
                       {dayGrants.slice(0, 3).map((g) => (
                         <div
                           key={g.id}
-                          className={`w-2 h-2 rounded-full ${TYPE_DOT_COLORS[g.grantType] || "bg-gray-400"}`}
+                          className={`w-2 h-2 rounded-full ${TYPE_DOT_COLORS[g.grantType] || "bg-[var(--muted)]"}`}
                           title={g.title}
                         />
                       ))}
                       {dayGrants.length > 3 && (
-                        <span className="text-xs text-[var(--muted)]">
-                          +{dayGrants.length - 3}
-                        </span>
+                        <span className="text-xs text-[var(--muted)]">+{dayGrants.length - 3}</span>
                       )}
                     </div>
                   )}
@@ -240,13 +257,14 @@ export default function DeadlineCalendar() {
 
       {/* Selected date sidebar */}
       <div className="lg:w-80">
-        <div className="bg-white rounded-lg border border-[var(--border)] p-4 sticky top-24">
+        <div className="bg-[var(--card)] rounded-lg border border-[var(--border)] p-4 sticky top-24">
           <h3 className="font-semibold text-[var(--foreground)] mb-3">
             {selectedDate
-              ? new Date(selectedDate + "T12:00:00").toLocaleDateString(
-                  "en-US",
-                  { weekday: "long", month: "long", day: "numeric" }
-                )
+              ? new Date(selectedDate + "T12:00:00").toLocaleDateString("en-US", {
+                  weekday: "long",
+                  month: "long",
+                  day: "numeric",
+                })
               : "Select a date"}
           </h3>
 
@@ -257,9 +275,7 @@ export default function DeadlineCalendar() {
           )}
 
           {selectedDate && selectedGrants.length === 0 && (
-            <p className="text-sm text-[var(--muted)]">
-              No grant deadlines on this date.
-            </p>
+            <p className="text-sm text-[var(--muted)]">No grant deadlines on this date.</p>
           )}
 
           <div className="space-y-3">
@@ -267,23 +283,19 @@ export default function DeadlineCalendar() {
               <Link
                 key={grant.id}
                 href={`/grants/${grant.id}`}
-                className="block p-3 rounded-lg border border-[var(--border)] hover:bg-gray-50 transition-colors"
+                className="block p-3 rounded-lg border border-[var(--border)] hover:bg-[var(--surface-hover)] transition-colors"
               >
                 <div className="flex items-center gap-2 mb-1">
                   <div
-                    className={`w-2 h-2 rounded-full ${TYPE_DOT_COLORS[grant.grantType] || "bg-gray-400"}`}
+                    className={`w-2 h-2 rounded-full ${TYPE_DOT_COLORS[grant.grantType] || "bg-[var(--muted)]"}`}
                   />
-                  <span className="text-xs text-[var(--muted)]">
-                    {grant.grantType}
-                  </span>
+                  <span className="text-xs text-[var(--muted)]">{grant.grantType}</span>
                 </div>
                 <p className="text-sm font-medium text-[var(--foreground)] line-clamp-2">
                   {grant.title}
                 </p>
                 {grant.amount && (
-                  <p className="text-xs text-[var(--success)] mt-1">
-                    {grant.amount}
-                  </p>
+                  <p className="text-xs text-[var(--success)] mt-1">{grant.amount}</p>
                 )}
               </Link>
             ))}
