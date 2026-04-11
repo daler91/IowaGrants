@@ -57,6 +57,15 @@ export function isDeadlinePassed(deadline: DeadlineInput): boolean {
   return !!d && d.getTime() < Date.now();
 }
 
+/**
+ * True when the grant has no (parseable) deadline. Rolling grants accept
+ * applications on an ongoing basis — they are a distinct product state,
+ * not missing data, and should be promoted visually via a "Rolling" badge.
+ */
+export function isRolling(deadline: DeadlineInput): boolean {
+  return toDate(deadline) === null;
+}
+
 /** True if the deadline exists, is in the future, and is within 7 days. */
 export function isDeadlineUrgent(deadline: DeadlineInput): boolean {
   const d = toDate(deadline);

@@ -12,6 +12,7 @@ import {
   formatDeadlineLong,
   isDeadlinePassed,
   isDeadlineUrgent,
+  isRolling,
   urgencyLabel,
 } from "@/lib/deadline";
 import AdminEditButton from "@/components/AdminEditButton";
@@ -47,6 +48,7 @@ export default async function GrantDetailPage({
 
   if (!grant) notFound();
 
+  const rolling = isRolling(grant.deadline);
   const deadlineStr = formatDeadlineLong(grant.deadline);
   const isUrgent = isDeadlineUrgent(grant.deadline);
   const urgencyText = urgencyLabel(grant.deadline);
@@ -83,6 +85,11 @@ export default async function GrantDetailPage({
               <Badge variant={statusBadgeVariant(displayStatus)} size="md">
                 {displayStatus}
               </Badge>
+              {rolling && (
+                <Badge variant="rolling" size="md">
+                  Rolling
+                </Badge>
+              )}
               {demographicVariant && (
                 <Badge variant={demographicVariant} size="md">
                   {grant.gender.replace("_", " ")}
@@ -116,7 +123,7 @@ export default async function GrantDetailPage({
             <p
               className={`text-lg font-semibold ${isUrgent ? "text-[var(--danger)]" : "text-[var(--foreground)]"}`}
             >
-              {deadlineStr}
+              {rolling ? "Rolling — apply any time" : deadlineStr}
             </p>
             {urgencyText && (
               <div className="mt-2">

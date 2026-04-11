@@ -11,6 +11,7 @@ import {
   formatDeadlineShort,
   isDeadlinePassed,
   isDeadlineUrgent,
+  isRolling,
   urgencyLabel,
 } from "@/lib/deadline";
 
@@ -29,6 +30,7 @@ export default memo(function GrantCard({
   onSelectChange,
   onDelete,
 }: Readonly<GrantCardProps>) {
+  const rolling = isRolling(grant.deadline);
   const deadlineStr = formatDeadlineShort(grant.deadline);
   const deadlinePassed = isDeadlinePassed(grant.deadline);
   const displayStatus = deadlinePassed ? "CLOSED" : grant.status;
@@ -80,6 +82,7 @@ export default memo(function GrantCard({
         <div className="flex flex-wrap gap-2 mb-3">
           <Badge variant={typeBadgeVariant(grant.grantType)}>{grant.grantType}</Badge>
           <Badge variant={statusBadgeVariant(displayStatus)}>{displayStatus}</Badge>
+          {rolling && <Badge variant="rolling">Rolling</Badge>}
           {demographicVariant && (
             <Badge variant={demographicVariant}>{grant.gender.replace("_", " ")}</Badge>
           )}
@@ -109,7 +112,7 @@ export default memo(function GrantCard({
             <span
               className={`font-medium ${isUrgent ? "text-[var(--danger)]" : "text-[var(--foreground)]"}`}
             >
-              {deadlineStr}
+              {rolling ? "Rolling — apply any time" : deadlineStr}
             </span>
             {urgencyText && (
               <Badge variant="urgent">

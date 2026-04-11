@@ -2,7 +2,7 @@
 
 import GrantCard from "./GrantCard";
 import { Button } from "@/components/ui/Button";
-import type { GrantListItem } from "@/lib/types";
+import type { GrantListItem, GrantSortKey, GrantSortDir } from "@/lib/types";
 
 interface GrantListProps {
   grants: GrantListItem[];
@@ -11,12 +11,33 @@ interface GrantListProps {
   totalPages: number;
   onPageChange: (page: number) => void;
   loading: boolean;
+  sort?: GrantSortKey;
+  dir?: GrantSortDir;
+  onSortChange?: (sort: GrantSortKey, dir: GrantSortDir) => void;
   selectable?: boolean;
   selectedIds?: Set<string>;
   onSelectionChange?: (ids: Set<string>) => void;
   onDeleteSelected?: () => void;
   onDeleteSingle?: (id: string, title: string) => void;
   onToggleSelectable?: () => void;
+  onClearSelection?: () => void;
+}
+
+/**
+ * Sort dropdown value → (key, dir) pairs. Encoded as single strings so
+ * a native <select> can expose the full set without nesting a second
+ * direction toggle. Order matches the visual dropdown.
+ */
+const SORT_OPTIONS: { value: string; label: string; sort: GrantSortKey; dir: GrantSortDir }[] = [
+  { value: "deadline-asc", label: "Deadline (soonest)", sort: "deadline", dir: "asc" },
+  { value: "rollingFirst-asc", label: "Rolling first", sort: "rollingFirst", dir: "asc" },
+  { value: "amount-desc", label: "Amount (highest)", sort: "amount", dir: "desc" },
+  { value: "recent-desc", label: "Newest added", sort: "recent", dir: "desc" },
+  { value: "title-asc", label: "Title (A–Z)", sort: "title", dir: "asc" },
+];
+
+function encodeSortValue(sort: GrantSortKey | undefined, dir: GrantSortDir | undefined): string {
+  return `${sort ?? "deadline"}-${dir ?? "asc"}`;
 }
 
 export default function GrantList({
@@ -26,12 +47,16 @@ export default function GrantList({
   totalPages,
   onPageChange,
   loading,
+  sort,
+  dir,
+  onSortChange,
   selectable = false,
   selectedIds = new Set(),
   onSelectionChange,
   onDeleteSelected,
   onDeleteSingle,
   onToggleSelectable,
+  onClearSelection,
 }: Readonly<GrantListProps>) {
   const allOnPageSelected = grants.length > 0 && grants.every((g) => selectedIds.has(g.id));
 
@@ -103,15 +128,42 @@ export default function GrantList({
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-3">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+        <div className="flex flex-wrap items-center gap-3">
           <p className="text-sm text-[var(--muted)]">
             Showing {grants.length} of {total} grants
           </p>
+          {onSortChange && (
+            <label className="flex items-center gap-1.5 text-sm text-[var(--muted)]">
+              <span className="sr-only sm:not-sr-only">Sort by</span>
+              <select
+                value={encodeSortValue(sort, dir)}
+                onChange={(e) => {
+                  const match = SORT_OPTIONS.find((opt) => opt.value === e.target.value);
+                  if (match) onSortChange(match.sort, match.dir);
+                }}
+                className="px-2 py-1 rounded border border-[var(--border)] bg-[var(--card)] text-[var(--foreground)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--focus-ring)]"
+                aria-label="Sort grants"
+              >
+                {SORT_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
           {selectable && selectedIds.size > 0 && (
-            <span className="text-sm font-medium text-[var(--primary)]">
-              {selectedIds.size} selected
-            </span>
+            <>
+              <span className="text-sm font-medium text-[var(--primary)]">
+                {selectedIds.size} selected
+              </span>
+              {onClearSelection && (
+                <Button variant="ghost" size="sm" onClick={onClearSelection}>
+                  Clear selection
+                </Button>
+              )}
+            </>
           )}
         </div>
         <div className="flex items-center gap-2">

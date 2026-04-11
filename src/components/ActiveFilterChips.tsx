@@ -30,9 +30,27 @@ export interface ActiveChip {
     | "businessStage"
     | "status"
     | "eligibleExpense"
-    | "location";
+    | "location"
+    | "industry"
+    | "amount";
   /** The raw value (for multi-valued dimensions). Undefined for search + location. */
   value?: string;
+}
+
+/**
+ * Format the amount range as a compact chip label. Only called when at
+ * least one of amountMin/amountMax is set.
+ */
+export function formatAmountChip(min: number | undefined, max: number | undefined): string {
+  const fmt = (n: number): string => {
+    if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(n % 1_000_000 === 0 ? 0 : 1)}M`;
+    if (n >= 1_000) return `$${Math.round(n / 1_000)}k`;
+    return `$${n}`;
+  };
+  if (min !== undefined && max !== undefined) return `Amount: ${fmt(min)}–${fmt(max)}`;
+  if (min !== undefined) return `Amount: ${fmt(min)}+`;
+  if (max !== undefined) return `Amount: up to ${fmt(max)}`;
+  return "Amount";
 }
 
 /**
@@ -97,6 +115,22 @@ export function computeActiveChips(filters: FilterType, search: string): ActiveC
     });
   }
 
+  if (filters.industry) {
+    chips.push({
+      key: `industry:${filters.industry}`,
+      label: filters.industry,
+      dimension: "industry",
+    });
+  }
+
+  if (filters.amountMin !== undefined || filters.amountMax !== undefined) {
+    chips.push({
+      key: `amount:${filters.amountMin ?? ""}-${filters.amountMax ?? ""}`,
+      label: formatAmountChip(filters.amountMin, filters.amountMax),
+      dimension: "amount",
+    });
+  }
+
   return chips;
 }
 
@@ -118,6 +152,10 @@ export function removeChipFromFilters(filters: FilterType, chip: ActiveChip): Fi
       return filters;
     case "location":
       return { ...filters, location: undefined, page: 1 };
+    case "industry":
+      return { ...filters, industry: undefined, page: 1 };
+    case "amount":
+      return { ...filters, amountMin: undefined, amountMax: undefined, page: 1 };
     case "grantType":
     case "gender":
     case "businessStage":

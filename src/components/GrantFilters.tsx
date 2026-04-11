@@ -2,6 +2,8 @@
 
 import { useEffect, useId, useRef, useState } from "react";
 import type { GrantFilters as FilterType } from "@/lib/types";
+import Combobox from "@/components/ui/Combobox";
+import { useMetaValues } from "@/lib/hooks/useMetaValues";
 
 interface GrantFiltersProps {
   filters: FilterType;
@@ -51,6 +53,98 @@ const EXPENSE_OPTIONS: Option[] = [
   { value: "RESEARCH_DEVELOPMENT", label: "R&D" },
   { value: "MARKETING_EXPORT", label: "Marketing & Export" },
 ];
+
+const AMOUNT_PRESETS: { label: string; amountMin?: number }[] = [
+  { label: "Any" },
+  { label: "$1k+", amountMin: 1000 },
+  { label: "$10k+", amountMin: 10000 },
+  { label: "$50k+", amountMin: 50000 },
+  { label: "$100k+", amountMin: 100000 },
+];
+
+interface AmountFilterProps {
+  amountMin: number | undefined;
+  amountMax: number | undefined;
+  onChange: (next: { amountMin: number | undefined; amountMax: number | undefined }) => void;
+}
+
+function AmountFilter({ amountMin, amountMax, onChange }: Readonly<AmountFilterProps>) {
+  const activePreset = (() => {
+    if (amountMin === undefined && amountMax === undefined) return "Any";
+    const match = AMOUNT_PRESETS.find((p) => p.amountMin === amountMin && amountMax === undefined);
+    return match?.label;
+  })();
+
+  return (
+    <div>
+      <div className="block text-sm font-medium text-[var(--muted)] mb-1">Award Amount</div>
+      <p className="text-xs text-[var(--muted)] mb-2">
+        We match grants whose funding cap is at least this value.
+      </p>
+      <div className="flex flex-wrap gap-1 mb-2">
+        {AMOUNT_PRESETS.map((preset) => {
+          const isActive = activePreset === preset.label;
+          return (
+            <button
+              key={preset.label}
+              type="button"
+              onClick={() => onChange({ amountMin: preset.amountMin, amountMax: undefined })}
+              aria-pressed={isActive}
+              className={`px-2 py-1 text-xs rounded-lg border transition-colors ${
+                isActive
+                  ? "border-[var(--primary)] bg-[var(--info-bg)] text-[var(--primary)]"
+                  : "border-[var(--border)] bg-[var(--card)] text-[var(--foreground)] hover:bg-[var(--surface-hover)]"
+              }`}
+            >
+              {preset.label}
+            </button>
+          );
+        })}
+      </div>
+      <div className="flex items-center gap-2">
+        <label className="flex-1">
+          <span className="sr-only">Minimum award cap</span>
+          <input
+            type="number"
+            min="0"
+            step="1000"
+            inputMode="numeric"
+            placeholder="Min $"
+            value={amountMin ?? ""}
+            onChange={(e) => {
+              const n = e.target.value ? Number.parseInt(e.target.value, 10) : undefined;
+              onChange({
+                amountMin: Number.isNaN(n as number) ? undefined : n,
+                amountMax,
+              });
+            }}
+            className="w-full px-2 py-1 text-sm rounded-lg border border-[var(--border)] bg-[var(--card)] text-[var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[var(--focus-ring)]"
+          />
+        </label>
+        <span className="text-xs text-[var(--muted)]">to</span>
+        <label className="flex-1">
+          <span className="sr-only">Maximum award cap</span>
+          <input
+            type="number"
+            min="0"
+            step="1000"
+            inputMode="numeric"
+            placeholder="Max $"
+            value={amountMax ?? ""}
+            onChange={(e) => {
+              const n = e.target.value ? Number.parseInt(e.target.value, 10) : undefined;
+              onChange({
+                amountMin,
+                amountMax: Number.isNaN(n as number) ? undefined : n,
+              });
+            }}
+            className="w-full px-2 py-1 text-sm rounded-lg border border-[var(--border)] bg-[var(--card)] text-[var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[var(--focus-ring)]"
+          />
+        </label>
+      </div>
+    </div>
+  );
+}
 
 function MultiSelect({
   label,
@@ -169,6 +263,9 @@ function MultiSelect({
 }
 
 export default function GrantFilters({ filters, onChange, onClear }: Readonly<GrantFiltersProps>) {
+  const { values: locationOptions } = useMetaValues("/api/meta/locations", "locations");
+  const { values: industryOptions } = useMetaValues("/api/meta/industries", "industries");
+
   const update = <K extends keyof FilterType>(key: K, values: string[]) => {
     onChange({
       ...filters,
@@ -220,6 +317,32 @@ export default function GrantFilters({ filters, onChange, onClear }: Readonly<Gr
           values={filters.status ?? []}
           placeholder="All"
           onChange={(v) => update("status", v)}
+        />
+        <Combobox
+          label="Location"
+          value={filters.location}
+          options={locationOptions}
+          placeholder="Any location"
+          onChange={(next) => onChange({ ...filters, location: next, page: 1 })}
+        />
+        <Combobox
+          label="Industry"
+          value={filters.industry}
+          options={industryOptions}
+          placeholder="Any industry"
+          onChange={(next) => onChange({ ...filters, industry: next, page: 1 })}
+        />
+        <AmountFilter
+          amountMin={filters.amountMin}
+          amountMax={filters.amountMax}
+          onChange={(next) =>
+            onChange({
+              ...filters,
+              amountMin: next.amountMin,
+              amountMax: next.amountMax,
+              page: 1,
+            })
+          }
         />
         <button
           onClick={handleClear}

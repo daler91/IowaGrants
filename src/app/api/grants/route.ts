@@ -4,6 +4,7 @@ import { requireAdmin, UnauthorizedError } from "@/lib/auth";
 import { GRANT_INCLUDE } from "@/lib/constants";
 import { parsePagination } from "@/lib/api-utils";
 import { buildGrantWhere } from "@/lib/grant-query";
+import { parseSortParams } from "@/lib/grant-sort";
 import { errorResponse, log, logError } from "@/lib/errors";
 import { parseJson } from "@/lib/http/parse-json";
 import { deleteIdsSchema } from "@/lib/http/schemas";
@@ -13,12 +14,13 @@ export async function GET(request: NextRequest) {
     const params = request.nextUrl.searchParams;
     const { page, limit, skip } = parsePagination(params);
     const where = buildGrantWhere(params);
+    const { orderBy } = parseSortParams(params);
 
     const [grants, total] = await Promise.all([
       prisma.grant.findMany({
         where,
         include: GRANT_INCLUDE,
-        orderBy: [{ deadline: { sort: "asc", nulls: "last" } }, { createdAt: "desc" }],
+        orderBy,
         skip,
         take: limit,
       }),

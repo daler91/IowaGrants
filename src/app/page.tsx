@@ -12,7 +12,13 @@ import Alert from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import Drawer from "@/components/ui/Drawer";
 import { useAdmin } from "@/lib/hooks/useAdmin";
-import type { GrantFilters as FilterType, GrantListItem, PaginatedResponse } from "@/lib/types";
+import type {
+  GrantFilters as FilterType,
+  GrantListItem,
+  GrantSortDir,
+  GrantSortKey,
+  PaginatedResponse,
+} from "@/lib/types";
 import { buildGrantQueryParams } from "@/lib/query-params";
 import { getDefaultFilters, DEFAULT_STATUS_FILTER } from "@/lib/filter-defaults";
 import { toast } from "@/lib/toast";
@@ -24,6 +30,29 @@ function parseList<T extends string = string>(raw: string | null): T[] | undefin
     .map((s) => s.trim())
     .filter(Boolean) as T[];
   return values.length ? values : undefined;
+}
+
+const VALID_SORT_KEYS: readonly GrantSortKey[] = [
+  "deadline",
+  "rollingFirst",
+  "amount",
+  "recent",
+  "title",
+];
+
+function parseSortKey(raw: string | null): GrantSortKey | undefined {
+  if (!raw) return undefined;
+  return (VALID_SORT_KEYS as readonly string[]).includes(raw) ? (raw as GrantSortKey) : undefined;
+}
+
+function parseSortDir(raw: string | null): GrantSortDir | undefined {
+  return raw === "asc" || raw === "desc" ? raw : undefined;
+}
+
+function parseOptionalNumber(raw: string | null): number | undefined {
+  if (!raw) return undefined;
+  const n = Number.parseInt(raw, 10);
+  return Number.isNaN(n) ? undefined : n;
 }
 
 function parseFiltersFromParams(params: URLSearchParams): { filters: FilterType; search: string } {
@@ -41,6 +70,11 @@ function parseFiltersFromParams(params: URLSearchParams): { filters: FilterType;
         ([...DEFAULT_STATUS_FILTER] as NonNullable<FilterType["status"]>),
       eligibleExpense: parseList(params.get("eligibleExpense")),
       location: params.get("location") || undefined,
+      industry: params.get("industry") || undefined,
+      amountMin: parseOptionalNumber(params.get("amountMin")),
+      amountMax: parseOptionalNumber(params.get("amountMax")),
+      sort: parseSortKey(params.get("sort")),
+      dir: parseSortDir(params.get("dir")),
       page: Number.parseInt(params.get("page") || "1") || 1,
       limit: defaults.limit,
     },
@@ -135,10 +169,11 @@ function Dashboard() {
     return () => clearTimeout(debounce);
   }, [fetchGrants]);
 
-  // Clear selection when page changes
-  useEffect(() => {
-    setSelectedIds(new Set());
-  }, [filters.page]);
+  // Selection intentionally persists across pagination — admins often pick
+  // grants from multiple pages before clicking Delete. The "Clear selection"
+  // button in GrantList lets them reset explicitly.
+
+  const handleClearSelection = () => setSelectedIds(new Set());
 
   const handleToggleSelectable = () => {
     setSelectable((prev: boolean) => {
@@ -179,14 +214,19 @@ function Dashboard() {
       });
       setDeleteTarget(null);
 
-      // Refresh and handle page overflow
-      const params = new URLSearchParams();
-      params.set("page", "1");
-      params.set("limit", (filters.limit || 20).toString());
-      const countRes = await fetch(`/api/grants?${params.toString()}`);
+      // Refresh and handle page overflow. Critical: the overflow probe must
+      // use the same filter set as the dashboard fetch, otherwise totalPages
+      // reflects the whole DB (not the filtered set) and can strand the user
+      // on a page that is empty under their current filters.
+      const probeParams = buildGrantQueryParams(filters, search);
+      probeParams.set("page", "1");
+      probeParams.set("limit", (filters.limit || 20).toString());
+      const countRes = await fetch(`/api/grants?${probeParams.toString()}`);
       const countData: PaginatedResponse<GrantListItem> = await countRes.json();
       const currentPage = filters.page || 1;
-      if (currentPage > countData.totalPages && countData.totalPages > 0) {
+      if (countData.totalPages === 0) {
+        setFilters((f: FilterType) => ({ ...f, page: 1 }));
+      } else if (currentPage > countData.totalPages) {
         setFilters((f: FilterType) => ({ ...f, page: countData.totalPages }));
       } else {
         fetchGrants();
@@ -207,6 +247,10 @@ function Dashboard() {
   const handleClearAll = useCallback(() => {
     setSearch("");
     setFilters(getDefaultFilters());
+  }, []);
+
+  const handleSortChange = useCallback((sort: GrantSortKey, dir: GrantSortDir) => {
+    setFilters((f: FilterType) => ({ ...f, sort, dir, page: 1 }));
   }, []);
 
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
@@ -251,7 +295,11 @@ function Dashboard() {
       </div>
 
       <div className="mb-6">
-        <SearchBar value={search} onChange={setSearch} />
+        <SearchBar
+          value={search}
+          onChange={setSearch}
+          hint="Searching titles and descriptions. Use filters for source, location, type, or amount."
+        />
       </div>
 
       {error && (
@@ -311,12 +359,16 @@ function Dashboard() {
             totalPages={totalPages}
             onPageChange={(page: number) => setFilters((f: FilterType) => ({ ...f, page }))}
             loading={loading}
+            sort={filters.sort}
+            dir={filters.dir}
+            onSortChange={handleSortChange}
             selectable={isAuthenticated ? selectable : false}
             selectedIds={isAuthenticated ? selectedIds : undefined}
             onSelectionChange={isAuthenticated ? setSelectedIds : undefined}
             onDeleteSelected={isAuthenticated ? handleDeleteSelected : undefined}
             onDeleteSingle={isAuthenticated ? handleDeleteSingle : undefined}
             onToggleSelectable={isAuthenticated ? handleToggleSelectable : undefined}
+            onClearSelection={isAuthenticated ? handleClearSelection : undefined}
           />
         </div>
       </div>

@@ -37,6 +37,9 @@ export interface GrantListItem {
   eligibleExpenses: { name: string; label: string }[];
 }
 
+export type GrantSortKey = "deadline" | "rollingFirst" | "amount" | "recent" | "title";
+export type GrantSortDir = "asc" | "desc";
+
 export interface GrantFilters {
   search?: string;
   grantType?: GrantType[];
@@ -48,6 +51,8 @@ export interface GrantFilters {
   amountMin?: number;
   amountMax?: number;
   eligibleExpense?: string[];
+  sort?: GrantSortKey;
+  dir?: GrantSortDir;
   page?: number;
   limit?: number;
 }

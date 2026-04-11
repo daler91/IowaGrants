@@ -4,6 +4,7 @@ import {
   formatDeadlineLong,
   isDeadlinePassed,
   isDeadlineUrgent,
+  isRolling,
   daysUntilDeadline,
   urgencyLabel,
 } from "../deadline";
@@ -87,5 +88,22 @@ describe("deadline formatters", () => {
 
   it("urgencyLabel uses 'tomorrow' for 1 day out", () => {
     expect(urgencyLabel("2026-04-06T12:00:00Z")).toBe("Closing tomorrow");
+  });
+
+  it("isRolling is true for null / undefined / invalid dates only", () => {
+    expect(isRolling(null)).toBe(true);
+    expect(isRolling(undefined)).toBe(true);
+    expect(isRolling("not-a-date")).toBe(true);
+    expect(isRolling("2026-06-01T00:00:00Z")).toBe(false);
+    expect(isRolling(new Date("2026-06-01T00:00:00Z"))).toBe(false);
+  });
+
+  it("isDeadlineUrgent is false for rolling grants", () => {
+    expect(isDeadlineUrgent(null)).toBe(false);
+    expect(isDeadlineUrgent(undefined)).toBe(false);
+  });
+
+  it("daysUntilDeadline is null for rolling grants", () => {
+    expect(daysUntilDeadline(null)).toBeNull();
   });
 });
