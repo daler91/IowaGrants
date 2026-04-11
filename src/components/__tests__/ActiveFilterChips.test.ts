@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { computeActiveChips, formatAmountChip, removeChipFromFilters } from "../ActiveFilterChips";
+import {
+  ALL_STATUSES_SENTINEL,
+  computeActiveChips,
+  formatAmountChip,
+  removeChipFromFilters,
+} from "../ActiveFilterChips";
 import type { GrantFilters } from "@/lib/types";
 
 // Shorthand factory — makes tests read cleanly.
@@ -169,5 +174,54 @@ describe("amount chip integration", () => {
     const chips = computeActiveChips(filters({ industry: "Healthcare" }), "");
     expect(chips.map((c) => c.dimension)).toEqual(["industry"]);
     expect(chips[0].label).toBe("Healthcare");
+  });
+});
+
+describe("cleared status chip", () => {
+  it("renders an 'All statuses' chip when status is undefined", () => {
+    const chips = computeActiveChips(filters({ status: undefined }), "");
+    const statusChips = chips.filter((c) => c.dimension === "status");
+    expect(statusChips).toHaveLength(1);
+    expect(statusChips[0].label).toBe("All statuses");
+    expect(statusChips[0].value).toBe(ALL_STATUSES_SENTINEL);
+  });
+
+  it("renders an 'All statuses' chip when status is an empty array", () => {
+    const chips = computeActiveChips(
+      filters({ status: [] as unknown as GrantFilters["status"] }),
+      "",
+    );
+    const statusChips = chips.filter((c) => c.dimension === "status");
+    expect(statusChips).toHaveLength(1);
+    expect(statusChips[0].label).toBe("All statuses");
+  });
+
+  it("activeFilterCount includes the 'All statuses' chip", () => {
+    // Regression guard for the original bug: clearing status dropped the
+    // count to zero, which hid the Clear All Filters button and caused
+    // the empty state to misclassify as unfiltered.
+    expect(computeActiveChips(filters({ status: undefined }), "")).toHaveLength(1);
+  });
+
+  it("removing the 'All statuses' chip restores the default status", () => {
+    const cleared = filters({ status: undefined });
+    const next = removeChipFromFilters(cleared, {
+      key: "status:all",
+      label: "All statuses",
+      dimension: "status",
+      value: ALL_STATUSES_SENTINEL,
+    });
+    expect(next.status).toEqual(["OPEN", "FORECASTED"]);
+    expect(next.page).toBe(1);
+  });
+
+  it("removing a normal status value still filters the array", () => {
+    const next = removeChipFromFilters(filters({ status: ["OPEN", "CLOSED"] }), {
+      key: "status:OPEN",
+      label: "Open",
+      dimension: "status",
+      value: "OPEN",
+    });
+    expect(next.status).toEqual(["CLOSED"]);
   });
 });
