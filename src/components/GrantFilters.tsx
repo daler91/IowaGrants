@@ -6,6 +6,12 @@ import type { GrantFilters as FilterType } from "@/lib/types";
 interface GrantFiltersProps {
   filters: FilterType;
   onChange: (filters: FilterType) => void;
+  /**
+   * Called when the user clicks "Clear All Filters". The parent decides what
+   * "clear" means (typically: restore defaults via getDefaultFilters()).
+   * If omitted, the button resets to `{ page: 1 }` for backwards compatibility.
+   */
+  onClear?: () => void;
 }
 
 type Option = { value: string; label: string };
@@ -162,13 +168,18 @@ function MultiSelect({
   );
 }
 
-export default function GrantFilters({ filters, onChange }: Readonly<GrantFiltersProps>) {
+export default function GrantFilters({ filters, onChange, onClear }: Readonly<GrantFiltersProps>) {
   const update = <K extends keyof FilterType>(key: K, values: string[]) => {
     onChange({
       ...filters,
       [key]: (values.length ? values : undefined) as FilterType[K],
       page: 1,
     });
+  };
+
+  const handleClear = () => {
+    if (onClear) onClear();
+    else onChange({ page: 1 });
   };
 
   return (
@@ -211,7 +222,7 @@ export default function GrantFilters({ filters, onChange }: Readonly<GrantFilter
           onChange={(v) => update("status", v)}
         />
         <button
-          onClick={() => onChange({ page: 1 })}
+          onClick={handleClear}
           className="w-full py-2 text-sm text-[var(--primary)] hover:text-[var(--primary-light)] font-medium transition-colors"
         >
           Clear All Filters

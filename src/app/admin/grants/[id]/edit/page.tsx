@@ -12,6 +12,7 @@ import {
 import { Button, LinkButton } from "@/components/ui/Button";
 import Alert from "@/components/ui/Alert";
 import { fieldInputClass } from "@/components/ui/FormField";
+import { toast } from "@/lib/toast";
 
 interface GrantFormData {
   title: string;
@@ -153,9 +154,12 @@ export default function EditGrantPage() {
         throw new Error(data.error || "Failed to update grant");
       }
 
+      toast.success("Grant updated successfully");
       setSuccess("Grant updated successfully.");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to update grant.");
+      const message = err instanceof Error ? err.message : "Failed to update grant.";
+      setError(message);
+      toast.error(message);
     } finally {
       setSaving(false);
     }

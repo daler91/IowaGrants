@@ -7,10 +7,15 @@ import SearchBar from "@/components/SearchBar";
 import GrantFilters from "@/components/GrantFilters";
 import GrantList from "@/components/GrantList";
 import ConfirmModal from "@/components/ConfirmModal";
+import ActiveFilterChips, { computeActiveChips } from "@/components/ActiveFilterChips";
 import Alert from "@/components/ui/Alert";
+import { Button } from "@/components/ui/Button";
+import Drawer from "@/components/ui/Drawer";
 import { useAdmin } from "@/lib/hooks/useAdmin";
 import type { GrantFilters as FilterType, GrantListItem, PaginatedResponse } from "@/lib/types";
 import { buildGrantQueryParams } from "@/lib/query-params";
+import { getDefaultFilters, DEFAULT_STATUS_FILTER } from "@/lib/filter-defaults";
+import { toast } from "@/lib/toast";
 
 function parseList<T extends string = string>(raw: string | null): T[] | undefined {
   if (!raw) return undefined;
@@ -22,6 +27,7 @@ function parseList<T extends string = string>(raw: string | null): T[] | undefin
 }
 
 function parseFiltersFromParams(params: URLSearchParams): { filters: FilterType; search: string } {
+  const defaults = getDefaultFilters();
   return {
     search: params.get("search") || "",
     filters: {
@@ -32,11 +38,11 @@ function parseFiltersFromParams(params: URLSearchParams): { filters: FilterType;
       ),
       status:
         parseList<NonNullable<FilterType["status"]>[number]>(params.get("status")) ||
-        (["OPEN", "FORECASTED"] as NonNullable<FilterType["status"]>),
+        ([...DEFAULT_STATUS_FILTER] as NonNullable<FilterType["status"]>),
       eligibleExpense: parseList(params.get("eligibleExpense")),
       location: params.get("location") || undefined,
       page: Number.parseInt(params.get("page") || "1") || 1,
-      limit: 20,
+      limit: defaults.limit,
     },
   };
 }
@@ -164,6 +170,8 @@ function Dashboard() {
       });
       if (!res.ok) throw new Error("Delete failed");
 
+      const deletedCount = deleteTarget.ids.length;
+      toast.success(deletedCount === 1 ? "Grant deleted" : `${deletedCount} grants deleted`);
       setSelectedIds((prev: Set<string>) => {
         const next = new Set(prev);
         deleteTarget.ids.forEach((id: string) => next.delete(id));
@@ -195,6 +203,17 @@ function Dashboard() {
     const qs = buildGrantQueryParams(filters, search).toString();
     return qs ? `/export?${qs}` : "/export";
   }, [search, filters]);
+
+  const handleClearAll = useCallback(() => {
+    setSearch("");
+    setFilters(getDefaultFilters());
+  }, []);
+
+  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
+  const activeFilterCount = useMemo(
+    () => computeActiveChips(filters, search).length,
+    [filters, search],
+  );
 
   return (
     <div>
@@ -243,9 +262,45 @@ function Dashboard() {
         </div>
       )}
 
+      <ActiveFilterChips
+        filters={filters}
+        search={search}
+        onFiltersChange={setFilters}
+        onSearchChange={setSearch}
+        onClearAll={handleClearAll}
+      />
+
+      {/* Mobile "Filters (N)" button — opens the filter drawer.
+          Hidden on lg+ where the sidebar is always visible. */}
+      <div className="lg:hidden mb-4">
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={() => setMobileFiltersOpen(true)}
+          aria-haspopup="dialog"
+          aria-expanded={mobileFiltersOpen}
+        >
+          <svg
+            className="w-4 h-4"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+            aria-hidden="true"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707L14 14v7l-4-2v-5L3.293 7.293A1 1 0 013 6.586V4z"
+            />
+          </svg>
+          Filters{activeFilterCount > 0 ? ` (${activeFilterCount})` : ""}
+        </Button>
+      </div>
+
       <div className="flex flex-col lg:flex-row gap-6">
-        <aside className="w-full lg:w-64 flex-shrink-0">
-          <GrantFilters filters={filters} onChange={setFilters} />
+        <aside className="hidden lg:block w-64 flex-shrink-0">
+          <GrantFilters filters={filters} onChange={setFilters} onClear={handleClearAll} />
         </aside>
 
         <div className="flex-1">
@@ -275,6 +330,26 @@ function Dashboard() {
         onConfirm={handleConfirmDelete}
         onCancel={() => !deleting && setDeleteTarget(null)}
       />
+
+      <Drawer
+        open={mobileFiltersOpen}
+        onClose={() => setMobileFiltersOpen(false)}
+        side="left"
+        ariaLabel="Filters"
+        title={`Filters${activeFilterCount > 0 ? ` (${activeFilterCount})` : ""}`}
+      >
+        <GrantFilters filters={filters} onChange={setFilters} onClear={handleClearAll} />
+        <div className="mt-4">
+          <Button
+            variant="primary"
+            size="md"
+            className="w-full"
+            onClick={() => setMobileFiltersOpen(false)}
+          >
+            Apply
+          </Button>
+        </div>
+      </Drawer>
     </div>
   );
 }

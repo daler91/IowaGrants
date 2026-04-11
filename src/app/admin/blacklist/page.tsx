@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/Button";
 import Alert from "@/components/ui/Alert";
 import FormField, { fieldInputClass } from "@/components/ui/FormField";
+import { toast } from "@/lib/toast";
 
 interface BlacklistedUrl {
   id: string;
@@ -24,7 +25,6 @@ export default function BlacklistPage() {
   const [reason, setReason] = useState("");
   const [adding, setAdding] = useState(false);
   const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
 
   const fetchUrls = useCallback(async () => {
     setLoading(true);
@@ -49,7 +49,6 @@ export default function BlacklistPage() {
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
-    setSuccess("");
     setAdding(true);
 
     const urlList = newUrl
@@ -72,12 +71,12 @@ export default function BlacklistPage() {
       if (!res.ok) throw new Error("Failed to add");
       const data = await res.json();
       const duplicatesText = data.duplicates > 0 ? `, ${data.duplicates} already blacklisted` : "";
-      setSuccess(`Added ${data.created} URL(s)${duplicatesText}.`);
+      toast.success(`Added ${data.created} URL(s)${duplicatesText}.`);
       setNewUrl("");
       setReason("");
       fetchUrls();
     } catch {
-      setError("Failed to add URLs to blacklist.");
+      toast.error("Failed to add URLs to blacklist.");
     } finally {
       setAdding(false);
     }
@@ -91,9 +90,10 @@ export default function BlacklistPage() {
         body: JSON.stringify({ ids: [id] }),
       });
       if (!res.ok) throw new Error("Failed to remove");
+      toast.success("URL removed from blacklist");
       fetchUrls();
     } catch {
-      setError("Failed to remove URL from blacklist.");
+      toast.error("Failed to remove URL from blacklist.");
     }
   };
 
@@ -138,11 +138,6 @@ export default function BlacklistPage() {
         {error && (
           <div className="mt-4">
             <Alert variant="error">{error}</Alert>
-          </div>
-        )}
-        {success && (
-          <div className="mt-4">
-            <Alert variant="success">{success}</Alert>
           </div>
         )}
       </div>

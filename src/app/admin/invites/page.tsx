@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/Button";
 import Alert from "@/components/ui/Alert";
 import { fieldInputClass } from "@/components/ui/FormField";
+import { toast } from "@/lib/toast";
 
 interface Invite {
   id: string;
@@ -62,6 +63,7 @@ export default function InvitesPage() {
       const link = `${globalThis.location.origin}/register#token=${data.invite.token}`;
       setInviteLink(link);
       setEmail("");
+      toast.success("Invite created");
       fetchInvites();
     } catch {
       setError("Network error. Please try again.");
@@ -70,8 +72,13 @@ export default function InvitesPage() {
     }
   };
 
-  const copyLink = () => {
-    navigator.clipboard.writeText(inviteLink);
+  const copyLink = async () => {
+    try {
+      await navigator.clipboard.writeText(inviteLink);
+      toast.success("Invite link copied");
+    } catch {
+      toast.error("Failed to copy link");
+    }
   };
 
   return (

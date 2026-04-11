@@ -7,7 +7,12 @@ import Badge, {
   demographicBadgeVariant,
   stageBadgeVariant,
 } from "@/components/ui/Badge";
-import { formatDeadlineShort, isDeadlinePassed, isDeadlineUrgent } from "@/lib/deadline";
+import {
+  formatDeadlineShort,
+  isDeadlinePassed,
+  isDeadlineUrgent,
+  urgencyLabel,
+} from "@/lib/deadline";
 
 interface GrantCardProps {
   grant: GrantListItem;
@@ -28,6 +33,7 @@ export default memo(function GrantCard({
   const deadlinePassed = isDeadlinePassed(grant.deadline);
   const displayStatus = deadlinePassed ? "CLOSED" : grant.status;
   const isUrgent = isDeadlineUrgent(grant.deadline);
+  const urgencyText = urgencyLabel(grant.deadline);
   const demographicVariant = demographicBadgeVariant(grant.gender);
   const stageVariant = stageBadgeVariant(grant.businessStage);
 
@@ -98,13 +104,32 @@ export default memo(function GrantCard({
             </div>
           )}
 
-          <div className="flex items-center gap-2 text-sm">
+          <div className="flex flex-wrap items-center gap-2 text-sm">
             <span className="text-[var(--muted)]">Deadline:</span>
             <span
               className={`font-medium ${isUrgent ? "text-[var(--danger)]" : "text-[var(--foreground)]"}`}
             >
               {deadlineStr}
             </span>
+            {urgencyText && (
+              <Badge variant="urgent">
+                <svg
+                  className="w-3 h-3 mr-1"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                  aria-hidden="true"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M12 8v4l3 2m6-2a9 9 0 11-18 0 9 9 0 0118 0z"
+                  />
+                </svg>
+                {urgencyText}
+              </Badge>
+            )}
           </div>
 
           {grant.eligibleExpenses.length > 0 && (

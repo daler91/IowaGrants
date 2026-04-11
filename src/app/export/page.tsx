@@ -6,6 +6,7 @@ import SearchBar from "@/components/SearchBar";
 import GrantFilters from "@/components/GrantFilters";
 import Alert from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
+import { toast } from "@/lib/toast";
 import type { GrantFilters as FilterType } from "@/lib/types";
 import {
   buildFilterSummary,
@@ -188,8 +189,9 @@ function ExportPageInner() {
       await navigator.clipboard.writeText(textOutput);
       setCopyStatus("copied");
       setTimeout(() => setCopyStatus("idle"), 2000);
+      toast.success("Copied to clipboard");
     } catch {
-      setError("Failed to copy to clipboard.");
+      toast.error("Failed to copy to clipboard");
     }
   };
 
@@ -203,8 +205,9 @@ function ExportPageInner() {
       await navigator.clipboard.writeText(globalThis.location.href);
       setShareStatus("copied");
       setTimeout(() => setShareStatus("idle"), 2000);
+      toast.success("Share link copied");
     } catch {
-      setError("Failed to copy share link.");
+      toast.error("Failed to copy share link");
     }
   };
 

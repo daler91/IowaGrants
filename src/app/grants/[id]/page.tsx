@@ -8,7 +8,12 @@ import Badge, {
   stageBadgeVariant,
 } from "@/components/ui/Badge";
 import { parseRawData } from "@/lib/ai/schemas";
-import { formatDeadlineLong, isDeadlinePassed, isDeadlineUrgent } from "@/lib/deadline";
+import {
+  formatDeadlineLong,
+  isDeadlinePassed,
+  isDeadlineUrgent,
+  urgencyLabel,
+} from "@/lib/deadline";
 import AdminEditButton from "@/components/AdminEditButton";
 
 /** Only allow http(s) links to prevent javascript: XSS via stored URLs. */
@@ -44,6 +49,7 @@ export default async function GrantDetailPage({
 
   const deadlineStr = formatDeadlineLong(grant.deadline);
   const isUrgent = isDeadlineUrgent(grant.deadline);
+  const urgencyText = urgencyLabel(grant.deadline);
   const deadlinePassed = isDeadlinePassed(grant.deadline);
   const displayStatus = deadlinePassed ? "CLOSED" : grant.status;
 
@@ -112,6 +118,27 @@ export default async function GrantDetailPage({
             >
               {deadlineStr}
             </p>
+            {urgencyText && (
+              <div className="mt-2">
+                <Badge variant="urgent">
+                  <svg
+                    className="w-3 h-3 mr-1"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                    aria-hidden="true"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M12 8v4l3 2m6-2a9 9 0 11-18 0 9 9 0 0118 0z"
+                    />
+                  </svg>
+                  {urgencyText}
+                </Badge>
+              </div>
+            )}
             {showDeadlineHint && (
               <p className="text-xs text-[var(--muted)] mt-1 italic">
                 Auto-extracted — verify at the original source.

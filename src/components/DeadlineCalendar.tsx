@@ -207,7 +207,8 @@ export default function DeadlineCalendar() {
                 ? `, ${dayGrants.length} grant deadline${deadlineSuffix}`
                 : "";
               const todayLabel = isToday ? " (today)" : "";
-              const ariaLabel = `${MONTH_NAMES[month - 1]} ${cell.day}${grantsLabel}${todayLabel}`;
+              const urgentLabel = isUrgent ? " (closing soon)" : "";
+              const ariaLabel = `${MONTH_NAMES[month - 1]} ${cell.day}${grantsLabel}${todayLabel}${urgentLabel}`;
 
               return (
                 <button
@@ -215,8 +216,29 @@ export default function DeadlineCalendar() {
                   onClick={() => setSelectedDate(isSelected ? null : cell.dateStr)}
                   aria-label={ariaLabel}
                   aria-pressed={isSelected}
-                  className={`h-20 rounded-lg p-1.5 text-left transition-all border ${getCellBorderClass(isSelected, isUrgent, isToday, hasGrants)}`}
+                  className={`relative h-20 rounded-lg p-1.5 text-left transition-all border ${getCellBorderClass(isSelected, isUrgent, isToday, hasGrants)}`}
                 >
+                  {isUrgent && (
+                    <span
+                      className="absolute top-1 right-1 text-[var(--danger)]"
+                      aria-hidden="true"
+                      title="Closing soon"
+                    >
+                      <svg
+                        className="w-3 h-3"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2.5}
+                          d="M12 8v4l3 2m6-2a9 9 0 11-18 0 9 9 0 0118 0z"
+                        />
+                      </svg>
+                    </span>
+                  )}
                   <span
                     className={`text-sm font-medium ${
                       isToday ? "text-[var(--primary)]" : "text-[var(--foreground)]"

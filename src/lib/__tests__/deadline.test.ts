@@ -4,6 +4,8 @@ import {
   formatDeadlineLong,
   isDeadlinePassed,
   isDeadlineUrgent,
+  daysUntilDeadline,
+  urgencyLabel,
 } from "../deadline";
 
 describe("deadline formatters", () => {
@@ -66,5 +68,24 @@ describe("deadline formatters", () => {
     expect(isDeadlineUrgent("2026-05-01T12:00:00Z")).toBe(false); // > 7 days
     expect(isDeadlineUrgent("2026-04-01T12:00:00Z")).toBe(false); // past
     expect(isDeadlineUrgent(null)).toBe(false);
+  });
+
+  it("daysUntilDeadline returns the ceil'd whole-day delta", () => {
+    expect(daysUntilDeadline("2026-04-09T12:00:00Z")).toBe(4);
+    expect(daysUntilDeadline("2026-04-01T12:00:00Z")).toBeLessThan(0);
+    expect(daysUntilDeadline(null)).toBeNull();
+  });
+
+  it("urgencyLabel phrases days remaining for urgent deadlines only", () => {
+    // 4 days out — urgent
+    expect(urgencyLabel("2026-04-09T12:00:00Z")).toBe("Closing in 4d");
+    // Non-urgent / far future / past / null → null
+    expect(urgencyLabel("2026-05-01T12:00:00Z")).toBeNull();
+    expect(urgencyLabel("2026-04-01T12:00:00Z")).toBeNull();
+    expect(urgencyLabel(null)).toBeNull();
+  });
+
+  it("urgencyLabel uses 'tomorrow' for 1 day out", () => {
+    expect(urgencyLabel("2026-04-06T12:00:00Z")).toBe("Closing tomorrow");
   });
 });

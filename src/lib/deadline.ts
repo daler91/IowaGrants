@@ -64,3 +64,29 @@ export function isDeadlineUrgent(deadline: DeadlineInput): boolean {
   const delta = d.getTime() - Date.now();
   return delta > 0 && delta < URGENT_THRESHOLD_MS;
 }
+
+/**
+ * Return the whole number of days remaining until the deadline, or null
+ * when there is no (parseable) deadline. Past deadlines yield a negative
+ * number. Rounding matches `formatDeadlineShort` so the "Nd left" copy
+ * agrees with the "Closing in Nd" badge on the urgent UI.
+ */
+export function daysUntilDeadline(deadline: DeadlineInput): number | null {
+  const d = toDate(deadline);
+  if (!d) return null;
+  return Math.ceil((d.getTime() - Date.now()) / MS_PER_DAY);
+}
+
+/**
+ * Short screen-reader and badge label for an urgent deadline.
+ * "Closing today" / "Closing tomorrow" / "Closing in Nd".
+ * Returns null if the deadline is not urgent.
+ */
+export function urgencyLabel(deadline: DeadlineInput): string | null {
+  if (!isDeadlineUrgent(deadline)) return null;
+  const days = daysUntilDeadline(deadline);
+  if (days === null) return null;
+  if (days <= 0) return "Closing today";
+  if (days === 1) return "Closing tomorrow";
+  return `Closing in ${days}d`;
+}
