@@ -8,8 +8,8 @@ import Badge, {
   stageBadgeVariant,
 } from "@/components/ui/Badge";
 import {
+  computeDisplayStatus,
   formatDeadlineShort,
-  isDeadlinePassed,
   isDeadlineUrgent,
   isRolling,
   urgencyLabel,
@@ -32,8 +32,9 @@ export default memo(function GrantCard({
 }: Readonly<GrantCardProps>) {
   const rolling = isRolling(grant.deadline);
   const deadlineStr = formatDeadlineShort(grant.deadline);
-  const deadlinePassed = isDeadlinePassed(grant.deadline);
-  const displayStatus = deadlinePassed ? "CLOSED" : grant.status;
+  // Prefer the server-computed displayStatus. Fall back to a local
+  // recomputation only if the API didn't provide one (older cache, tests).
+  const displayStatus = grant.displayStatus ?? computeDisplayStatus(grant.status, grant.deadline);
   const isUrgent = isDeadlineUrgent(grant.deadline);
   const urgencyText = urgencyLabel(grant.deadline);
   const demographicVariant = demographicBadgeVariant(grant.gender);

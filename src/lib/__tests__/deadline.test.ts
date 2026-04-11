@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import {
+  computeDisplayStatus,
   formatDeadlineShort,
   formatDeadlineLong,
   isDeadlinePassed,
@@ -105,5 +106,23 @@ describe("deadline formatters", () => {
 
   it("daysUntilDeadline is null for rolling grants", () => {
     expect(daysUntilDeadline(null)).toBeNull();
+  });
+
+  it("computeDisplayStatus returns CLOSED when deadline has passed", () => {
+    // 2026-04-05 is mocked "now"; 2026-01-01 is in the past.
+    expect(computeDisplayStatus("OPEN", "2026-01-01T00:00:00Z")).toBe("CLOSED");
+  });
+
+  it("computeDisplayStatus preserves OPEN for future deadlines", () => {
+    expect(computeDisplayStatus("OPEN", "2026-12-31T00:00:00Z")).toBe("OPEN");
+  });
+
+  it("computeDisplayStatus preserves OPEN for rolling grants", () => {
+    expect(computeDisplayStatus("OPEN", null)).toBe("OPEN");
+  });
+
+  it("computeDisplayStatus preserves CLOSED / FORECASTED regardless of deadline", () => {
+    expect(computeDisplayStatus("CLOSED", "2026-12-31T00:00:00Z")).toBe("CLOSED");
+    expect(computeDisplayStatus("FORECASTED", "2026-12-31T00:00:00Z")).toBe("FORECASTED");
   });
 });

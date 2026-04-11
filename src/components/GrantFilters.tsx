@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useRef, useState } from "react";
 import type { GrantFilters as FilterType } from "@/lib/types";
+import { Button } from "@/components/ui/Button";
 import Combobox from "@/components/ui/Combobox";
 import { useMetaValues } from "@/lib/hooks/useMetaValues";
 
@@ -14,6 +15,8 @@ interface GrantFiltersProps {
    * If omitted, the button resets to `{ page: 1 }` for backwards compatibility.
    */
   onClear?: () => void;
+  /** Optional active-filter count for the panel heading. */
+  activeCount?: number;
 }
 
 type Option = { value: string; label: string };
@@ -262,7 +265,12 @@ function MultiSelect({
   );
 }
 
-export default function GrantFilters({ filters, onChange, onClear }: Readonly<GrantFiltersProps>) {
+export default function GrantFilters({
+  filters,
+  onChange,
+  onClear,
+  activeCount,
+}: Readonly<GrantFiltersProps>) {
   const { values: locationOptions } = useMetaValues("/api/meta/locations", "locations");
   const { values: industryOptions } = useMetaValues("/api/meta/industries", "industries");
 
@@ -281,7 +289,14 @@ export default function GrantFilters({ filters, onChange, onClear }: Readonly<Gr
 
   return (
     <div className="bg-[var(--card)] rounded-lg border border-[var(--border)] p-4">
-      <h3 className="font-semibold text-[var(--foreground)] mb-4">Filters</h3>
+      <h3 className="font-semibold text-[var(--foreground)] mb-4">
+        Filters
+        {activeCount !== undefined && activeCount > 0 && (
+          <span className="ml-2 text-sm font-normal text-[var(--muted)]">
+            ({activeCount} active)
+          </span>
+        )}
+      </h3>
       <div className="space-y-4">
         <MultiSelect
           label="Business Stage"
@@ -344,12 +359,11 @@ export default function GrantFilters({ filters, onChange, onClear }: Readonly<Gr
             })
           }
         />
-        <button
-          onClick={handleClear}
-          className="w-full py-2 text-sm text-[var(--primary)] hover:text-[var(--primary-light)] font-medium transition-colors"
-        >
-          Clear All Filters
-        </button>
+        {(activeCount === undefined || activeCount > 0) && (
+          <Button variant="secondary" size="sm" className="w-full" onClick={handleClear}>
+            Clear All Filters
+          </Button>
+        )}
       </div>
     </div>
   );

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 
 interface CalendarGrant {
@@ -36,28 +36,92 @@ const MONTH_NAMES = [
 
 const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
-function getCellBorderClass(
+/**
+ * Compose the visual state of a calendar cell. Each attribute contributes
+ * independently so a cell that is (e.g.) today, urgent, and selected at
+ * once shows all three cues instead of only the highest-priority one.
+ *
+ * Layering:
+ *   - background: urgent > today > hasGrants > empty
+ *   - border:     selected overrides background-derived border
+ *   - ring:       selected adds an outer ring
+ */
+function getCellClass(
   isSelected: boolean,
   isUrgent: boolean,
   isToday: boolean,
   hasGrants: boolean,
 ): string {
-  if (isSelected)
-    return "border-[var(--primary)] bg-[var(--info-bg)] ring-2 ring-[var(--primary-light)]";
-  if (isUrgent) return "border-[var(--danger-border)] bg-[var(--danger-bg)]";
-  if (isToday) return "border-[var(--primary-light)] bg-[var(--info-bg)]";
-  if (hasGrants) return "border-[var(--border)] bg-[var(--card)] hover:bg-[var(--surface-hover)]";
-  return "border-transparent bg-[var(--surface-hover)]/50";
+  // Background layer (driven by urgency/today/data)
+  let background: string;
+  if (isUrgent) {
+    background = "bg-[var(--danger-bg)]";
+  } else if (isToday) {
+    background = "bg-[var(--info-bg)]";
+  } else if (hasGrants) {
+    background = "bg-[var(--card)] hover:bg-[var(--surface-hover)]";
+  } else {
+    background = "bg-[var(--surface-hover)]/50";
+  }
+
+  // Border layer (selected wins, else derived from the background)
+  let border: string;
+  if (isSelected) {
+    border = "border-[var(--primary)]";
+  } else if (isUrgent) {
+    border = "border-[var(--danger-border)]";
+  } else if (isToday) {
+    border = "border-[var(--primary-light)]";
+  } else if (hasGrants) {
+    border = "border-[var(--border)]";
+  } else {
+    border = "border-transparent";
+  }
+
+  // Ring is additive — only on selection.
+  const ring = isSelected ? "ring-2 ring-[var(--primary-light)]" : "";
+
+  return `${background} ${border} ${ring}`;
+}
+
+/** Pad a 1–12 month number into the `yyyy-mm-dd` prefix. */
+function formatDateKey(y: number, m: number, d: number): string {
+  return `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
 }
 
 export default function DeadlineCalendar() {
   const today = new Date();
+  const todayStr = today.toISOString().split("T")[0];
   const [year, setYear] = useState(today.getFullYear());
   const [month, setMonth] = useState(today.getMonth() + 1);
   const [grants, setGrants] = useState<Record<string, CalendarGrant[]>>({});
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Roving tabindex: exactly one cell has tabIndex=0 at any time. Starts
+  // at today if the calendar is open on the current month, otherwise the
+  // 1st of the visible month.
+  const [focusedDate, setFocusedDate] = useState<string>(() => {
+    const initialMatchesToday =
+      today.getFullYear() === today.getFullYear() && today.getMonth() + 1 === today.getMonth() + 1;
+    return initialMatchesToday
+      ? todayStr
+      : formatDateKey(today.getFullYear(), today.getMonth() + 1, 1);
+  });
+
+  // When moveFocus() decides to change months, we stash the date string
+  // here and an effect moves focus to the matching button after the new
+  // grid has rendered.
+  const pendingFocusRef = useRef<string | null>(null);
+  const cellRefs = useRef<Record<string, HTMLButtonElement | null>>({});
+
+  useEffect(() => {
+    if (pendingFocusRef.current) {
+      cellRefs.current[pendingFocusRef.current]?.focus();
+      pendingFocusRef.current = null;
+    }
+  });
 
   useEffect(() => {
     async function fetchCalendar() {
@@ -79,30 +143,115 @@ export default function DeadlineCalendar() {
     fetchCalendar();
   }, [year, month]);
 
-  const prevMonth = () => {
-    if (month === 1) {
-      setMonth(12);
-      setYear(year - 1);
-    } else {
-      setMonth(month - 1);
-    }
+  const jumpToMonth = (y: number, m: number) => {
+    setYear(y);
+    setMonth(m);
     setSelectedDate(null);
+    setFocusedDate(formatDateKey(y, m, 1));
+  };
+
+  const prevMonth = () => {
+    if (month === 1) jumpToMonth(year - 1, 12);
+    else jumpToMonth(year, month - 1);
   };
 
   const nextMonth = () => {
-    if (month === 12) {
-      setMonth(1);
-      setYear(year + 1);
-    } else {
-      setMonth(month + 1);
+    if (month === 12) jumpToMonth(year + 1, 1);
+    else jumpToMonth(year, month + 1);
+  };
+
+  /**
+   * Move the roving focus by a delta (days). Updates state so the new
+   * cell has tabIndex=0, and queues a programmatic focus after render.
+   * When the delta crosses a month boundary, month/year change too.
+   */
+  const moveFocus = (deltaDays: number) => {
+    const [fy, fm, fd] = focusedDate.split("-").map((s) => Number.parseInt(s, 10));
+    const next = new Date(fy, fm - 1, fd + deltaDays);
+    const ny = next.getFullYear();
+    const nm = next.getMonth() + 1;
+    const nd = next.getDate();
+    const nextKey = formatDateKey(ny, nm, nd);
+    setFocusedDate(nextKey);
+    pendingFocusRef.current = nextKey;
+    if (ny !== year || nm !== month) {
+      setYear(ny);
+      setMonth(nm);
     }
-    setSelectedDate(null);
+  };
+
+  const handleGridKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    switch (e.key) {
+      case "ArrowRight":
+        e.preventDefault();
+        moveFocus(1);
+        break;
+      case "ArrowLeft":
+        e.preventDefault();
+        moveFocus(-1);
+        break;
+      case "ArrowDown":
+        e.preventDefault();
+        moveFocus(7);
+        break;
+      case "ArrowUp":
+        e.preventDefault();
+        moveFocus(-7);
+        break;
+      case "Home": {
+        e.preventDefault();
+        // Start of the current week (Sunday)
+        const [fy, fm, fd] = focusedDate.split("-").map((s) => Number.parseInt(s, 10));
+        const d = new Date(fy, fm - 1, fd);
+        moveFocus(-d.getDay());
+        break;
+      }
+      case "End": {
+        e.preventDefault();
+        // End of the current week (Saturday)
+        const [fy, fm, fd] = focusedDate.split("-").map((s) => Number.parseInt(s, 10));
+        const d = new Date(fy, fm - 1, fd);
+        moveFocus(6 - d.getDay());
+        break;
+      }
+      case "PageUp": {
+        e.preventDefault();
+        const [fy, fm, fd] = focusedDate.split("-").map((s) => Number.parseInt(s, 10));
+        const prev = new Date(fy, fm - 2, fd); // previous month, same day
+        const ny = prev.getFullYear();
+        const nm = prev.getMonth() + 1;
+        const nd = prev.getDate();
+        const key = formatDateKey(ny, nm, nd);
+        setFocusedDate(key);
+        pendingFocusRef.current = key;
+        if (ny !== year || nm !== month) {
+          setYear(ny);
+          setMonth(nm);
+        }
+        break;
+      }
+      case "PageDown": {
+        e.preventDefault();
+        const [fy, fm, fd] = focusedDate.split("-").map((s) => Number.parseInt(s, 10));
+        const nextMonthDate = new Date(fy, fm, fd); // next month, same day
+        const ny = nextMonthDate.getFullYear();
+        const nm = nextMonthDate.getMonth() + 1;
+        const nd = nextMonthDate.getDate();
+        const key = formatDateKey(ny, nm, nd);
+        setFocusedDate(key);
+        pendingFocusRef.current = key;
+        if (ny !== year || nm !== month) {
+          setYear(ny);
+          setMonth(nm);
+        }
+        break;
+      }
+    }
   };
 
   // Build calendar grid
   const firstDay = new Date(year, month - 1, 1).getDay();
   const daysInMonth = new Date(year, month, 0).getDate();
-  const todayStr = today.toISOString().split("T")[0];
 
   const cells: Array<{ day: number | null; dateStr: string; key: string }> = [];
 
@@ -184,15 +333,21 @@ export default function DeadlineCalendar() {
           </div>
         )}
         {!error && !loading && (
-          <div className="grid grid-cols-7 gap-1">
+          <div
+            role="grid"
+            aria-label={`${MONTH_NAMES[month - 1]} ${year}`}
+            className="grid grid-cols-7 gap-1"
+            onKeyDown={handleGridKeyDown}
+          >
             {cells.map((cell) => {
               if (cell.day === null) {
-                return <div key={cell.key} className="h-20" />;
+                return <div key={cell.key} className="h-20" role="gridcell" />;
               }
 
               const dayGrants = grants[cell.dateStr] || [];
               const isToday = cell.dateStr === todayStr;
               const isSelected = cell.dateStr === selectedDate;
+              const isFocused = cell.dateStr === focusedDate;
               const hasGrants = dayGrants.length > 0;
 
               // Check if deadline is within 7 days from today
@@ -213,10 +368,18 @@ export default function DeadlineCalendar() {
               return (
                 <button
                   key={cell.key}
-                  onClick={() => setSelectedDate(isSelected ? null : cell.dateStr)}
+                  role="gridcell"
+                  ref={(el) => {
+                    cellRefs.current[cell.dateStr] = el;
+                  }}
+                  tabIndex={isFocused ? 0 : -1}
+                  onClick={() => {
+                    setSelectedDate(isSelected ? null : cell.dateStr);
+                    setFocusedDate(cell.dateStr);
+                  }}
                   aria-label={ariaLabel}
-                  aria-pressed={isSelected}
-                  className={`relative h-20 rounded-lg p-1.5 text-left transition-all border ${getCellBorderClass(isSelected, isUrgent, isToday, hasGrants)}`}
+                  aria-selected={isSelected}
+                  className={`relative h-20 rounded-lg p-1.5 text-left transition-all border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] ${getCellClass(isSelected, isUrgent, isToday, hasGrants)}`}
                 >
                   {isUrgent && (
                     <span

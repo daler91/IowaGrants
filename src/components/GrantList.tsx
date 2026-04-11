@@ -1,7 +1,7 @@
 "use client";
 
 import GrantCard from "./GrantCard";
-import { Button } from "@/components/ui/Button";
+import { Button, LinkButton } from "@/components/ui/Button";
 import type { GrantListItem, GrantSortKey, GrantSortDir } from "@/lib/types";
 
 interface GrantListProps {
@@ -11,9 +11,14 @@ interface GrantListProps {
   totalPages: number;
   onPageChange: (page: number) => void;
   loading: boolean;
+  /** True during the debounce window after the user edits filters/search. */
+  pending?: boolean;
   sort?: GrantSortKey;
   dir?: GrantSortDir;
   onSortChange?: (sort: GrantSortKey, dir: GrantSortDir) => void;
+  exportHref?: string;
+  hasActiveFilters?: boolean;
+  onClearFilters?: () => void;
   selectable?: boolean;
   selectedIds?: Set<string>;
   onSelectionChange?: (ids: Set<string>) => void;
@@ -47,9 +52,13 @@ export default function GrantList({
   totalPages,
   onPageChange,
   loading,
+  pending = false,
   sort,
   dir,
   onSortChange,
+  exportHref,
+  hasActiveFilters = false,
+  onClearFilters,
   selectable = false,
   selectedIds = new Set(),
   onSelectionChange,
@@ -120,8 +129,36 @@ export default function GrantList({
             d="M9.75 9.75l4.5 4.5m0-4.5l-4.5 4.5M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
           />
         </svg>
-        <h3 className="mt-4 text-lg font-medium text-[var(--foreground)]">No grants found</h3>
-        <p className="mt-2 text-sm text-[var(--muted)]">Try adjusting your search or filters.</p>
+        {hasActiveFilters ? (
+          <>
+            <h3 className="mt-4 text-lg font-medium text-[var(--foreground)]">
+              No grants match your filters
+            </h3>
+            <p className="mt-2 text-sm text-[var(--muted)]">
+              Try removing a filter or broadening your search.
+            </p>
+            {onClearFilters && (
+              <div className="mt-4">
+                <Button variant="primary" size="sm" onClick={onClearFilters}>
+                  Clear all filters
+                </Button>
+              </div>
+            )}
+          </>
+        ) : (
+          <>
+            <h3 className="mt-4 text-lg font-medium text-[var(--foreground)]">
+              No grants available yet
+            </h3>
+            <p className="mt-2 text-sm text-[var(--muted)]">
+              Grants are updated daily. Check back soon, or view the{" "}
+              <a href="/calendar" className="text-[var(--primary)] underline">
+                deadline calendar
+              </a>
+              .
+            </p>
+          </>
+        )}
       </div>
     );
   }
@@ -189,18 +226,49 @@ export default function GrantList({
               </Button>
             </>
           )}
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={onToggleSelectable}
-            aria-pressed={selectable || undefined}
-          >
-            {selectable ? "Cancel" : "Select"}
-          </Button>
+          {onToggleSelectable && (
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={onToggleSelectable}
+              aria-pressed={selectable || undefined}
+            >
+              {selectable ? "Cancel" : "Select"}
+            </Button>
+          )}
+          {exportHref && (
+            <LinkButton
+              variant="secondary"
+              size="sm"
+              href={exportHref}
+              title="Export these filtered grants"
+            >
+              <svg
+                className="w-4 h-4"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+                aria-hidden="true"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5 5-5M12 15V3"
+                />
+              </svg>
+              Export
+            </LinkButton>
+          )}
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div
+        className={`grid grid-cols-1 md:grid-cols-2 gap-4 transition-opacity duration-200 ${
+          pending ? "opacity-60" : "opacity-100"
+        }`}
+        aria-busy={pending || undefined}
+      >
         {grants.map((grant) => (
           <GrantCard
             key={grant.id}

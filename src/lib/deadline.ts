@@ -66,6 +66,16 @@ export function isRolling(deadline: DeadlineInput): boolean {
   return toDate(deadline) === null;
 }
 
+/**
+ * Compute the user-visible status: if the stored status is OPEN but the
+ * deadline has passed, treat it as CLOSED. This is authoritative when
+ * computed on the server so the UI can trust the value instead of
+ * recomputing with client-local time (which drifts across timezones).
+ */
+export function computeDisplayStatus(status: string, deadline: DeadlineInput): string {
+  return isDeadlinePassed(deadline) ? "CLOSED" : status;
+}
+
 /** True if the deadline exists, is in the future, and is within 7 days. */
 export function isDeadlineUrgent(deadline: DeadlineInput): boolean {
   const d = toDate(deadline);

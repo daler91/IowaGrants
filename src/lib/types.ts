@@ -29,6 +29,12 @@ export interface GrantListItem {
   sourceName: string;
   grantType: string;
   status: string;
+  /**
+   * Server-computed: equal to `status` unless the deadline has passed,
+   * in which case it's "CLOSED". Use this for display — it's free of
+   * timezone drift that used to haunt the client-side recomputation.
+   */
+  displayStatus?: string;
   gender: string;
   businessStage: string;
   amount?: string | null;

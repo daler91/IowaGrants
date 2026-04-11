@@ -42,9 +42,12 @@ export default function LoginPage() {
   return (
     <div className="min-h-[60vh] flex items-center justify-center">
       <div className="w-full max-w-sm">
-        <h1 className="text-2xl font-bold text-[var(--foreground)] mb-6 text-center">
+        <h1 className="text-2xl font-bold text-[var(--foreground)] mb-2 text-center">
           Admin Login
         </h1>
+        <p className="text-sm text-[var(--muted)] mb-6 text-center">
+          Admin access only. Contact the site owner to request an invite.
+        </p>
         <form
           onSubmit={handleSubmit}
           className="bg-[var(--card)] rounded-lg border border-[var(--border)] p-6 space-y-4"

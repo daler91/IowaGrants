@@ -9,8 +9,8 @@ import Badge, {
 } from "@/components/ui/Badge";
 import { parseRawData } from "@/lib/ai/schemas";
 import {
+  computeDisplayStatus,
   formatDeadlineLong,
-  isDeadlinePassed,
   isDeadlineUrgent,
   isRolling,
   urgencyLabel,
@@ -48,12 +48,26 @@ export default async function GrantDetailPage({
 
   if (!grant) notFound();
 
+  // "Similar grants" rail: grants of the same type that aren't this one,
+  // still openable (OPEN status), soonest deadlines first. Limit 3 to
+  // keep the rail compact below the action buttons.
+  const similar = await prisma.grant.findMany({
+    where: {
+      id: { not: grant.id },
+      grantType: grant.grantType,
+      status: "OPEN",
+      OR: [{ deadline: null }, { deadline: { gte: new Date() } }],
+    },
+    include: { eligibleExpenses: true },
+    orderBy: [{ deadline: { sort: "asc", nulls: "last" } }, { createdAt: "desc" }],
+    take: 3,
+  });
+
   const rolling = isRolling(grant.deadline);
   const deadlineStr = formatDeadlineLong(grant.deadline);
   const isUrgent = isDeadlineUrgent(grant.deadline);
   const urgencyText = urgencyLabel(grant.deadline);
-  const deadlinePassed = isDeadlinePassed(grant.deadline);
-  const displayStatus = deadlinePassed ? "CLOSED" : grant.status;
+  const displayStatus = computeDisplayStatus(grant.status, grant.deadline);
 
   const rawData = parseRawData(grant.rawData);
   const deadlineSource = rawData?.deadlineSource;
@@ -105,7 +119,7 @@ export default async function GrantDetailPage({
         })()}
 
         <div className="flex items-start justify-between gap-4 mb-4">
-          <h1 className="text-2xl font-bold text-[var(--foreground)]">{grant.title}</h1>
+          <h1 className="text-h1">{grant.title}</h1>
           <AdminEditButton grantId={id} />
         </div>
 
@@ -275,6 +289,39 @@ export default async function GrantDetailPage({
           </p>
         </div>
       </div>
+
+      {similar.length > 0 && (
+        <section className="mt-8" aria-labelledby="similar-grants-heading">
+          <h2 id="similar-grants-heading" className="text-h2 mb-4">
+            Similar grants
+          </h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {similar.map((s) => (
+              <Link
+                key={s.id}
+                href={`/grants/${s.id}`}
+                className="block bg-[var(--card)] rounded-lg border border-[var(--border)] p-4 hover:shadow-md transition-shadow"
+              >
+                <div className="flex flex-wrap gap-2 mb-2">
+                  <Badge variant={typeBadgeVariant(s.grantType)}>{s.grantType}</Badge>
+                  {isRolling(s.deadline) && <Badge variant="rolling">Rolling</Badge>}
+                </div>
+                <h3 className="text-sm font-semibold text-[var(--foreground)] line-clamp-2 mb-1">
+                  {s.title}
+                </h3>
+                {s.amount && (
+                  <p className="text-xs font-medium text-[var(--success)] mb-1">{s.amount}</p>
+                )}
+                <p className="text-xs text-[var(--muted)]">
+                  {isRolling(s.deadline)
+                    ? "Rolling — apply any time"
+                    : `Deadline: ${formatDeadlineLong(s.deadline)}`}
+                </p>
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
     </div>
   );
 }

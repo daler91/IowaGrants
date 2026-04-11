@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { requireAdmin, UnauthorizedError } from "@/lib/auth";
 import { GRANT_INCLUDE } from "@/lib/constants";
 import { parsePagination } from "@/lib/api-utils";
+import { computeDisplayStatus } from "@/lib/deadline";
 import { buildGrantWhere } from "@/lib/grant-query";
 import { parseSortParams } from "@/lib/grant-sort";
 import { errorResponse, log, logError } from "@/lib/errors";
@@ -27,8 +28,15 @@ export async function GET(request: NextRequest) {
       prisma.grant.count({ where }),
     ]);
 
+    // Decorate each grant with a server-computed displayStatus so the
+    // client doesn't have to (and can't get timezone drift wrong).
+    const data = grants.map((g) => ({
+      ...g,
+      displayStatus: computeDisplayStatus(g.status, g.deadline),
+    }));
+
     const response = NextResponse.json({
-      data: grants,
+      data,
       total,
       page,
       limit,

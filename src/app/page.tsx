@@ -1,8 +1,7 @@
 "use client";
 
-import { Suspense, useState, useEffect, useCallback, useMemo } from "react";
+import { Suspense, useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import Link from "next/link";
 import SearchBar from "@/components/SearchBar";
 import GrantFilters from "@/components/GrantFilters";
 import GrantList from "@/components/GrantList";
@@ -133,17 +132,25 @@ function Dashboard() {
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Track the filter snapshot that the currently-rendered grants correspond
+  // to. While the user is still in the 300ms debounce window, the current
+  // filters differ from this ref — we use that gap to dim the result grid
+  // so the click feels acknowledged before the skeleton appears.
+  const lastFetchedKey = useRef("");
+
   const fetchGrants = useCallback(async () => {
     setLoading(true);
     setError(null);
     const params = buildGrantQueryParams(filters, search);
     params.set("page", (filters.page || 1).toString());
     params.set("limit", (filters.limit || 20).toString());
+    const fetchKey = params.toString();
 
     try {
       const res = await fetch(`/api/grants?${params.toString()}`);
       if (!res.ok) throw new Error("Failed to load grants");
       const data: PaginatedResponse<GrantListItem> = await res.json();
+      lastFetchedKey.current = fetchKey;
       setGrants(data.data);
       setTotal(data.total);
       setTotalPages(data.totalPages);
@@ -259,39 +266,25 @@ function Dashboard() {
     [filters, search],
   );
 
+  // "pending" is true while the user has changed filters/search but the
+  // next fetch hasn't committed yet (covers the 300ms debounce gap). It
+  // is derived — no setState in effect — so the rule engine is happy.
+  const currentKey = useMemo(() => {
+    const params = buildGrantQueryParams(filters, search);
+    params.set("page", (filters.page || 1).toString());
+    params.set("limit", (filters.limit || 20).toString());
+    return params.toString();
+  }, [filters, search]);
+  const pending = !loading && currentKey !== lastFetchedKey.current;
+
   return (
     <div>
-      <div className="mb-8 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold text-[var(--foreground)] mb-2">
-            Iowa Small Business Grants
-          </h1>
-          <p className="text-[var(--muted)]">
-            Discover grants for small businesses and entrepreneurs in Iowa. Updated daily from
-            federal, state, and local sources.
-          </p>
-        </div>
-        <Link
-          href={exportHref}
-          className="self-start inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-[var(--border)] bg-[var(--card)] hover:bg-[var(--surface-hover)] text-[var(--foreground)] font-medium transition-colors"
-          title="Export these filtered grants"
-        >
-          <svg
-            className="w-4 h-4"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-            aria-hidden="true"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5 5-5M12 15V3"
-            />
-          </svg>
-          Export
-        </Link>
+      <div className="mb-8">
+        <h1 className="text-h1 mb-2">Iowa Small Business Grants</h1>
+        <p className="text-subtitle">
+          Discover grants for small businesses and entrepreneurs in Iowa. Updated daily from
+          federal, state, and local sources.
+        </p>
       </div>
 
       <div className="mb-6">
@@ -348,7 +341,12 @@ function Dashboard() {
 
       <div className="flex flex-col lg:flex-row gap-6">
         <aside className="hidden lg:block w-64 flex-shrink-0">
-          <GrantFilters filters={filters} onChange={setFilters} onClear={handleClearAll} />
+          <GrantFilters
+            filters={filters}
+            onChange={setFilters}
+            onClear={handleClearAll}
+            activeCount={activeFilterCount}
+          />
         </aside>
 
         <div className="flex-1">
@@ -359,9 +357,13 @@ function Dashboard() {
             totalPages={totalPages}
             onPageChange={(page: number) => setFilters((f: FilterType) => ({ ...f, page }))}
             loading={loading}
+            pending={pending}
             sort={filters.sort}
             dir={filters.dir}
             onSortChange={handleSortChange}
+            exportHref={exportHref}
+            hasActiveFilters={activeFilterCount > 0}
+            onClearFilters={handleClearAll}
             selectable={isAuthenticated ? selectable : false}
             selectedIds={isAuthenticated ? selectedIds : undefined}
             onSelectionChange={isAuthenticated ? setSelectedIds : undefined}
@@ -390,7 +392,12 @@ function Dashboard() {
         ariaLabel="Filters"
         title={`Filters${activeFilterCount > 0 ? ` (${activeFilterCount})` : ""}`}
       >
-        <GrantFilters filters={filters} onChange={setFilters} onClear={handleClearAll} />
+        <GrantFilters
+          filters={filters}
+          onChange={setFilters}
+          onClear={handleClearAll}
+          activeCount={activeFilterCount}
+        />
         <div className="mt-4">
           <Button
             variant="primary"

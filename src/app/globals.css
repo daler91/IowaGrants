@@ -190,3 +190,23 @@ body {
   background: var(--background);
   font-family: var(--font-geist-sans), system-ui, sans-serif;
 }
+
+/* ── Typography scale ──────────────────────────────────────────────────
+   Prefer these utility classes over ad-hoc `text-3xl font-bold` so
+   headings stay consistent across pages. New markup should use them;
+   existing headings will migrate opportunistically in future passes.
+*/
+@layer components {
+  .text-h1 {
+    @apply text-3xl font-bold text-[var(--foreground)];
+  }
+  .text-h2 {
+    @apply text-xl font-semibold text-[var(--foreground)];
+  }
+  .text-h3 {
+    @apply text-lg font-semibold text-[var(--foreground)];
+  }
+  .text-subtitle {
+    @apply text-[var(--muted)];
+  }
+}
