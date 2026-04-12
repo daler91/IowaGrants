@@ -177,17 +177,20 @@ export default function Combobox({
       </div>
       {hint && !open && <p className="text-xs text-[var(--muted)] mt-1">{hint}</p>}
       {open && filtered.length > 0 && (
-        <ul
+        // WAI-ARIA combobox autocomplete pattern: requires role="listbox".
+        // <datalist>/<select> can't support our free-text commit, styled
+        // active option, or mousedown-before-blur behavior.
+        <div
           id={listboxId}
-          role="listbox"
+          role="listbox" // NOSONAR: WAI-ARIA combobox pattern
           className="absolute z-20 mt-1 w-full max-h-64 overflow-auto rounded-lg border border-[var(--border)] bg-[var(--card)] shadow-lg py-1"
         >
           {filtered.map((opt, i) => {
             const isActive = i === activeIndex;
             return (
-              <li
+              <div
                 key={opt}
-                role="option"
+                role="option" // NOSONAR: WAI-ARIA combobox pattern
                 aria-selected={opt === value}
                 onMouseDown={(e) => {
                   // mousedown so it fires before the input blur closes the list
@@ -201,18 +204,15 @@ export default function Combobox({
                 }`}
               >
                 {opt}
-              </li>
+              </div>
             );
           })}
-        </ul>
+        </div>
       )}
       {open && filtered.length === 0 && (
-        <div
-          role="status"
-          className="absolute z-20 mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--card)] shadow-lg px-3 py-2 text-sm text-[var(--muted)]"
-        >
+        <output className="block absolute z-20 mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--card)] shadow-lg px-3 py-2 text-sm text-[var(--muted)]">
           No matches
-        </div>
+        </output>
       )}
     </div>
   );

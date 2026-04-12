@@ -124,17 +124,20 @@ export default function TagInput({
         />
       </div>
       {open && filteredSuggestions.length > 0 && (
-        <ul
+        // WAI-ARIA combobox autocomplete pattern: requires role="listbox".
+        // <datalist>/<select> can't support our free-text commit, styled
+        // active option, or mousedown-before-blur behavior.
+        <div
           id={listboxId}
-          role="listbox"
+          role="listbox" // NOSONAR: WAI-ARIA combobox pattern
           className="absolute z-20 mt-1 w-full max-h-64 overflow-auto rounded-lg border border-[var(--border)] bg-[var(--card)] shadow-lg py-1"
         >
           {filteredSuggestions.map((opt, i) => {
             const isActive = i === activeIndex;
             return (
-              <li
+              <div
                 key={opt}
-                role="option"
+                role="option" // NOSONAR: WAI-ARIA combobox pattern
                 aria-selected={isActive}
                 onMouseDown={(e) => {
                   e.preventDefault();
@@ -147,10 +150,10 @@ export default function TagInput({
                 }`}
               >
                 {opt}
-              </li>
+              </div>
             );
           })}
-        </ul>
+        </div>
       )}
     </div>
   );

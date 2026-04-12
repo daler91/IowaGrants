@@ -265,6 +265,7 @@ function Dashboard() {
     () => computeActiveChips(filters, search).length,
     [filters, search],
   );
+  const filtersCountSuffix = activeFilterCount > 0 ? ` (${activeFilterCount})` : "";
 
   // "pending" is true while the user has changed filters/search but the
   // next fetch hasn't committed yet (covers the 300ms debounce gap). It
@@ -390,7 +391,7 @@ function Dashboard() {
         onClose={() => setMobileFiltersOpen(false)}
         side="left"
         ariaLabel="Filters"
-        title={`Filters${activeFilterCount > 0 ? ` (${activeFilterCount})` : ""}`}
+        title={`Filters${filtersCountSuffix}`}
       >
         <GrantFilters
           filters={filters}

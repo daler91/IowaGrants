@@ -165,7 +165,7 @@ export default function GrantList({
               <a href="/calendar" className="text-[var(--primary)] underline">
                 deadline calendar
               </a>
-              .
+              {"."}
             </p>
           </>
         )}
