@@ -124,12 +124,16 @@ export default function TagInput({
         />
       </div>
       {open && filteredSuggestions.length > 0 && (
-        // WAI-ARIA combobox autocomplete pattern: requires role="listbox".
-        // <datalist>/<select> can't support our free-text commit, styled
-        // active option, or mousedown-before-blur behavior.
-        <div
+        // WAI-ARIA combobox autocomplete pattern: requires role="listbox" on
+        // the popover and role="option" on each item. <datalist>/<select>
+        // can't support our free-text commit, styled active option, or
+        // mousedown-before-blur behavior. Focus stays on the input; options
+        // are programmatically focusable only (tabIndex={-1}) so they
+        // satisfy the "interactive roles must be focusable" rule without
+        // appearing in the tab order.
+        <div // NOSONAR: see comment above — WAI-ARIA combobox pattern
           id={listboxId}
-          role="listbox" // NOSONAR: WAI-ARIA combobox pattern
+          role="listbox"
           className="absolute z-20 mt-1 w-full max-h-64 overflow-auto rounded-lg border border-[var(--border)] bg-[var(--card)] shadow-lg py-1"
         >
           {filteredSuggestions.map((opt, i) => {
@@ -137,7 +141,8 @@ export default function TagInput({
             return (
               <div
                 key={opt}
-                role="option" // NOSONAR: WAI-ARIA combobox pattern
+                role="option"
+                tabIndex={-1}
                 aria-selected={isActive}
                 onMouseDown={(e) => {
                   e.preventDefault();
