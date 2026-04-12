@@ -333,6 +333,9 @@ export default function DeadlineCalendar() {
             aria-label={`${MONTH_NAMES[month - 1]} ${year}`}
             className="grid grid-cols-7 gap-1"
             onKeyDown={handleGridKeyDown}
+            // Child cells implement roving tabindex (see the button below);
+            // the container is programmatically focusable only.
+            tabIndex={-1}
           >
             {cells.map((cell) => {
               if (cell.day === null) {

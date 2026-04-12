@@ -177,7 +177,14 @@ export default function Combobox({
       </div>
       {hint && !open && <p className="text-xs text-[var(--muted)] mt-1">{hint}</p>}
       {open && filtered.length > 0 && (
-        <ul
+        // WAI-ARIA combobox autocomplete pattern: requires role="listbox" on
+        // the popover and role="option" on each item. <datalist>/<select>
+        // can't support our free-text commit, styled active option, or
+        // mousedown-before-blur behavior. Focus stays on the input; options
+        // are programmatically focusable only (tabIndex={-1}) so they
+        // satisfy the "interactive roles must be focusable" rule without
+        // appearing in the tab order.
+        <div // NOSONAR: see comment above — WAI-ARIA combobox pattern
           id={listboxId}
           role="listbox"
           className="absolute z-20 mt-1 w-full max-h-64 overflow-auto rounded-lg border border-[var(--border)] bg-[var(--card)] shadow-lg py-1"
@@ -185,9 +192,10 @@ export default function Combobox({
           {filtered.map((opt, i) => {
             const isActive = i === activeIndex;
             return (
-              <li
+              <div
                 key={opt}
                 role="option"
+                tabIndex={-1}
                 aria-selected={opt === value}
                 onMouseDown={(e) => {
                   // mousedown so it fires before the input blur closes the list
@@ -201,18 +209,15 @@ export default function Combobox({
                 }`}
               >
                 {opt}
-              </li>
+              </div>
             );
           })}
-        </ul>
+        </div>
       )}
       {open && filtered.length === 0 && (
-        <div
-          role="status"
-          className="absolute z-20 mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--card)] shadow-lg px-3 py-2 text-sm text-[var(--muted)]"
-        >
+        <output className="block absolute z-20 mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--card)] shadow-lg px-3 py-2 text-sm text-[var(--muted)]">
           No matches
-        </div>
+        </output>
       )}
     </div>
   );

@@ -148,7 +148,10 @@ export default function EditGrantPage() {
     if (!dirty) return;
     const handler = (e: BeforeUnloadEvent) => {
       e.preventDefault();
-      e.returnValue = "";
+      // returnValue is deprecated, but Safari and some older Chromium
+      // versions only show the unsaved-changes prompt when it's set in
+      // addition to calling preventDefault(). Keep both for compat.
+      e.returnValue = ""; // NOSONAR: legacy browser compat
     };
     window.addEventListener("beforeunload", handler);
     return () => window.removeEventListener("beforeunload", handler);

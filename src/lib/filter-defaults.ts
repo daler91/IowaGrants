@@ -29,7 +29,7 @@ export function getDefaultFilters(): GrantFilters {
  * user isn't told they need to "clear" what they never picked.
  */
 export function isDefaultStatus(status: GrantFilters["status"] | undefined): boolean {
-  if (!status || status.length !== DEFAULT_STATUS_FILTER.length) return false;
+  if (status?.length !== DEFAULT_STATUS_FILTER.length) return false;
   const lookup = new Set<string>(DEFAULT_STATUS_FILTER);
   return status.every((s) => lookup.has(s));
 }
