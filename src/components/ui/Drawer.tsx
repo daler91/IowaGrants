@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef } from "react";
 import type { ReactNode } from "react";
+import { useFocusTrap } from "@/lib/hooks/useFocusTrap";
 
 export type DrawerSide = "left" | "right" | "bottom";
 
@@ -49,6 +50,8 @@ export default function Drawer({
   children,
 }: Readonly<DrawerProps>) {
   const closeRef = useRef<HTMLButtonElement>(null);
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  useFocusTrap(dialogRef, open);
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
@@ -80,7 +83,7 @@ export default function Drawer({
         className="absolute inset-0 bg-black/40"
         onClick={onClose}
       />
-      <dialog open aria-label={ariaLabel} className={drawerPanelClass(side)}>
+      <dialog ref={dialogRef} open aria-label={ariaLabel} className={drawerPanelClass(side)}>
         <div className="sticky top-0 z-10 flex items-center justify-between bg-[var(--card)] border-b border-[var(--border)] px-4 py-3">
           <h2 className="text-lg font-semibold text-[var(--foreground)]">{title ?? ariaLabel}</h2>
           <button

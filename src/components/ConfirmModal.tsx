@@ -2,6 +2,7 @@
 
 import { useEffect, useCallback, useRef } from "react";
 import { Button } from "@/components/ui/Button";
+import { useFocusTrap } from "@/lib/hooks/useFocusTrap";
 
 interface ConfirmModalProps {
   open: boolean;
@@ -23,6 +24,8 @@ export default function ConfirmModal({
   loading = false,
 }: Readonly<ConfirmModalProps>) {
   const cancelRef = useRef<HTMLButtonElement>(null);
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  useFocusTrap(dialogRef, open);
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
@@ -52,6 +55,7 @@ export default function ConfirmModal({
         onClick={onCancel}
       />
       <dialog
+        ref={dialogRef}
         open
         aria-labelledby="confirm-modal-title"
         className="relative bg-[var(--card)] rounded-lg border border-[var(--border)] p-6 shadow-xl max-w-md w-full mx-4"
