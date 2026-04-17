@@ -1,4 +1,3 @@
-import Anthropic from "@anthropic-ai/sdk";
 import type { GrantData } from "@/lib/types";
 import { env } from "@/lib/env";
 import { VALIDATION_BATCH_SIZE, AI_CALL_DELAY_MS } from "@/lib/scrapers/config";
@@ -6,6 +5,7 @@ import { log, logError, logWarn } from "@/lib/errors";
 import { ValidationResultArraySchema, type ValidationResult } from "./schemas";
 import { getAnthropic } from "./client";
 import type { IntegrationBudget } from "./budget";
+import { computeBackoffDelay, sleep } from "./backoff";
 
 const VALIDATION_PROMPT = `You are evaluating scraped grant listings to determine if they are real, active grant programs for small businesses.
 
@@ -112,14 +112,7 @@ async function validateBatch(
       );
 
       if (attempt < MAX_RETRIES - 1) {
-        // Respect Anthropic rate-limit Retry-After header when available
-        if (error instanceof Anthropic.RateLimitError) {
-          const retryAfter = Number.parseInt(error.headers?.get?.("retry-after") ?? "5", 10);
-          await new Promise((r) => setTimeout(r, retryAfter * 1000));
-        } else {
-          const delay = INITIAL_RETRY_DELAY_MS * 2 ** attempt;
-          await new Promise((r) => setTimeout(r, delay));
-        }
+        await sleep(computeBackoffDelay(error, attempt, INITIAL_RETRY_DELAY_MS));
       }
     }
   }

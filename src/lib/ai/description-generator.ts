@@ -5,6 +5,7 @@ import { log, logError, logWarn } from "@/lib/errors";
 import { DescriptionResultArraySchema } from "./schemas";
 import { getAnthropic } from "./client";
 import type { IntegrationBudget } from "./budget";
+import { computeBackoffDelay, sleep } from "./backoff";
 
 const DESCRIPTION_PROMPT = `You are writing clear, helpful descriptions for grant programs aimed at Iowa small business owners.
 
@@ -41,9 +42,7 @@ function buildGrantSnippet(grant: GrantData, index: number): string {
     parts.push(`Deadline: ${grant.deadline.toISOString().split("T")[0]}`);
   }
   const liveBodyText =
-    grant.rawData && typeof grant.rawData === "object"
-      ? grant.rawData.liveBodyText
-      : undefined;
+    grant.rawData && typeof grant.rawData === "object" ? grant.rawData.liveBodyText : undefined;
   if (typeof liveBodyText === "string" && liveBodyText.length > 0) {
     parts.push(`Live page excerpt: ${liveBodyText.slice(0, 1500)}`);
   }
@@ -86,8 +85,7 @@ async function generateBatchDescriptions(
       );
 
       if (attempt < MAX_RETRIES - 1) {
-        const delay = INITIAL_RETRY_DELAY_MS * 2 ** attempt;
-        await new Promise((r) => setTimeout(r, delay));
+        await sleep(computeBackoffDelay(error, attempt, INITIAL_RETRY_DELAY_MS));
       }
     }
   }
