@@ -4,23 +4,24 @@ Generated: 2026-04-17
 
 ## Executive Summary
 
-Iowa Grant Scanner is a Next.js 14 / Prisma / PostgreSQL app that scrapes multi-source grant data and surfaces it to Iowa small business owners. Overall the codebase is well-structured with good security fundamentals (bcrypt, JWT issuer/audience pinning, HttpOnly cookies, CSRF origin check, parameterized Prisma queries), graceful scraper degradation, and tested timezone handling. The top concerns are (1) an admin-invite token transported via URL query string that leaks through browser history/referrers, (2) SSRF surface in scraper page/URL-health helpers that don't validate URLs, (3) CSP that still allows `unsafe-inline` for scripts, and (4) accessibility gaps (modal/drawer focus traps, dynamic results not announced) that will meaningfully hurt non-technical and assistive-tech users — the app's core audience.
+Iowa Grant Scanner is a Next.js 14 / Prisma / PostgreSQL app that scrapes multi-source grant data and surfaces it to Iowa small business owners. Overall the codebase is well-structured with good security fundamentals (bcrypt, JWT issuer/audience pinning, HttpOnly cookies, CSRF origin check, parameterized Prisma queries), graceful scraper degradation, and tested timezone handling. The top concerns are (1) SSRF surface in scraper page/URL-health helpers that don't validate URLs, (2) CSP that still allows `unsafe-inline` for scripts, (3) accessibility gaps (modal/drawer focus traps, no polite live-region announcement when filter results update) that will meaningfully hurt non-technical and assistive-tech users, and (4) a few scraper/API performance hotspots (serial change-detection loop, unconditional `count()` on list requests).
+
+> **Post-review corrections (after verification against source):** Codex review caught three items that were inaccurate. Retracted: original Critical #1 (invite token in URL query string — the code already uses a URL fragment, see `src/app/admin/invites/page.tsx:63` and `src/app/register/page.tsx:23-26,40`). Retracted: original W11 (debounce regression — `fetchGrants` is `useCallback([search, filters])` and the effect clears/restarts a 300 ms timeout, which is a valid debounce). Rewritten: original Critical #8 — `aria-busy` is already set on the results grid (`src/components/GrantList.tsx:276-281`); the remaining gap is only a polite live-region announcement. Findings below are renumbered accordingly.
 
 ## Critical Findings (must fix before shipping)
 
 | # | Category | Finding | File(s) | Recommended Fix |
 |---|----------|---------|---------|-----------------|
-| 1 | Security / Privacy | Admin invite token transported in URL query params; leaks via browser history, Referer, proxies, analytics | `src/app/admin/invites/page.tsx`, `src/app/api/admin/invites/route.ts` | Deliver token via URL fragment (`#token=`) or a POST-only acceptance flow; never render it in a GET querystring |
-| 2 | Security (SSRF) | `fetchPageDetails()` performs `axios.get()` on any URL without `isSafeUrl()` check | `src/lib/scrapers/page-utils.ts:114-148` | Call `isSafeUrl(url)` at function entry; return null and log when blocked |
-| 3 | Security (SSRF) | `checkUrlHealth()` fetches arbitrary URLs with no validation | `src/lib/scrapers/url-health.ts:38-94` | Add `isSafeUrl(url)` guard before `axios.head/get` |
-| 4 | Security (SSRF/XSS) | Grant `PUT` accepts any string for `sourceUrl` / `pdfUrl` — `javascript:` or `http://169.254.169.254` accepted | `src/app/api/grants/[id]/route.ts:69-96` | Refine Zod schema with `validateUrl` (protocol + `isSafeUrl` check) |
-| 5 | Security (XSS) | CSP allows `unsafe-inline` for both `script-src` and `style-src`, neutralizing CSP as XSS defense | `next.config.mjs:22-24` | Replace with per-request nonce in middleware; remove `unsafe-inline` for scripts |
-| 6 | Accessibility | `ConfirmModal` has no focus trap — Tab escapes to background content; blocks keyboard-only users | `src/components/ConfirmModal.tsx:37-40` | Implement focus trap (loop first/last focusable) and restore focus on close |
-| 7 | Accessibility | `Drawer` uses `<dialog open>` with only initial focus — no focus trap | `src/components/ui/Drawer.tsx:73-110` | Add focus trap + `returnFocus` to opener on close |
-| 8 | Accessibility | Grant list re-fetch on filter change not announced to AT; only visual opacity dim | `src/app/page.tsx:279-280`, `src/components/GrantList.tsx` | Add `aria-busy={pending}` + `aria-live="polite"` status region announcing "Updating results…" |
-| 9 | Performance | Change-detection loop fetches N URLs sequentially via blocking `await axios.get()` — 50 URLs × 5s timeout ≈ 250s worst case | `src/lib/change-detection/detector.ts:25-71` | Parallelize with `p-limit(4-8)` / `Promise.allSettled` |
-| 10 | Performance | `GET /api/grants` runs `findMany` + `count` with identical WHERE clauses; count is a second full scan on text-search paths | `src/app/api/grants/route.ts:20-29`, `src/lib/grant-query.ts:86-91` | Avoid count on every request (use `hasNextPage` via `take: limit+1`); add Postgres trigram / GIN index for ILIKE on `title`/`description` |
-| 11 | Infra | Rate limiter reads `x-forwarded-for` which is client-spoofable in multi-hop; on Railway confirm which header is actually trusted | `src/middleware.ts:74-79` | Only trust a documented proxy-set header (e.g. `x-real-ip`) and ignore `x-forwarded-for` unless you strip it at the edge |
+| 1 | Security (SSRF) | `fetchPageDetails()` performs `axios.get()` on any URL without `isSafeUrl()` check | `src/lib/scrapers/page-utils.ts:114-148` | Call `isSafeUrl(url)` at function entry; return null and log when blocked |
+| 2 | Security (SSRF) | `checkUrlHealth()` fetches arbitrary URLs with no validation | `src/lib/scrapers/url-health.ts:38-94` | Add `isSafeUrl(url)` guard before `axios.head/get` |
+| 3 | Security (SSRF/XSS) | Grant `PUT` accepts any string for `sourceUrl` / `pdfUrl` — `javascript:` or `http://169.254.169.254` accepted | `src/app/api/grants/[id]/route.ts:69-96` | Refine Zod schema with `validateUrl` (protocol + `isSafeUrl` check) |
+| 4 | Security (XSS) | CSP allows `unsafe-inline` for both `script-src` and `style-src`, neutralizing CSP as XSS defense | `next.config.mjs:22-24` | Replace with per-request nonce in middleware; remove `unsafe-inline` for scripts |
+| 5 | Accessibility | `ConfirmModal` has no focus trap — Tab escapes to background content; blocks keyboard-only users | `src/components/ConfirmModal.tsx:37-40` | Implement focus trap (loop first/last focusable) and restore focus on close |
+| 6 | Accessibility | `Drawer` uses `<dialog open>` with only initial focus — no focus trap | `src/components/ui/Drawer.tsx:73-110` | Add focus trap + `returnFocus` to opener on close |
+| 7 | Accessibility | Grant-list grid sets `aria-busy` on pending filter refetch but has no polite live-region status message, so AT users don't hear that results are updating | `src/components/GrantList.tsx:276-281` | Add an `aria-live="polite"` / `role="status"` region that announces "Updating results…" and "Showing N grants" on transition |
+| 8 | Performance | Change-detection loop fetches N URLs sequentially via blocking `await axios.get()` — 50 URLs × 5s timeout ≈ 250s worst case | `src/lib/change-detection/detector.ts:25-71` | Parallelize with `p-limit(4-8)` / `Promise.allSettled` |
+| 9 | Performance | `GET /api/grants` runs `findMany` + `count` with identical WHERE clauses; count is a second full scan on text-search paths | `src/app/api/grants/route.ts:20-29`, `src/lib/grant-query.ts:86-91` | Avoid count on every request (use `hasNextPage` via `take: limit+1`); add Postgres trigram / GIN index for ILIKE on `title`/`description` |
+| 10 | Infra | Rate limiter reads `x-forwarded-for` which is client-spoofable in multi-hop; on Railway confirm which header is actually trusted | `src/middleware.ts:74-79` | Only trust a documented proxy-set header (e.g. `x-real-ip`) and ignore `x-forwarded-for` unless you strip it at the edge |
 
 ## Warnings (should fix soon)
 
@@ -36,17 +37,16 @@ Iowa Grant Scanner is a Next.js 14 / Prisma / PostgreSQL app that scrapes multi-
 | W8 | Accessibility | Export-page format buttons aren't grouped as a radio-like set | `src/app/export/page.tsx:306-324` | Wrap in `<fieldset><legend>` or `role="radiogroup"` with `aria-labelledby` |
 | W9 | Accessibility | Heading hierarchy skips levels on several pages (h1 → h2 sidebar then h2 content) | export, admin pages | Use h2 for main sections, h3 for sidebar/subsections |
 | W10 | Accessibility | No `<footer>` landmark | `src/app/layout.tsx:34-36` | Add `<footer role="contentinfo">` with minimum content |
-| W11 | Performance | Search triggers on every keystroke — debounce effect depends on `fetchGrants` callback whose identity changes each keystroke | `src/app/page.tsx:141-177` | Move timeout inside the effect with `[search, filters]` deps only |
-| W12 | Performance | `GRANT_INCLUDE` always pulls `categories` + `eligibleExpenses` — list view serializes 10-20% extra payload it doesn't render | `src/lib/constants.ts:14-17`, `src/app/api/grants/route.ts` | Split `GRANT_INCLUDE_LIST` (minimal) vs `GRANT_INCLUDE_DETAIL` |
-| W13 | Performance | Revalidation loads full Grant rows but uses only `id/sourceUrl/title/rawData/status` | `src/lib/scrapers/revalidate-existing.ts:123-141` | Add `select:` projection |
-| W14 | Performance | AI operations in scraper pipeline run serially (validator → categorizer → deadline → description); fixed 500ms delay with no adaptive backoff | `src/lib/scrapers/index.ts:560-623`, `src/lib/ai/deadline-extractor.ts:157-158` | Parallelize independent passes under budget; add exponential backoff on 429 |
-| W15 | QA | Grant description field is unbounded (`TEXT`) — 100k+ char PDFs can bloat API responses | `prisma/schema.prisma:Grant.description` | Cap at ~5,000 chars at insert time |
-| W16 | DevOps | ~108 raw `console.log/error` calls remain (per TECHNICAL_DEBT.md); request-id not propagated through scraper/AI logs | `src/app/**`, `src/components/**`, `src/lib/scrapers/**`, `src/lib/ai/**` | Migrate to `log/logError/logWarn` utilities; thread `x-request-id` through |
-| W17 | DevOps | No error-tracking service wired up; stdout JSON only | `src/instrumentation.ts` | Integrate Sentry or equivalent; already have the instrumentation hook |
-| W18 | DevOps | `/api/health` doesn't verify DB — unhealthy DB still returns 200 | `src/app/api/health/route.ts` | Add `?deep=true` that runs `SELECT 1` via Prisma |
-| W19 | Privacy | Admin email written to audit logs with no retention policy | `src/app/api/grants/route.ts:66` and other admin-audit log sites, `src/lib/errors.ts` | Document retention (e.g. 1 year); add log rotation/cleanup |
-| W20 | Privacy | PDFs sent to Anthropic may contain PII (applicant examples, sample SSNs) with no pre-flight redaction | `src/lib/ai/pdf-parser.ts` | Document third-party processing in privacy policy; optional redaction pass |
-| W21 | Privacy | No documented data-retention policy for grants / audit logs / invite tokens | repo-wide | Add policy doc; auto-expire invites; optional CLOSED-grant pruning |
+| W11 | Performance | `GRANT_INCLUDE` always pulls `categories` + `eligibleExpenses` — list view serializes 10-20% extra payload it doesn't render | `src/lib/constants.ts:14-17`, `src/app/api/grants/route.ts` | Split `GRANT_INCLUDE_LIST` (minimal) vs `GRANT_INCLUDE_DETAIL` |
+| W12 | Performance | Revalidation loads full Grant rows but uses only `id/sourceUrl/title/rawData/status` | `src/lib/scrapers/revalidate-existing.ts:123-141` | Add `select:` projection |
+| W13 | Performance | AI operations in scraper pipeline run serially (validator → categorizer → deadline → description); fixed 500ms delay with no adaptive backoff | `src/lib/scrapers/index.ts:560-623`, `src/lib/ai/deadline-extractor.ts:157-158` | Parallelize independent passes under budget; add exponential backoff on 429 |
+| W14 | QA | Grant description field is unbounded (`TEXT`) — 100k+ char PDFs can bloat API responses | `prisma/schema.prisma:Grant.description` | Cap at ~5,000 chars at insert time |
+| W15 | DevOps | ~108 raw `console.log/error` calls remain (per TECHNICAL_DEBT.md); request-id not propagated through scraper/AI logs | `src/app/**`, `src/components/**`, `src/lib/scrapers/**`, `src/lib/ai/**` | Migrate to `log/logError/logWarn` utilities; thread `x-request-id` through |
+| W16 | DevOps | No error-tracking service wired up; stdout JSON only | `src/instrumentation.ts` | Integrate Sentry or equivalent; already have the instrumentation hook |
+| W17 | DevOps | `/api/health` doesn't verify DB — unhealthy DB still returns 200 | `src/app/api/health/route.ts` | Add `?deep=true` that runs `SELECT 1` via Prisma |
+| W18 | Privacy | Admin email written to audit logs with no retention policy | `src/app/api/grants/route.ts:66` and other admin-audit log sites, `src/lib/errors.ts` | Document retention (e.g. 1 year); add log rotation/cleanup |
+| W19 | Privacy | PDFs sent to Anthropic may contain PII (applicant examples, sample SSNs) with no pre-flight redaction | `src/lib/ai/pdf-parser.ts` | Document third-party processing in privacy policy; optional redaction pass |
+| W20 | Privacy | No documented data-retention policy for grants / audit logs / invite tokens | repo-wide | Add policy doc; auto-expire invites; optional CLOSED-grant pruning |
 
 ## Suggestions (nice to have)
 
@@ -83,7 +83,7 @@ Iowa Grant Scanner is a Next.js 14 / Prisma / PostgreSQL app that scrapes multi-
 - CSRF: middleware enforces origin-match on POST/PUT/DELETE (`src/middleware.ts:27-48`), with explicit skip for the Bearer-authed scraper endpoint.
 - Cookies: `HttpOnly` + `Secure` (prod) + `SameSite=Lax` (`src/lib/auth.ts:100-108`).
 
-**Findings** — see Critical #1-5, #11 and Warnings W1-W3, Suggestions S1-S2 above.
+**Findings** — see Critical #1-4, #10 and Warnings W1-W3, Suggestions S1-S2 above.
 
 ### Business Analysis
 
@@ -113,11 +113,11 @@ Iowa Grant Scanner is a Next.js 14 / Prisma / PostgreSQL app that scrapes multi-
 - Responsive design uses `lg:`/`md:`/`sm:` breakpoints; a filter drawer replaces the sidebar on mobile.
 - Color tokens produce AA-level contrast for primary text/buttons/badges.
 
-**Gaps** — see Critical #6-8 and Warnings W4-W10, Suggestion S11 above.
+**Gaps** — see Critical #5-7 and Warnings W4-W10, Suggestion S11 above.
 
 Priority order for a one-sprint accessibility improvement:
-1. Focus trap in `ConfirmModal` + `Drawer` (Critical #6-7).
-2. `aria-busy` + `aria-live` on grant list during pending fetch (Critical #8).
+1. Focus trap in `ConfirmModal` + `Drawer` (Critical #5-6).
+2. Polite live-region announcement for grant-list filter refetch — `aria-busy` is already set, the remaining gap is the status message (Critical #7).
 3. Visible form-guidance for password + amount (W4).
 4. Heading hierarchy + `<footer>` landmark (W9, W10).
 5. Calendar urgency labelling for color-blind + AT users (W5).
@@ -125,18 +125,17 @@ Priority order for a one-sprint accessibility improvement:
 ### Performance
 
 **Scraper pipeline** — biggest wins are here:
-- Critical #9: parallelize change-detection URL probe loop with `p-limit`.
-- W13: `select:` projection on revalidation queries.
-- W14: parallelize independent AI passes; add exponential backoff on 429.
+- Critical #8: parallelize change-detection URL probe loop with `p-limit`.
+- W12: `select:` projection on revalidation queries.
+- W13: parallelize independent AI passes; add exponential backoff on 429.
 - S8: expose concurrency/batch constants via env.
 
 **API surface**
-- Critical #10: avoid unconditional `count()` on every list request; prefer `take: limit+1` to compute `hasNextPage`. Add a Postgres trigram (`pg_trgm`) GIN index if keeping ILIKE-based search — there's already a `trigram_search` migration referenced in `prisma/migrations/`, confirm it's applied to `title` + `description`.
-- W12: split `GRANT_INCLUDE_LIST` from `GRANT_INCLUDE_DETAIL`.
+- Critical #9: avoid unconditional `count()` on every list request; prefer `take: limit+1` to compute `hasNextPage`. Add a Postgres trigram (`pg_trgm`) GIN index if keeping ILIKE-based search — there's already a `trigram_search` migration referenced in `prisma/migrations/`, confirm it's applied to `title` + `description`.
+- W11: split `GRANT_INCLUDE_LIST` from `GRANT_INCLUDE_DETAIL`.
 - S3: add `Cache-Control: s-maxage=300, stale-while-revalidate=3600` to `/api/grants/[id]`.
 
 **Frontend**
-- W11: fix debounce effect dependencies.
 - S5, S7: memoize filter handlers, cache meta-values fetch.
 
 **AI budget**
@@ -152,7 +151,7 @@ Priority order for a one-sprint accessibility improvement:
 - Scraper max-duration 300s with stale-lock detection at 10 min (`src/app/api/scraper/route.ts`).
 - Deadline date handling pinned to `America/Chicago`; covered by `src/lib/__tests__/deadline.test.ts`.
 
-**Gaps** — W15 (unbounded description), S9 (calendar bounds test), S10 (client-side debounce on scraper button).
+**Gaps** — W14 (unbounded description), S9 (calendar bounds test), S10 (client-side debounce on scraper button).
 
 ### DevOps / Infrastructure
 
@@ -163,7 +162,7 @@ Priority order for a one-sprint accessibility improvement:
 - Graceful degradation: missing optional API keys (SAM.gov, Brave, SerpAPI, Airtable, Anthropic) cause scrapers to skip, not crash. `Promise.allSettled` on scraper fan-out isolates failures.
 - CSRF + rate-limit + request-id threading all handled in middleware with sensible cleanup.
 
-**Gaps** — Critical #11 (IP header trust), W16 (finish console.log migration), W17 (no Sentry), W18 (shallow health check), S12 (no secret-rotation runbook).
+**Gaps** — Critical #10 (IP header trust), W15 (finish console.log migration), W16 (no Sentry), W17 (shallow health check), S12 (no secret-rotation runbook).
 
 ### Data Privacy
 
@@ -173,17 +172,17 @@ Priority order for a one-sprint accessibility improvement:
 - JWTs in `HttpOnly; Secure; SameSite=Lax` cookies, with `tokenVersion` revocation checked per request.
 - API responses never leak `passwordHash` or `tokenVersion`.
 
-**Gaps** — Critical #1 (invite token in URL), W19 (admin email retention), W20 (PDF PII to Anthropic), W21 (no retention policy), S13 (privacy/terms page), S14 (GDPR/CCPA self-serve), S15 (`rawData` shape).
+**Gaps** — W18 (admin email retention), W19 (PDF PII to Anthropic), W20 (no retention policy), S13 (privacy/terms page), S14 (GDPR/CCPA self-serve), S15 (`rawData` shape).
 
 ## Score Summary
 
 | Category | Score (1-10) | Notes |
 |----------|--------------|-------|
-| Security | 7 | Strong fundamentals (JWT, bcrypt, CSRF, timing-safe, parameterized SQL). Loses points for invite-token-in-URL, SSRF gaps in page/URL-health helpers, `unsafe-inline` CSP, URL validation missing on admin grant writes. |
+| Security | 8 | Strong fundamentals (JWT, bcrypt, CSRF, timing-safe, parameterized SQL, invite tokens delivered via URL fragment). Loses points for SSRF gaps in page/URL-health helpers, `unsafe-inline` CSP, URL validation missing on admin grant writes. |
 | Business Fit | 9 | Product does what the README promises; filters match the data model; status transitions are well-considered. Minor feature-creep risk. |
 | UX / Accessibility | 6 | Good foundation (semantic HTML, focus rings, skip link, responsive). Modal/drawer focus traps, live-region announcements, and form guidance need work before shipping to a non-technical audience. |
 | Performance | 6 | Schema is indexed sensibly and responses are paginated, but the scraper change-detection loop is serial, `count()` runs on every list request, and AI passes don't run in parallel. Solid wins available. |
 | QA / Robustness | 8 | Good test coverage for auth, deadlines, filters, URL utils. Clamping and validation are thoughtful. Missing a description-length cap. |
 | DevOps | 7 | Railway deploy is clean, migrations are safe, graceful degradation is real. Needs error tracking, finished logging migration, deeper health check, documented IP-header trust. |
-| Data Privacy | 6 | Public users are well-protected. Admin flow has one critical leak (invite token in URL), no retention policy, and no documented third-party processing. |
+| Data Privacy | 7 | Public users are well-protected. No documented retention policy and no documented third-party (Anthropic) processing disclosure. |
 | **Overall** | **7** | Shippable with a focused critical-issues sprint; post-launch work should tackle the accessibility and performance warnings. |
