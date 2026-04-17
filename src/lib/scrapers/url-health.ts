@@ -1,6 +1,8 @@
 import axios, { AxiosError } from "axios";
 import * as cheerio from "cheerio";
 import { BROWSER_HEADERS, SCRAPER_TIMEOUT_MS } from "./config";
+import { isSafeUrl } from "./url-utils";
+import { logWarn } from "@/lib/errors";
 
 export type UrlHealth =
   | {
@@ -13,7 +15,7 @@ export type UrlHealth =
   | {
       alive: false;
       status: number | null;
-      reason: "http_error" | "network_error" | "soft_404" | "non_html";
+      reason: "http_error" | "network_error" | "soft_404" | "non_html" | "blocked_unsafe_url";
       finalUrl?: string;
     };
 
@@ -36,6 +38,10 @@ const SOFT_404_PATTERNS = [
  * feed into the AI validator) without a second HTTP request.
  */
 export async function checkUrlHealth(url: string): Promise<UrlHealth> {
+  if (!isSafeUrl(url)) {
+    logWarn("url-health", "Refused to fetch unsafe URL", { url, reason: "ssrf_blocked" });
+    return { alive: false, status: null, reason: "blocked_unsafe_url" };
+  }
   let response;
   try {
     response = await axios.get(url, {
