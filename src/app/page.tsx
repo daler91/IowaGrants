@@ -21,6 +21,7 @@ import type {
 import { buildGrantQueryParams } from "@/lib/query-params";
 import { getDefaultFilters, DEFAULT_STATUS_FILTER } from "@/lib/filter-defaults";
 import { toast } from "@/lib/toast";
+import { logError } from "@/lib/errors";
 
 function parseList<T extends string = string>(raw: string | null): T[] | undefined {
   if (!raw) return undefined;
@@ -155,7 +156,7 @@ function Dashboard() {
       setTotal(data.total);
       setTotalPages(data.totalPages);
     } catch (error) {
-      console.error("Failed to fetch grants:", error);
+      logError("home-page", "Failed to fetch grants", error);
       setError("Failed to load grants. Please try again.");
     } finally {
       setLoading(false);
@@ -239,7 +240,7 @@ function Dashboard() {
         fetchGrants();
       }
     } catch (error) {
-      console.error("Failed to delete grants:", error);
+      logError("home-page", "Failed to delete grants", error);
       setError("Failed to delete grants. Please try again.");
     } finally {
       setDeleting(false);

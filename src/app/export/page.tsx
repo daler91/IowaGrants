@@ -7,6 +7,7 @@ import GrantFilters from "@/components/GrantFilters";
 import Alert from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { toast } from "@/lib/toast";
+import { logError } from "@/lib/errors";
 import { buildGrantQueryParams } from "@/lib/query-params";
 import type { GrantFilters as FilterType, GrantSortDir, GrantSortKey } from "@/lib/types";
 import {
@@ -152,8 +153,8 @@ function ExportPageInner() {
       if (!res.ok) throw new Error("Failed to load count");
       const data = (await res.json()) as { total: number };
       setPreviewCount(data.total);
-    } catch (e) {
-      console.error(e);
+    } catch (error) {
+      logError("export-page", "Failed to load preview count", error);
       setError("Failed to load matching grants count.");
     } finally {
       setCountLoading(false);
@@ -203,8 +204,8 @@ function ExportPageInner() {
         setTextOutput(result.text);
         triggerDownload(result);
       }
-    } catch (e) {
-      console.error(e);
+    } catch (error) {
+      logError("export-page", "Failed to generate export", error, { format });
       setError("Failed to generate export. Please try again.");
     } finally {
       setGenerating(false);

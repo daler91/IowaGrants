@@ -1,6 +1,7 @@
 "use client";
 
 import { Button } from "@/components/ui/Button";
+import { logError } from "@/lib/errors";
 
 type AppErrorProps = Readonly<{
   error: Error & { digest?: string };
@@ -8,7 +9,7 @@ type AppErrorProps = Readonly<{
 }>;
 
 export default function AppError({ error, reset }: AppErrorProps) {
-  console.error(error);
+  logError("app-error", "Unhandled error boundary", error, { digest: error.digest });
   return (
     <div className="text-center py-16">
       <svg

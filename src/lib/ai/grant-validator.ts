@@ -70,6 +70,7 @@ const INITIAL_RETRY_DELAY_MS = 1000;
 
 async function validateBatch(
   grants: Array<{ grant: GrantData; originalIndex: number }>,
+  budget?: IntegrationBudget,
 ): Promise<ValidationResult[] | null> {
   const snippets = grants.map(({ grant }, i) => buildGrantSnippet(grant, i));
 
@@ -93,6 +94,7 @@ async function validateBatch(
         clearTimeout(timeout);
       }
 
+      budget?.recordTokens(response.usage);
       const text = response.content[0].type === "text" ? response.content[0].text : "";
 
       // Strip markdown fences if present
@@ -206,7 +208,7 @@ export async function validateGrants(
       originalIndex: i + idx,
     }));
     opts.budget?.recordAICall();
-    const results = await validateBatch(batch);
+    const results = await validateBatch(batch, opts.budget);
 
     if (results === null) {
       filtered += batch.length;

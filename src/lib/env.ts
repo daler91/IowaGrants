@@ -76,6 +76,16 @@ export const env = {
     return optionalEnv("ADMIN_PASSWORD");
   },
 
+  // ── Observability ─────────────────────────────────────────────────
+  get SENTRY_DSN() {
+    return optionalEnv("SENTRY_DSN");
+  },
+  get SENTRY_TRACES_SAMPLE_RATE() {
+    const raw = optionalEnv("SENTRY_TRACES_SAMPLE_RATE", "0.1");
+    const n = Number.parseFloat(raw ?? "0.1");
+    return Number.isFinite(n) && n >= 0 && n <= 1 ? n : 0.1;
+  },
+
   // ── Runtime ───────────────────────────────────────────────────────
   get NODE_ENV() {
     return optionalEnv("NODE_ENV", "development")!;

@@ -20,7 +20,7 @@ const config = [
   {
     files: ["src/lib/**/*.ts", "src/app/api/**/*.ts", "src/instrumentation.ts", "src/middleware.ts"],
     rules: {
-      "no-console": "warn",
+      "no-console": "error",
     },
   },
   // The structured logger itself needs console access

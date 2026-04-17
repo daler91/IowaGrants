@@ -54,6 +54,7 @@ const INITIAL_RETRY_DELAY_MS = 1000;
 
 async function generateBatchDescriptions(
   grants: GrantData[],
+  budget?: IntegrationBudget,
 ): Promise<Array<{ index: number; description: string }> | null> {
   const snippets = grants.map((grant, i) => buildGrantSnippet(grant, i));
   const message = `${DESCRIPTION_PROMPT}\n\n---\n\n${snippets.join("\n\n---\n\n")}`;
@@ -66,6 +67,7 @@ async function generateBatchDescriptions(
         messages: [{ role: "user", content: message }],
       });
 
+      budget?.recordTokens(response.usage);
       const text = response.content[0].type === "text" ? response.content[0].text : "";
 
       // Strip markdown fences if present
@@ -150,7 +152,7 @@ export async function generateDescriptions(
 
     const batch = grants.slice(i, i + DESCRIPTION_BATCH_SIZE);
     opts.budget?.recordAICall();
-    const results = await generateBatchDescriptions(batch);
+    const results = await generateBatchDescriptions(batch, opts.budget);
 
     if (results) {
       rewritten += applyBatchResults(batch, results);
