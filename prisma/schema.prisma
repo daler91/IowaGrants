@@ -25,6 +25,12 @@ model Grant {
   locations        String[]
   industries       String[]
   pdfUrl           String?
+  /// Structured scraper artifacts. Documented fields:
+  ///   liveBodyText: string — last fetched page text (for AI validator).
+  ///   closedReason: { method, status?, reason?, at } — audit of auto-close.
+  ///   deadlineSource: string — which pass extracted the deadline.
+  ///   originalDescription: string — pre-AI description, kept for audit.
+  /// Do not persist free-form scraper output here without updating this list.
   rawData          Json?
   lastVerified     DateTime        @default(now())
   createdAt        DateTime        @default(now())

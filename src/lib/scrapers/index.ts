@@ -651,6 +651,15 @@ export async function runFullScrape(scrapeRunId?: string): Promise<ScraperResult
     logError("orchestrator", "Revalidation sweep failed", error);
   }
 
+  // Step 8b: Retention sweep — delete long-expired invite tokens per
+  // docs/DATA_RETENTION.md.
+  try {
+    const { runRetentionSweep } = await import("@/lib/cron/retention");
+    await runRetentionSweep();
+  } catch (error) {
+    logError("orchestrator", "Retention sweep failed", error);
+  }
+
   // Update ScrapeRun record with final counts
   if (scrapeRunId) {
     await prisma.scrapeRun.update({

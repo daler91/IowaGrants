@@ -7,6 +7,16 @@ import { log, logError, logWarn } from "@/lib/errors";
 import { ParsedGrantSchema } from "./schemas";
 import { getAnthropic } from "./client";
 
+/**
+ * Best-effort PII redaction applied to text before it leaves the system.
+ * Currently targets US SSN-like `xxx-xx-xxxx` patterns; PDFs sent as
+ * binary cannot be redacted here.
+ */
+export function redactPII(text: string): string {
+  if (!text) return text;
+  return text.replace(/\b\d{3}-\d{2}-\d{4}\b/g, "[REDACTED-SSN]");
+}
+
 const EXTRACTION_PROMPT = `You are analyzing a grant program document. Extract the following information and return it as JSON:
 
 {
@@ -166,6 +176,7 @@ export async function parseTextWithAI(
     const timeout = setTimeout(() => controller.abort(), 60_000);
     let message;
     try {
+      const redacted = redactPII(text.slice(0, 10000));
       message = await getAnthropic().messages.create(
         {
           model: "claude-sonnet-4-6",
@@ -173,7 +184,7 @@ export async function parseTextWithAI(
           messages: [
             {
               role: "user",
-              content: `${EXTRACTION_PROMPT}\n\nHere is the grant program text:\n\n${text.slice(0, 10000)}`,
+              content: `${EXTRACTION_PROMPT}\n\nHere is the grant program text:\n\n${redacted}`,
             },
           ],
         },
