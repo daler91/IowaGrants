@@ -55,17 +55,14 @@ Added `.github/workflows/ci.yml` with four jobs: lint, typecheck, test, and buil
 
 ## High
 
-### 4. Error Handling & Logging [PARTIAL]
+### 4. Error Handling & Logging [RESOLVED]
 
 **Resolved:**
 
-- Added `src/lib/errors.ts` with `getErrorMessage()`, `log()`, `logError()`, `logWarn()` for standardized structured JSON logging
-
-**Still remaining:**
-
-- 108 existing `console.log/error` calls not yet migrated to the new utility
-- No error tracking service (Sentry) configured
-- API response formats still inconsistent across routes
+- Added `src/lib/errors.ts` with `getErrorMessage()`, `log()`, `logError()`, `logWarn()` + `withRequestId()` for standardized structured JSON logging
+- Migrated all remaining `console.log/error` calls in app/components code to the structured logger
+- ESLint `no-console` enforced as error on server code (only the logger itself may use console)
+- Optional Sentry integration wired via `src/instrumentation.ts` + `instrumentation-client.ts` (no-op when `SENTRY_DSN` is unset)
 
 ---
 
@@ -140,10 +137,14 @@ Expanded `src/lib/env.ts` from 3 to 17 variables with lazy validation. Replaced 
 
 **Resolved:**
 
-- Added password strength validation (min 12 chars) in `prisma/seed.ts` and `src/instrumentation.ts`
+- Added password strength validation (min 12 chars) in `prisma/seed.ts`, `src/instrumentation.ts`, and now enforced inside `hashPassword()`
 - Documented rate limiter as single-instance only with migration guidance
+- SSRF guards on `fetchPageDetails` and `checkUrlHealth`; Zod `grantUpdateSchema` refines `sourceUrl` / `pdfUrl` via `validateExternalUrl`
+- CSP `'unsafe-inline'` removed from `script-src` — per-request nonce in middleware
+- `/api/admin/*` rate-limit bucket added; `x-real-ip` is the only trusted client-IP source
+- Logout bumps `tokenVersion` so leaked JWTs die immediately; new `POST /api/admin/security/bump-tokens` rotates globally
 
-**Still remaining:** Rate limiter improvements (bounded cleanup, multi-instance support).
+**Still remaining:** Multi-instance rate limiter (Redis-backed).
 
 ---
 
@@ -168,9 +169,18 @@ Expanded `src/lib/env.ts` from 3 to 17 variables with lazy validation. Replaced 
 
 **Resolved:**
 
-- Added `React.memo` to `GrantCard` component
+- Added `React.memo` to `GrantCard` component; `GrantList.handleSelectOne` memoized via `useCallback` so memoization isn't defeated
+- Change-detection URL probing parallelized via `p-limit(CHANGE_DETECT_CONCURRENCY)`
+- Shared AI backoff helper that honors `Retry-After` across deadline-extractor, grant-validator, and description-generator
+- Scraper tuning constants (batch size, concurrencies) are env-configurable
+- Scraper filter pipeline collapsed to a single-pass `.filter(every)` instead of three sequential passes
+- Single-grant GET sets `Cache-Control: public, s-maxage=300, stale-while-revalidate=3600`
+- `GRANT_INCLUDE` split into `GRANT_INCLUDE_LIST` / `GRANT_INCLUDE_DETAIL` for future list-payload slimming
+- `useMetaValues` gains a module-level fetch cache + AbortController
+- Grant description capped at 5000 chars at write time
+- `IntegrationBudget` tracks input/output tokens in addition to call count
 
-**Still remaining:** Concurrent scraper rate limiting, PDF batch processing, axios→fetch migration.
+**Still remaining:** PDF batch processing, axios→fetch migration, multi-instance rate limiting.
 
 ---
 
