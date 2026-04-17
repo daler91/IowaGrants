@@ -6,16 +6,30 @@ interface UseMetaValuesResult {
   values: string[];
 }
 
+// Module-level cache so multiple components mounted on the same page share
+// a single network fetch per endpoint, even across unmount/remount.
+const cache = new Map<string, Promise<Record<string, unknown>>>();
+
+function fetchOnce(endpoint: string, signal?: AbortSignal): Promise<Record<string, unknown>> {
+  const cached = cache.get(endpoint);
+  if (cached) return cached;
+  const pending = fetch(endpoint, { signal })
+    .then((res) => (res.ok ? res.json() : {}))
+    .catch((error) => {
+      // Don't poison the cache on network failure — allow a retry on next mount.
+      cache.delete(endpoint);
+      if ((error as { name?: string })?.name === "AbortError") return {};
+      return {};
+    });
+  cache.set(endpoint, pending);
+  return pending;
+}
+
 /**
- * Fetch a list of distinct values from a meta endpoint once per mount.
- * The endpoint itself is cached via HTTP headers, so repeat mounts share
- * a response. Errors are swallowed — a filter missing its suggestions is
- * strictly a degradation, not a breakage (the user can still type freely).
- *
- * We don't track a `loading` flag because (a) no consumer reads it, and
- * (b) the empty-array initial state renders identically to a "loading"
- * state from the UI's perspective — the combobox just shows no suggestions
- * until the fetch lands.
+ * Fetch a list of distinct values from a meta endpoint once per app session.
+ * Results are cached in-module so repeat mounts share a single network round
+ * trip. Errors are swallowed — a filter missing its suggestions is strictly
+ * a degradation, not a breakage (the user can still type freely).
  */
 export function useMetaValues(
   endpoint: string,
@@ -24,20 +38,16 @@ export function useMetaValues(
   const [values, setValues] = useState<string[]>([]);
 
   useEffect(() => {
+    const controller = new AbortController();
     let cancelled = false;
-    fetch(endpoint)
-      .then((res) => (res.ok ? res.json() : { [field]: [] }))
-      .then((data) => {
-        if (cancelled) return;
-        const list = Array.isArray(data?.[field]) ? (data[field] as string[]) : [];
-        setValues(list);
-      })
-      .catch(() => {
-        if (cancelled) return;
-        setValues([]);
-      });
+    fetchOnce(endpoint, controller.signal).then((data) => {
+      if (cancelled) return;
+      const list = Array.isArray(data?.[field]) ? (data[field] as string[]) : [];
+      setValues(list);
+    });
     return () => {
       cancelled = true;
+      controller.abort();
     };
   }, [endpoint, field]);
 

@@ -1,5 +1,6 @@
 "use client";
 
+import { useCallback } from "react";
 import GrantCard from "./GrantCard";
 import { Button, LinkButton } from "@/components/ui/Button";
 import { DEFAULT_SORT, defaultDirFor } from "@/lib/grant-sort";
@@ -92,13 +93,16 @@ export default function GrantList({
     }
   };
 
-  const handleSelectOne = (id: string, checked: boolean) => {
-    if (!onSelectionChange) return;
-    const next = new Set(selectedIds);
-    if (checked) next.add(id);
-    else next.delete(id);
-    onSelectionChange(next);
-  };
+  const handleSelectOne = useCallback(
+    (id: string, checked: boolean) => {
+      if (!onSelectionChange) return;
+      const next = new Set(selectedIds);
+      if (checked) next.add(id);
+      else next.delete(id);
+      onSelectionChange(next);
+    },
+    [onSelectionChange, selectedIds],
+  );
 
   if (loading) {
     return (

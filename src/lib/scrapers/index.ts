@@ -41,6 +41,7 @@ import {
 } from "@/lib/change-detection/detector";
 import pLimit from "p-limit";
 import { IntegrationBudget } from "@/lib/ai/budget";
+import { truncateDescription } from "@/lib/constants";
 import type { GrantData, ScraperResult } from "@/lib/types";
 
 async function ensureEligibleExpenses() {
@@ -90,6 +91,9 @@ async function upsertGrant(grant: GrantData): Promise<boolean> {
     });
   }
   grant.deadline = sanitizedDeadline;
+
+  // Cap description length so a 100k-char PDF can't bloat API payloads.
+  grant.description = truncateDescription(grant.description);
 
   const categoryConnections =
     grant.categories.length > 0
