@@ -206,7 +206,10 @@ function Dashboard() {
     if (!deleteTarget) return;
     setDeleting(true);
     try {
-      const res = await fetch("/api/grants", {
+      // Pass confirmBulk=true for large batches so the API accepts the
+      // request (defense-in-depth against a misfired client).
+      const bulk = deleteTarget.ids.length > 10 ? "?confirmBulk=true" : "";
+      const res = await fetch(`/api/grants${bulk}`, {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ids: deleteTarget.ids }),

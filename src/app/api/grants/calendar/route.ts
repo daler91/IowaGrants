@@ -2,22 +2,40 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { logError } from "@/lib/errors";
 
+export const MIN_CALENDAR_YEAR = 2000;
+export const MAX_CALENDAR_YEAR = 2100;
+
+/**
+ * Validates year/month search params. Returns null when valid, or the
+ * HTTP status + message for a 400 response.
+ */
+export function validateCalendarParams(
+  rawYear: string | null,
+  rawMonth: string | null,
+): { year: number; month: number } | { error: string } {
+  const year = Number.parseInt(rawYear || new Date().getFullYear().toString());
+  const month = Number.parseInt(rawMonth || (new Date().getMonth() + 1).toString());
+  if (
+    Number.isNaN(year) ||
+    Number.isNaN(month) ||
+    month < 1 ||
+    month > 12 ||
+    year < MIN_CALENDAR_YEAR ||
+    year > MAX_CALENDAR_YEAR
+  ) {
+    return { error: "Invalid year or month parameter" };
+  }
+  return { year, month };
+}
+
 export async function GET(request: NextRequest) {
   try {
     const params = request.nextUrl.searchParams;
-    const year = Number.parseInt(params.get("year") || new Date().getFullYear().toString());
-    const month = Number.parseInt(params.get("month") || (new Date().getMonth() + 1).toString());
-
-    if (
-      Number.isNaN(year) ||
-      Number.isNaN(month) ||
-      month < 1 ||
-      month > 12 ||
-      year < 2000 ||
-      year > 2100
-    ) {
-      return NextResponse.json({ error: "Invalid year or month parameter" }, { status: 400 });
+    const validated = validateCalendarParams(params.get("year"), params.get("month"));
+    if ("error" in validated) {
+      return NextResponse.json({ error: validated.error }, { status: 400 });
     }
+    const { year, month } = validated;
 
     const startDate = new Date(year, month - 1, 1);
     const endDate = new Date(year, month, 0, 23, 59, 59);

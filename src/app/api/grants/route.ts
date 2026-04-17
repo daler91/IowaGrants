@@ -50,6 +50,8 @@ export async function GET(request: NextRequest) {
   }
 }
 
+const BULK_DELETE_CONFIRM_THRESHOLD = 10;
+
 export async function DELETE(request: NextRequest) {
   try {
     const admin = await requireAdmin(request);
@@ -58,6 +60,21 @@ export async function DELETE(request: NextRequest) {
     if (result.error) return result.error;
 
     const { ids } = result.data;
+
+    // Defense in depth: require an explicit confirmation flag when the
+    // caller is deleting a large batch. Prevents a misfired client
+    // request from wiping the DB.
+    if (ids.length > BULK_DELETE_CONFIRM_THRESHOLD) {
+      const confirm = request.nextUrl.searchParams.get("confirmBulk");
+      if (confirm !== "true") {
+        return errorResponse(
+          request,
+          409,
+          `Bulk delete of ${ids.length} grants requires confirmBulk=true`,
+          "BULK_CONFIRM_REQUIRED",
+        );
+      }
+    }
 
     const deleteResult = await prisma.grant.deleteMany({
       where: { id: { in: ids } },
