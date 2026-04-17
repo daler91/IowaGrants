@@ -273,6 +273,10 @@ export default function GrantList({
         </div>
       </div>
 
+      <div role="status" aria-live="polite" className="sr-only">
+        {pending ? "Updating results…" : `Showing ${grants.length} of ${total} grants`}
+      </div>
+
       <div
         className={`grid grid-cols-1 md:grid-cols-2 gap-4 transition-opacity duration-200 ${
           pending ? "opacity-60" : "opacity-100"

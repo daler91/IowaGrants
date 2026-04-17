@@ -112,23 +112,30 @@ function RegisterForm() {
               className={fieldInputClass}
             />
           </FormField>
-          <FormField label="Password" htmlFor="password" required>
+          <FormField label="Password" htmlFor="password" required hint="At least 12 characters.">
             <input
               id="password"
               type="password"
               required
               minLength={12}
+              aria-describedby="password-hint"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className={fieldInputClass}
             />
           </FormField>
-          <FormField label="Confirm Password" htmlFor="confirmPassword" required>
+          <FormField
+            label="Confirm Password"
+            htmlFor="confirmPassword"
+            required
+            hint="Re-enter the same password."
+          >
             <input
               id="confirmPassword"
               type="password"
               required
               minLength={12}
+              aria-describedby="confirmPassword-hint"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
               className={fieldInputClass}

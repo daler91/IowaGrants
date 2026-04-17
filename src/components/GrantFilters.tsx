@@ -113,6 +113,7 @@ function AmountFilter({ amountMin, amountMax, onChange }: Readonly<AmountFilterP
             step="1000"
             inputMode="numeric"
             placeholder="Min $"
+            aria-describedby="amount-hint"
             value={amountMin ?? ""}
             onChange={(e) => {
               const n = e.target.value ? Number.parseInt(e.target.value, 10) : undefined;
@@ -133,6 +134,7 @@ function AmountFilter({ amountMin, amountMax, onChange }: Readonly<AmountFilterP
             step="1000"
             inputMode="numeric"
             placeholder="Max $"
+            aria-describedby="amount-hint"
             value={amountMax ?? ""}
             onChange={(e) => {
               const n = e.target.value ? Number.parseInt(e.target.value, 10) : undefined;
@@ -145,6 +147,9 @@ function AmountFilter({ amountMin, amountMax, onChange }: Readonly<AmountFilterP
           />
         </label>
       </div>
+      <p id="amount-hint" className="text-xs text-[var(--muted)] mt-1">
+        Amounts in US dollars. &ldquo;Cap&rdquo; is the upper limit of the award range.
+      </p>
     </div>
   );
 }

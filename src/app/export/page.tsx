@@ -300,29 +300,39 @@ function ExportPageInner() {
 
         <div className="flex-1 space-y-6">
           {/* Format selector */}
-          <div className="bg-[var(--card)] rounded-lg border border-[var(--border)] p-5">
-            <h2 className="font-semibold text-[var(--foreground)] mb-3">Export format</h2>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <fieldset className="bg-[var(--card)] rounded-lg border border-[var(--border)] p-5">
+            <legend className="font-semibold text-[var(--foreground)] mb-3 px-1">
+              Export format
+            </legend>
+            <div
+              role="radiogroup"
+              aria-label="Export format"
+              className="grid grid-cols-2 md:grid-cols-4 gap-3"
+            >
               {FORMATS.map((f) => {
                 const active = format === f.value;
                 return (
                   <button
                     key={f.value}
+                    type="button"
+                    role="radio"
+                    aria-checked={active}
                     onClick={() => setFormat(f.value)}
                     className={`text-left p-3 rounded-lg border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] ${
                       active
                         ? "border-[var(--primary)] bg-[var(--info-bg)] ring-2 ring-[var(--primary-light)]"
                         : "border-[var(--border)] hover:border-[var(--muted)]"
                     }`}
-                    aria-pressed={active}
                   >
-                    <div className="font-medium text-[var(--foreground)]">{f.label}</div>
-                    <div className="text-xs text-[var(--muted)] mt-0.5">{f.description}</div>
+                    <span className="block font-medium text-[var(--foreground)]">{f.label}</span>
+                    <span className="block text-xs text-[var(--muted)] mt-0.5">
+                      {f.description}
+                    </span>
                   </button>
                 );
               })}
             </div>
-          </div>
+          </fieldset>
 
           {/* Summary + download */}
           <div className="bg-[var(--card)] rounded-lg border border-[var(--border)] p-5">

@@ -68,6 +68,7 @@ export default memo(function GrantCard({
             </button>
             <input
               type="checkbox"
+              aria-label={`Select grant: ${grant.title}`}
               checked={selected || false}
               onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
                 e.stopPropagation();

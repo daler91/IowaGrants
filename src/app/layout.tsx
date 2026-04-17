@@ -40,6 +40,34 @@ export default async function RootLayout({
         <main id="main-content" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           {children}
         </main>
+        <footer
+          role="contentinfo"
+          className="mt-12 border-t border-[var(--border)] bg-[var(--card)] text-[var(--muted)]"
+        >
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 flex flex-col sm:flex-row items-center justify-between gap-2 text-sm">
+            <p>&copy; {new Date().getFullYear()} Iowa Grant Scanner</p>
+            <nav aria-label="Legal">
+              <ul className="flex gap-4">
+                <li>
+                  <a
+                    className="hover:text-[var(--foreground)] underline-offset-2 hover:underline"
+                    href="/privacy"
+                  >
+                    Privacy
+                  </a>
+                </li>
+                <li>
+                  <a
+                    className="hover:text-[var(--foreground)] underline-offset-2 hover:underline"
+                    href="/terms"
+                  >
+                    Terms
+                  </a>
+                </li>
+              </ul>
+            </nav>
+          </div>
+        </footer>
         <Toaster />
       </body>
     </html>
