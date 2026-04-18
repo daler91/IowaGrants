@@ -168,8 +168,7 @@ export default function GrantList({
               Grants are updated daily. Check back soon, or view the{" "}
               <a href="/calendar" className="text-[var(--primary)] underline">
                 deadline calendar
-              </a>
-              {"."}
+              </a>.
             </p>
           </>
         )}
