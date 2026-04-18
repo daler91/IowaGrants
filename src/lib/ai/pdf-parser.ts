@@ -12,6 +12,8 @@ import { getAnthropic } from "./client";
  * Currently targets US SSN-like `xxx-xx-xxxx` patterns; PDFs sent as
  * binary cannot be redacted here.
  */
+// Linear-time pattern with bounded quantifiers — no ReDoS risk.
+// NOSONAR: intentionally simple regex, reviewed for safety.
 const SSN_PATTERN = /\b\d{3}-\d{2}-\d{4}\b/g;
 export function redactPII(text: string): string {
   if (!text) return text;

@@ -11,7 +11,8 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    await prisma.$queryRaw`SELECT 1`;
+    // Static liveness probe with no user input — safe to use $queryRaw.
+    await prisma.$queryRaw`SELECT 1`; // NOSONAR: static SQL, no interpolation
     return NextResponse.json({ status: "ok", timestamp, db: "ok" });
   } catch (error) {
     logError("health", "Deep health check failed", error);
