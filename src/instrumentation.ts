@@ -64,7 +64,20 @@ async function seedAdmin() {
     try {
       const existing = await prisma.adminUser.findUnique({ where: { email } });
       if (existing) {
-        log("seed", `Admin already exists: ${existing.email} — skipping seed`);
+        // ADMIN_PASSWORD is the bootstrap source of truth. If it no longer
+        // matches the stored hash (admin rotated it in the deploy config),
+        // re-hash and persist so login uses the current value.
+        const matches = await bcrypt.compare(password, existing.passwordHash);
+        if (matches) {
+          log("seed", `Admin already exists: ${existing.email} — password in sync`);
+          return;
+        }
+        const passwordHash = await bcrypt.hash(password, 12);
+        await prisma.adminUser.update({
+          where: { id: existing.id },
+          data: { passwordHash },
+        });
+        log("seed", `Admin password synced from ADMIN_PASSWORD for ${existing.email}`);
         return;
       }
       const passwordHash = await bcrypt.hash(password, 12);
