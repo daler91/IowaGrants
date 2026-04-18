@@ -39,7 +39,7 @@ function formatDuration(start: string, end: string | null): string {
   return `${minutes}m ${remainingSeconds}s`;
 }
 
-function StatusBadge({ status }: { status: string }) {
+function StatusBadge({ status }: Readonly<{ status: string }>) {
   const classes: Record<string, string> = {
     running: "bg-[var(--info-bg)] text-[var(--info-fg)] border-[var(--info-border)]",
     completed: "bg-[var(--success-bg)] text-[var(--success-fg)] border-[var(--success-border)]",
@@ -120,6 +120,71 @@ export default function ScansPage() {
     }
   };
 
+  let currentStatusView: React.ReactNode;
+  if (loading) {
+    currentStatusView = <p className="text-sm text-[var(--muted)]">Loading…</p>;
+  } else if (latest) {
+    currentStatusView = (
+      <div className="flex items-center gap-3">
+        <StatusBadge status={latest.status} />
+        <span className="text-sm text-[var(--muted)]">
+          Started {formatDateTime(latest.startedAt)}
+        </span>
+      </div>
+    );
+  } else {
+    currentStatusView = <p className="text-sm text-[var(--muted)]">No scans have been run yet.</p>;
+  }
+
+  let startButtonLabel: string;
+  if (isRunning) {
+    startButtonLabel = "Scan in progress…";
+  } else if (starting) {
+    startButtonLabel = "Starting…";
+  } else {
+    startButtonLabel = "Start new scan";
+  }
+
+  let historyBody: React.ReactNode;
+  if (loading) {
+    historyBody = <div className="p-6 text-center text-[var(--muted)]">Loading…</div>;
+  } else if (recent.length === 0) {
+    historyBody = <div className="p-6 text-center text-[var(--muted)]">No scan history yet.</div>;
+  } else {
+    historyBody = (
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="text-left text-[var(--muted)] border-b border-[var(--border)]">
+              <th className="px-6 py-3 font-medium">Status</th>
+              <th className="px-6 py-3 font-medium">Started</th>
+              <th className="px-6 py-3 font-medium">Duration</th>
+              <th className="px-6 py-3 font-medium text-right">Grants found</th>
+              <th className="px-6 py-3 font-medium text-right">New</th>
+            </tr>
+          </thead>
+          <tbody>
+            {recent.map((run) => (
+              <tr key={run.id} className="border-b border-[var(--border)] last:border-b-0">
+                <td className="px-6 py-3">
+                  <StatusBadge status={run.status} />
+                </td>
+                <td className="px-6 py-3 text-[var(--foreground)]">
+                  {formatDateTime(run.startedAt)}
+                </td>
+                <td className="px-6 py-3 text-[var(--foreground)]">
+                  {formatDuration(run.startedAt, run.completedAt)}
+                </td>
+                <td className="px-6 py-3 text-right text-[var(--foreground)]">{run.grantsFound}</td>
+                <td className="px-6 py-3 text-right text-[var(--foreground)]">{run.grantsNew}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+  }
+
   return (
     <div>
       <h1 className="text-3xl font-bold text-[var(--foreground)] mb-2">Scan Grants</h1>
@@ -131,21 +196,10 @@ export default function ScansPage() {
         <div className="flex items-start justify-between gap-4 mb-4">
           <div>
             <h2 className="text-lg font-semibold text-[var(--foreground)] mb-1">Current status</h2>
-            {loading ? (
-              <p className="text-sm text-[var(--muted)]">Loading…</p>
-            ) : latest ? (
-              <div className="flex items-center gap-3">
-                <StatusBadge status={latest.status} />
-                <span className="text-sm text-[var(--muted)]">
-                  Started {formatDateTime(latest.startedAt)}
-                </span>
-              </div>
-            ) : (
-              <p className="text-sm text-[var(--muted)]">No scans have been run yet.</p>
-            )}
+            {currentStatusView}
           </div>
           <Button onClick={handleStart} loading={starting} disabled={isRunning || starting}>
-            {isRunning ? "Scan in progress…" : starting ? "Starting…" : "Start new scan"}
+            {startButtonLabel}
           </Button>
         </div>
 
@@ -187,46 +241,7 @@ export default function ScansPage() {
         <div className="px-6 py-4 border-b border-[var(--border)]">
           <h2 className="text-lg font-semibold text-[var(--foreground)]">Recent scans</h2>
         </div>
-        {loading ? (
-          <div className="p-6 text-center text-[var(--muted)]">Loading…</div>
-        ) : recent.length === 0 ? (
-          <div className="p-6 text-center text-[var(--muted)]">No scan history yet.</div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-left text-[var(--muted)] border-b border-[var(--border)]">
-                  <th className="px-6 py-3 font-medium">Status</th>
-                  <th className="px-6 py-3 font-medium">Started</th>
-                  <th className="px-6 py-3 font-medium">Duration</th>
-                  <th className="px-6 py-3 font-medium text-right">Grants found</th>
-                  <th className="px-6 py-3 font-medium text-right">New</th>
-                </tr>
-              </thead>
-              <tbody>
-                {recent.map((run) => (
-                  <tr key={run.id} className="border-b border-[var(--border)] last:border-b-0">
-                    <td className="px-6 py-3">
-                      <StatusBadge status={run.status} />
-                    </td>
-                    <td className="px-6 py-3 text-[var(--foreground)]">
-                      {formatDateTime(run.startedAt)}
-                    </td>
-                    <td className="px-6 py-3 text-[var(--foreground)]">
-                      {formatDuration(run.startedAt, run.completedAt)}
-                    </td>
-                    <td className="px-6 py-3 text-right text-[var(--foreground)]">
-                      {run.grantsFound}
-                    </td>
-                    <td className="px-6 py-3 text-right text-[var(--foreground)]">
-                      {run.grantsNew}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+        {historyBody}
       </div>
     </div>
   );
