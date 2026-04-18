@@ -19,7 +19,10 @@ interface ScrapeStatusResponse {
   recent: ScrapeRun[];
 }
 
-const POLL_INTERVAL_MS = 5000;
+// Stay under the 5-req/min rate limit on /api/scraper (see RATE_LIMITS in
+// src/middleware.ts) — 15s gives 4/min steady-state with room for the initial
+// load and manual refreshes after Start.
+const POLL_INTERVAL_MS = 15000;
 
 function formatDateTime(value: string | null): string {
   if (!value) return "—";
