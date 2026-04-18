@@ -16,6 +16,7 @@ function safeCompare(a: string, b: string): boolean {
 export const maxDuration = 300; // 5 minute timeout for this route
 
 const STALE_LOCK_MS = 10 * 60 * 1000; // 10 minutes
+const RECENT_RUNS_LIMIT = 10;
 
 export async function GET(request: NextRequest) {
   try {
@@ -27,19 +28,32 @@ export async function GET(request: NextRequest) {
     throw err;
   }
 
-  const latest = await prisma.scrapeRun.findFirst({
+  const recent = await prisma.scrapeRun.findMany({
     orderBy: { startedAt: "desc" },
+    take: RECENT_RUNS_LIMIT,
   });
-  return NextResponse.json({ scrape: latest });
+  return NextResponse.json({ scrape: recent[0] ?? null, recent });
 }
 
 export async function POST(request: NextRequest) {
   const authHeader = request.headers.get("authorization");
   const cronSecret = env.CRON_SECRET;
 
-  const expected = `Bearer ${cronSecret}`;
-  if (!cronSecret || !safeCompare(authHeader || "", expected)) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const hasCronSecret = Boolean(
+    cronSecret && authHeader && safeCompare(authHeader, `Bearer ${cronSecret}`),
+  );
+
+  let adminEmail: string | null = null;
+  if (!hasCronSecret) {
+    try {
+      const admin = await requireAdmin(request);
+      adminEmail = admin.email;
+    } catch (err) {
+      if (err instanceof UnauthorizedError) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      }
+      throw err;
+    }
   }
 
   // Check for an already-running scrape
@@ -65,6 +79,13 @@ export async function POST(request: NextRequest) {
 
   // Create a new scrape run record
   const scrapeRun = await prisma.scrapeRun.create({ data: {} });
+
+  if (adminEmail) {
+    log("admin-audit", "Scrape triggered by admin", {
+      admin: adminEmail,
+      scrapeId: scrapeRun.id,
+    });
+  }
 
   // Run scraper in the background — wrap the entire chain so that errors
   // inside .then() (e.g. a failed DB update) don't become unhandled rejections.

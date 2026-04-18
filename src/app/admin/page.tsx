@@ -13,6 +13,14 @@ export default function AdminPage() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <Link
+          href="/admin/scans"
+          className="bg-[var(--card)] rounded-lg border border-[var(--border)] p-6 hover:shadow-md transition-shadow"
+        >
+          <h2 className="text-xl font-semibold text-[var(--foreground)] mb-2">Scan Grants</h2>
+          <p className="text-[var(--muted)]">Start a new grant scan and monitor recent runs.</p>
+        </Link>
+
+        <Link
           href="/admin/blacklist"
           className="bg-[var(--card)] rounded-lg border border-[var(--border)] p-6 hover:shadow-md transition-shadow"
         >
