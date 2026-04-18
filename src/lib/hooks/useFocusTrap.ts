@@ -35,19 +35,15 @@ export function useFocusTrap(containerRef: RefObject<HTMLElement | null>, active
         return;
       }
       const first = focusable[0];
-      const last = focusable[focusable.length - 1];
+      const last = focusable.at(-1)!;
       const activeEl = document.activeElement as HTMLElement | null;
 
-      if (event.shiftKey) {
-        if (activeEl === first || !container.contains(activeEl)) {
-          event.preventDefault();
-          last.focus();
-        }
-      } else {
-        if (activeEl === last || !container.contains(activeEl)) {
-          event.preventDefault();
-          first.focus();
-        }
+      if (event.shiftKey && (activeEl === first || !container.contains(activeEl))) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && (activeEl === last || !container.contains(activeEl))) {
+        event.preventDefault();
+        first.focus();
       }
     };
 

@@ -75,10 +75,10 @@ export function withRequestId(requestId: string | null | undefined) {
   const rid = requestId ?? undefined;
   return {
     log: (module: string, message: string, data?: Record<string, unknown>) =>
-      log(module, message, { ...(data ?? {}), requestId: rid }),
+      log(module, message, { ...data, requestId: rid }),
     logError: (module: string, message: string, error?: unknown, data?: Record<string, unknown>) =>
-      logError(module, message, error, { ...(data ?? {}), requestId: rid }),
+      logError(module, message, error, { ...data, requestId: rid }),
     logWarn: (module: string, message: string, data?: Record<string, unknown>) =>
-      logWarn(module, message, { ...(data ?? {}), requestId: rid }),
+      logWarn(module, message, { ...data, requestId: rid }),
   };
 }

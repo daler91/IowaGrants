@@ -12,9 +12,10 @@ import { getAnthropic } from "./client";
  * Currently targets US SSN-like `xxx-xx-xxxx` patterns; PDFs sent as
  * binary cannot be redacted here.
  */
+const SSN_PATTERN = /\b\d{3}-\d{2}-\d{4}\b/g;
 export function redactPII(text: string): string {
   if (!text) return text;
-  return text.replace(/\b\d{3}-\d{2}-\d{4}\b/g, "[REDACTED-SSN]");
+  return text.replaceAll(SSN_PATTERN, "[REDACTED-SSN]");
 }
 
 const EXTRACTION_PROMPT = `You are analyzing a grant program document. Extract the following information and return it as JSON:

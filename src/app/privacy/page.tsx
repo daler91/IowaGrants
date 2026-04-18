@@ -62,10 +62,10 @@ export default function PrivacyPage() {
       <section>
         <h2 className="text-xl font-semibold mt-6">Admin data access</h2>
         <p>
-          Administrators can request a JSON export of their own record and audit log entries via
-          <code>GET /api/admin/me/export</code>, and can request deletion via
-          <code>DELETE /api/admin/me</code>. Deletion soft-deletes the account and invalidates every
-          outstanding session.
+          Administrators can request a JSON export of their own record and invites they issued via{" "}
+          <code>GET /api/admin/me/export</code>, and can delete their account via{" "}
+          <code>DELETE /api/admin/me</code>. Deletion removes the account and invalidates every
+          outstanding session; it is refused when doing so would leave zero admins.
         </p>
       </section>
 

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { Prisma } from "@prisma/client";
 import { requireAdmin, UnauthorizedError } from "@/lib/auth";
-import { GRANT_INCLUDE, truncateDescription } from "@/lib/constants";
+import { GRANT_INCLUDE_DETAIL, truncateDescription } from "@/lib/constants";
 import { errorResponse, log, logError } from "@/lib/errors";
 import { parseJson } from "@/lib/http/parse-json";
 import { grantUpdateSchema } from "@/lib/http/schemas";
@@ -95,7 +95,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
     const grant = await prisma.grant.findUnique({
       where: { id },
-      include: GRANT_INCLUDE,
+      include: GRANT_INCLUDE_DETAIL,
     });
 
     if (!grant) {
@@ -147,7 +147,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     const updated = await prisma.grant.update({
       where: { id },
       data,
-      include: GRANT_INCLUDE,
+      include: GRANT_INCLUDE_DETAIL,
     });
 
     log("admin-audit", "Grant updated", { admin: admin.email, grantId: id });

@@ -82,7 +82,7 @@ function nextWithContext(request: NextRequest, requestId: string, nonce: string)
 export function middleware(request: NextRequest) {
   const path = request.nextUrl.pathname;
   const requestId = request.headers.get("x-request-id") || crypto.randomUUID();
-  const nonce = crypto.randomUUID().replace(/-/g, "");
+  const nonce = crypto.randomUUID().replaceAll("-", "");
 
   const csrfError = checkCsrfOrigin(request);
   if (csrfError) {

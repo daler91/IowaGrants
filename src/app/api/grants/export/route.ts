@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { GRANT_INCLUDE } from "@/lib/constants";
+import { GRANT_INCLUDE_DETAIL } from "@/lib/constants";
 import { buildGrantWhere } from "@/lib/grant-query";
 import { logError } from "@/lib/errors";
 
@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
     const [grants, total] = await Promise.all([
       prisma.grant.findMany({
         where,
-        include: GRANT_INCLUDE,
+        include: GRANT_INCLUDE_DETAIL,
         orderBy: [{ deadline: { sort: "asc", nulls: "last" } }, { createdAt: "desc" }],
         take: EXPORT_MAX,
       }),

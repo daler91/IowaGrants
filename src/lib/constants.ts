@@ -22,9 +22,6 @@ export const GRANT_INCLUDE_LIST = {
   categories: { select: { name: true } },
 } as const;
 
-/** @deprecated Use GRANT_INCLUDE_DETAIL or GRANT_INCLUDE_LIST. */
-export const GRANT_INCLUDE = GRANT_INCLUDE_DETAIL;
-
 // Maximum length of Grant.description stored in the DB. PDFs and
 // aggressive scrapers can push this into the tens of thousands of
 // characters; we cap at write time so API payloads stay bounded.
