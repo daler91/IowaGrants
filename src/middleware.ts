@@ -140,6 +140,6 @@ export const config = {
   // Run on all paths except static assets and Next internals so the CSP
   // nonce is attached to every HTML response.
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:png|jpg|jpeg|gif|svg|webp|ico|woff|woff2|ttf|otf)).*)",
+    "/((?!_next/static|_next/image|favicon.ico|.*[.](?:png|jpg|jpeg|gif|svg|webp|ico|woff|woff2|ttf|otf)).*)",
   ],
 };

@@ -7,18 +7,20 @@ interface UseMetaValuesResult {
 }
 
 // Module-level cache so multiple components mounted on the same page share
-// a single network fetch per endpoint, even across unmount/remount.
+// a single network fetch per endpoint, even across unmount/remount. The
+// cached promise is NOT bound to any component's AbortSignal — aborting
+// it would poison the shared result for every other caller — so cancel
+// only the React state update downstream instead.
 const cache = new Map<string, Promise<Record<string, unknown>>>();
 
-function fetchOnce(endpoint: string, signal?: AbortSignal): Promise<Record<string, unknown>> {
+function fetchOnce(endpoint: string): Promise<Record<string, unknown>> {
   const cached = cache.get(endpoint);
   if (cached) return cached;
-  const pending = fetch(endpoint, { signal })
+  const pending = fetch(endpoint)
     .then((res) => (res.ok ? res.json() : {}))
-    .catch((error) => {
+    .catch(() => {
       // Don't poison the cache on network failure — allow a retry on next mount.
       cache.delete(endpoint);
-      if ((error as { name?: string })?.name === "AbortError") return {};
       return {};
     });
   cache.set(endpoint, pending);
@@ -38,16 +40,14 @@ export function useMetaValues(
   const [values, setValues] = useState<string[]>([]);
 
   useEffect(() => {
-    const controller = new AbortController();
     let cancelled = false;
-    fetchOnce(endpoint, controller.signal).then((data) => {
+    fetchOnce(endpoint).then((data) => {
       if (cancelled) return;
       const list = Array.isArray(data?.[field]) ? (data[field] as string[]) : [];
       setValues(list);
     });
     return () => {
       cancelled = true;
-      controller.abort();
     };
   }, [endpoint, field]);
 
