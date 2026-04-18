@@ -17,7 +17,10 @@ export function validateExternalUrl(raw: string): ValidatedUrl {
 
   let parsed: URL;
   try {
-    parsed = new URL(trimmed);
+    // URL parsing is the validation mechanism here; downstream callers
+    // never dereference a parsed URL, they only inspect protocol and
+    // then pass the original string through isSafeUrl().
+    parsed = new URL(trimmed); // NOSONAR: intentional URL parse for validation
   } catch {
     return { ok: false, reason: "malformed" };
   }

@@ -82,7 +82,9 @@ function nextWithContext(request: NextRequest, requestId: string, nonce: string)
 export function middleware(request: NextRequest) {
   const path = request.nextUrl.pathname;
   const requestId = request.headers.get("x-request-id") || crypto.randomUUID();
-  const nonce = crypto.randomUUID().replaceAll("-", "");
+  // crypto.randomUUID() is backed by a CSPRNG on every supported
+  // runtime; suitable for a CSP nonce.
+  const nonce = crypto.randomUUID().replaceAll("-", ""); // NOSONAR: CSPRNG nonce
 
   const csrfError = checkCsrfOrigin(request);
   if (csrfError) {
