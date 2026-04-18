@@ -24,6 +24,33 @@ function cleanup() {
   keysToDelete.forEach((key) => hits.delete(key));
 }
 
+/**
+ * Collect origins the CSRF check should accept. Behind a TLS-terminating
+ * proxy (Railway), `request.nextUrl.origin` can reflect the internal
+ * http://host:port while the browser sends the public https origin — so
+ * we also honor `x-forwarded-host` / `x-forwarded-proto` and an optional
+ * `ALLOWED_ORIGINS` env allow-list.
+ */
+function buildAllowedOrigins(request: NextRequest): Set<string> {
+  const allowed = new Set<string>([request.nextUrl.origin]);
+
+  const fwdHost = request.headers.get("x-forwarded-host")?.split(",")[0].trim();
+  const fwdProto = request.headers.get("x-forwarded-proto")?.split(",")[0].trim();
+  if (fwdHost) {
+    const proto = fwdProto || request.nextUrl.protocol.replace(":", "");
+    allowed.add(`${proto}://${fwdHost}`);
+  }
+
+  const envAllowed = process.env.ALLOWED_ORIGINS;
+  if (envAllowed) {
+    for (const entry of envAllowed.split(",")) {
+      const trimmed = entry.trim();
+      if (trimmed) allowed.add(trimmed);
+    }
+  }
+  return allowed;
+}
+
 /** Anti-CSRF origin check for state-changing requests. Returns a 403 response on failure, or null if OK. */
 function checkCsrfOrigin(request: NextRequest): NextResponse | null {
   const path = request.nextUrl.pathname;
@@ -39,7 +66,8 @@ function checkCsrfOrigin(request: NextRequest): NextResponse | null {
     return NextResponse.json({ error: "Missing origin header" }, { status: 403 });
   }
   try {
-    if (new URL(origin).origin !== request.nextUrl.origin) {
+    const normalized = new URL(origin).origin;
+    if (!buildAllowedOrigins(request).has(normalized)) {
       return NextResponse.json({ error: "Invalid origin" }, { status: 403 });
     }
   } catch {
