@@ -18,6 +18,10 @@ describe("auth", () => {
       const hash = await hashPassword("correct-password");
       expect(await verifyPassword("wrong-password", hash)).toBe(false);
     });
+
+    it("should throw when password is shorter than the minimum", async () => {
+      await expect(hashPassword("short")).rejects.toThrow(/at least 12/);
+    });
   });
 
   describe("signToken / verifyToken", () => {

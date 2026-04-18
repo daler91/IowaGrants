@@ -41,6 +41,7 @@ import {
 } from "@/lib/change-detection/detector";
 import pLimit from "p-limit";
 import { IntegrationBudget } from "@/lib/ai/budget";
+import { truncateDescription } from "@/lib/constants";
 import type { GrantData, ScraperResult } from "@/lib/types";
 
 async function ensureEligibleExpenses() {
@@ -90,6 +91,9 @@ async function upsertGrant(grant: GrantData): Promise<boolean> {
     });
   }
   grant.deadline = sanitizedDeadline;
+
+  // Cap description length so a 100k-char PDF can't bloat API payloads.
+  grant.description = truncateDescription(grant.description);
 
   const categoryConnections =
     grant.categories.length > 0
@@ -212,9 +216,7 @@ async function processPdfGrants(allGrants: GrantData[], urlsToReparse: string[])
   }
 
   // Also parse PDFs found by scrapers (bounded concurrency)
-  const pdfIndices = allGrants
-    .map((grant, i) => (grant.pdfUrl ? i : -1))
-    .filter((i) => i >= 0);
+  const pdfIndices = allGrants.map((grant, i) => (grant.pdfUrl ? i : -1)).filter((i) => i >= 0);
   const enrichResults = await Promise.all(
     pdfIndices.map((i) =>
       limit(async () => {
@@ -283,7 +285,10 @@ function needsDeadlineCheck(grant: GrantData, now: number): boolean {
 function applyDeadlineResult(
   grant: GrantData,
   result: { deadline: Date | null; confidence: "HIGH" | "MEDIUM" | "LOW"; reason: string },
-): { method: "regex" | "ai" | "merged"; outcome: "overwritten" | "filled" | "disagreement" | "none" } {
+): {
+  method: "regex" | "ai" | "merged";
+  outcome: "overwritten" | "filled" | "disagreement" | "none";
+} {
   const regexDeadlineIso = grant.deadline?.toISOString() ?? null;
   const aiDeadlineIso = result.deadline?.toISOString() ?? null;
   let method: "regex" | "ai" | "merged" = "regex";
@@ -321,7 +326,10 @@ function applyDeadlineResult(
   return { method, outcome };
 }
 
-async function reconcileDeadlines(grants: GrantData[], opts: { budget?: IntegrationBudget } = {}): Promise<void> {
+async function reconcileDeadlines(
+  grants: GrantData[],
+  opts: { budget?: IntegrationBudget } = {},
+): Promise<void> {
   if (grants.length === 0) return;
 
   const now = Date.now();
@@ -588,19 +596,28 @@ export async function runFullScrape(scrapeRunId?: string): Promise<ScraperResult
     },
   ];
 
-  let applicationFiltered = categorized;
-  for (const filter of filters) {
-    const before = applicationFiltered.length;
-    applicationFiltered = applicationFiltered.filter((grant) => {
-      const passes = filter.test(grant);
-      if (!passes) {
+  // Single-pass filter: each grant is checked against every rule in one walk.
+  // We still count per-rule drops for logging parity with the previous
+  // implementation.
+  const perFilterDrops = new Map<string, number>(filters.map((f) => [f.name, 0]));
+  const beforeAll = categorized.length;
+  const applicationFiltered = categorized.filter((grant) => {
+    for (const filter of filters) {
+      if (!filter.test(grant)) {
+        perFilterDrops.set(filter.name, (perFilterDrops.get(filter.name) ?? 0) + 1);
         log("orchestrator", `Filtered by ${filter.name}`, { title: grant.title });
+        return false;
       }
-      return passes;
-    });
-    if (before !== applicationFiltered.length) {
-      log("orchestrator", `${filter.name} filter: ${before} → ${applicationFiltered.length}`);
     }
+    return true;
+  });
+  for (const [name, dropped] of perFilterDrops) {
+    if (dropped > 0) {
+      log("orchestrator", `${name} filter: dropped ${dropped}`);
+    }
+  }
+  if (beforeAll !== applicationFiltered.length) {
+    log("orchestrator", `filter pipeline: ${beforeAll} → ${applicationFiltered.length}`);
   }
 
   // Step 5b-bis: Hydrate live page content for URL liveness check + AI validation.
@@ -632,6 +649,15 @@ export async function runFullScrape(scrapeRunId?: string): Promise<ScraperResult
     log("orchestrator", "Revalidation sweep done", { ...sweepSummary });
   } catch (error) {
     logError("orchestrator", "Revalidation sweep failed", error);
+  }
+
+  // Step 8b: Retention sweep — delete long-expired invite tokens per
+  // docs/DATA_RETENTION.md.
+  try {
+    const { runRetentionSweep } = await import("@/lib/cron/retention");
+    await runRetentionSweep();
+  } catch (error) {
+    logError("orchestrator", "Retention sweep failed", error);
   }
 
   // Update ScrapeRun record with final counts

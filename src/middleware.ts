@@ -8,6 +8,7 @@ import { NextRequest, NextResponse } from "next/server";
 const RATE_LIMITS: Record<string, { windowMs: number; max: number }> = {
   "/api/auth": { windowMs: 60_000, max: 5 },
   "/api/scraper": { windowMs: 60_000, max: 5 },
+  "/api/admin": { windowMs: 60_000, max: 30 },
   "/api/grants": { windowMs: 60_000, max: 60 },
 };
 
@@ -47,36 +48,64 @@ function checkCsrfOrigin(request: NextRequest): NextResponse | null {
   return null;
 }
 
-/** Forward requestId on both request (for route handlers) and response headers. */
-function nextWithRequestId(request: NextRequest, requestId: string): NextResponse {
+/**
+ * Build the Content-Security-Policy using a per-request nonce for scripts.
+ * `style-src` intentionally keeps `'unsafe-inline'` because Tailwind + Next's
+ * generated style attributes require it; browsers ignore nonces on style
+ * attributes anyway.
+ */
+function buildCsp(nonce: string): string {
+  return [
+    "default-src 'self'",
+    `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'`,
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' data: https:",
+    "font-src 'self' data:",
+    "connect-src 'self'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    "frame-ancestors 'none'",
+  ].join("; ");
+}
+
+/** Forward requestId + nonce to downstream handlers and set response headers. */
+function nextWithContext(request: NextRequest, requestId: string, nonce: string): NextResponse {
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set("x-request-id", requestId);
+  requestHeaders.set("x-nonce", nonce);
   const response = NextResponse.next({ request: { headers: requestHeaders } });
   response.headers.set("x-request-id", requestId);
+  response.headers.set("Content-Security-Policy", buildCsp(nonce));
   return response;
 }
 
 export function middleware(request: NextRequest) {
-  const csrfError = checkCsrfOrigin(request);
-  if (csrfError) return csrfError;
-
   const path = request.nextUrl.pathname;
-
-  // ── Propagate request ID for correlated logging ─────────────────────
   const requestId = request.headers.get("x-request-id") || crypto.randomUUID();
+  // crypto.randomUUID() is backed by a CSPRNG on every supported
+  // runtime; suitable for a CSP nonce.
+  const nonce = crypto.randomUUID().replaceAll("-", ""); // NOSONAR: CSPRNG nonce
+
+  const csrfError = checkCsrfOrigin(request);
+  if (csrfError) {
+    csrfError.headers.set("Content-Security-Policy", buildCsp(nonce));
+    return csrfError;
+  }
+
+  // Non-API routes only need the CSP + request-id wiring.
+  if (!path.startsWith("/api/")) {
+    return nextWithContext(request, requestId, nonce);
+  }
 
   const config = Object.entries(RATE_LIMITS).find(([prefix]) => path.startsWith(prefix));
   if (!config) {
-    return nextWithRequestId(request, requestId);
+    return nextWithContext(request, requestId, nonce);
   }
 
   const [, { windowMs, max }] = config;
-  // Prefer x-real-ip (set by trusted reverse proxy) over x-forwarded-for
-  // (which can be spoofed by clients in multi-hop setups).
-  const ip =
-    request.headers.get("x-real-ip") ??
-    request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
-    "unknown";
+  // Trust only x-real-ip; Railway's proxy sets it. x-forwarded-for is
+  // client-spoofable unless the edge strips it, which we do not guarantee.
+  const ip = request.headers.get("x-real-ip") ?? "unknown";
   const [prefix] = config;
   const key = `${ip}:${prefix}`;
   const now = Date.now();
@@ -88,7 +117,7 @@ export function middleware(request: NextRequest) {
   const entry = hits.get(key);
   if (!entry || now > entry.resetAt) {
     hits.set(key, { count: 1, resetAt: now + windowMs });
-    return nextWithRequestId(request, requestId);
+    return nextWithContext(request, requestId, nonce);
   }
 
   entry.count++;
@@ -100,14 +129,19 @@ export function middleware(request: NextRequest) {
         headers: {
           "Retry-After": String(Math.ceil((entry.resetAt - now) / 1000)),
           "x-request-id": requestId,
+          "Content-Security-Policy": buildCsp(nonce),
         },
       },
     );
   }
 
-  return nextWithRequestId(request, requestId);
+  return nextWithContext(request, requestId, nonce);
 }
 
 export const config = {
-  matcher: ["/api/:path*"],
+  // Run on all paths except static assets and Next internals so the CSP
+  // nonce is attached to every HTML response.
+  matcher: [
+    "/((?!_next/static|_next/image|favicon.ico|.*[.](?:png|jpg|jpeg|gif|svg|webp|ico|woff|woff2|ttf|otf)).*)",
+  ],
 };

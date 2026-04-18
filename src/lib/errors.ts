@@ -65,3 +65,20 @@ export function logWarn(module: string, message: string, data?: Record<string, u
   };
   console.warn(JSON.stringify(entry));
 }
+
+/**
+ * Returns log helpers bound to a request correlation id. Pass the value of
+ * `x-request-id` (middleware generates one per request) so downstream scraper
+ * and AI modules can propagate it into structured logs.
+ */
+export function withRequestId(requestId: string | null | undefined) {
+  const rid = requestId ?? undefined;
+  return {
+    log: (module: string, message: string, data?: Record<string, unknown>) =>
+      log(module, message, { ...data, requestId: rid }),
+    logError: (module: string, message: string, error?: unknown, data?: Record<string, unknown>) =>
+      logError(module, message, error, { ...data, requestId: rid }),
+    logWarn: (module: string, message: string, data?: Record<string, unknown>) =>
+      logWarn(module, message, { ...data, requestId: rid }),
+  };
+}

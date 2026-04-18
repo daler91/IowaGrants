@@ -20,14 +20,16 @@ function getSecret() {
   return new TextEncoder().encode(env.JWT_SECRET);
 }
 
+export const MIN_PASSWORD_LENGTH = 12;
+
 export async function hashPassword(password: string): Promise<string> {
+  if (password.length < MIN_PASSWORD_LENGTH) {
+    throw new Error(`password must be at least ${MIN_PASSWORD_LENGTH} characters`);
+  }
   return bcrypt.hash(password, 12);
 }
 
-export async function verifyPassword(
-  password: string,
-  hash: string,
-): Promise<boolean> {
+export async function verifyPassword(password: string, hash: string): Promise<boolean> {
   return bcrypt.compare(password, hash);
 }
 
@@ -79,9 +81,7 @@ export class UnauthorizedError extends Error {
  * Throws UnauthorizedError if not — callers should catch
  * and return NextResponse.json({ error: "Unauthorized" }, { status: 401 }).
  */
-export async function requireAdmin(
-  request: NextRequest,
-): Promise<{ sub: string; email: string }> {
+export async function requireAdmin(request: NextRequest): Promise<{ sub: string; email: string }> {
   const claims = await getAdminFromRequest(request);
   if (!claims) {
     throw new UnauthorizedError();
@@ -95,7 +95,6 @@ export async function requireAdmin(
 
   return claims;
 }
-
 
 export function setAuthCookie(response: NextResponse, token: string) {
   response.cookies.set(COOKIE_NAME, token, {

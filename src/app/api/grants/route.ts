@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { requireAdmin, UnauthorizedError } from "@/lib/auth";
-import { GRANT_INCLUDE } from "@/lib/constants";
+import { GRANT_INCLUDE_DETAIL } from "@/lib/constants";
 import { parsePagination } from "@/lib/api-utils";
 import { computeDisplayStatus } from "@/lib/deadline";
 import { buildGrantWhere } from "@/lib/grant-query";
@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
     const [grants, total] = await Promise.all([
       prisma.grant.findMany({
         where,
-        include: GRANT_INCLUDE,
+        include: GRANT_INCLUDE_DETAIL,
         orderBy,
         skip,
         take: limit,
@@ -50,6 +50,8 @@ export async function GET(request: NextRequest) {
   }
 }
 
+const BULK_DELETE_CONFIRM_THRESHOLD = 10;
+
 export async function DELETE(request: NextRequest) {
   try {
     const admin = await requireAdmin(request);
@@ -58,6 +60,21 @@ export async function DELETE(request: NextRequest) {
     if (result.error) return result.error;
 
     const { ids } = result.data;
+
+    // Defense in depth: require an explicit confirmation flag when the
+    // caller is deleting a large batch. Prevents a misfired client
+    // request from wiping the DB.
+    if (ids.length > BULK_DELETE_CONFIRM_THRESHOLD) {
+      const confirm = request.nextUrl.searchParams.get("confirmBulk");
+      if (confirm !== "true") {
+        return errorResponse(
+          request,
+          409,
+          `Bulk delete of ${ids.length} grants requires confirmBulk=true`,
+          "BULK_CONFIRM_REQUIRED",
+        );
+      }
+    }
 
     const deleteResult = await prisma.grant.deleteMany({
       where: { id: { in: ids } },

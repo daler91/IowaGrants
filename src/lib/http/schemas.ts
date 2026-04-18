@@ -5,12 +5,13 @@ import {
   VALID_BUSINESS_STAGE,
   VALID_GRANT_STATUS,
 } from "@/lib/constants";
+import { validateExternalUrl } from "@/lib/http/url-validation";
 
 // ── Auth ────────────────────────────────────────────────────────────────
 
 export const loginSchema = z.object({
-  email: z.string().min(1),
-  password: z.string().min(1),
+  email: z.string().email("A valid email address is required"),
+  password: z.string().min(12, "Password must be at least 12 characters"),
 });
 
 export const registerSchema = z.object({
@@ -66,17 +67,26 @@ const grantStatusEnum = z.enum(VALID_GRANT_STATUS as [string, ...string[]]);
 const businessStageEnum = z.enum(VALID_BUSINESS_STAGE as [string, ...string[]]);
 const genderFocusEnum = z.enum(VALID_GENDER_FOCUS as [string, ...string[]]);
 
+const safeUrlString = z
+  .string()
+  .min(1, "URL must be a non-empty string")
+  .check(
+    z.refine((value) => validateExternalUrl(value).ok, {
+      message: "URL must use http(s) and not point to a private or metadata host",
+    }),
+  );
+
 export const grantUpdateSchema = z.object({
   // Required string fields — non-empty when provided
   title: z.string().min(1, "title must be a non-empty string").optional(),
   description: z.string().min(1, "description must be a non-empty string").optional(),
   sourceName: z.string().min(1, "sourceName must be a non-empty string").optional(),
-  sourceUrl: z.string().min(1, "sourceUrl must be a non-empty string").optional(),
+  sourceUrl: safeUrlString.optional(),
 
   // Optional string fields (nullable)
   amount: z.union([z.string(), z.null()]).optional(),
   eligibility: z.union([z.string(), z.null()]).optional(),
-  pdfUrl: z.union([z.string(), z.null()]).optional(),
+  pdfUrl: z.union([safeUrlString, z.null()]).optional(),
 
   // Integer fields (nullable)
   amountMin: z.union([z.number().int().min(0), z.null()]).optional(),

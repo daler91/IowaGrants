@@ -6,6 +6,7 @@ import { log, logError } from "@/lib/errors";
 import { DeadlineExtractionArraySchema, type DeadlineExtraction } from "./schemas";
 import { getAnthropic } from "./client";
 import type { IntegrationBudget } from "./budget";
+import { computeBackoffDelay, sleep } from "./backoff";
 
 const DEADLINE_PROMPT = `You are extracting application deadlines from scraped grant listings.
 
@@ -57,6 +58,7 @@ const INITIAL_RETRY_DELAY_MS = 1000;
 async function callClaudeForBatch(
   inputs: DeadlineExtractionInput[],
   today: Date,
+  budget?: IntegrationBudget,
 ): Promise<DeadlineExtraction[] | null> {
   const snippets = inputs.map(buildSnippet).join("\n\n---\n\n");
   const todayStr = today.toISOString().slice(0, 10);
@@ -70,6 +72,7 @@ async function callClaudeForBatch(
         messages: [{ role: "user", content: message }],
       });
 
+      budget?.recordTokens(response.usage);
       const text = response.content[0]?.type === "text" ? response.content[0].text : "";
       const cleaned = text
         .replace(/^```(?:json)?\s*/m, "")
@@ -83,7 +86,7 @@ async function callClaudeForBatch(
         error,
       );
       if (attempt < MAX_RETRIES - 1) {
-        await new Promise((r) => setTimeout(r, INITIAL_RETRY_DELAY_MS * 2 ** attempt));
+        await sleep(computeBackoffDelay(error, attempt, INITIAL_RETRY_DELAY_MS));
       }
     }
   }
@@ -155,7 +158,7 @@ export async function extractDeadlinesWithAI(
     }));
 
     opts.budget?.recordAICall();
-    const extracted = await callClaudeForBatch(inputs, today);
+    const extracted = await callClaudeForBatch(inputs, today, opts.budget);
     if (extracted) {
       applyExtractionResults(extracted, batchStart, batch.length, results);
     }

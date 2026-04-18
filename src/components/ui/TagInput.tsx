@@ -12,6 +12,8 @@ interface TagInputProps {
   suggestions?: string[];
   placeholder?: string;
   ariaLabel: string;
+  /** Marks the field as required for assistive tech. */
+  required?: boolean;
 }
 
 /**
@@ -30,6 +32,7 @@ export default function TagInput({
   suggestions = [],
   placeholder,
   ariaLabel,
+  required = false,
 }: Readonly<TagInputProps>) {
   const [draft, setDraft] = useState("");
   const [open, setOpen] = useState(false);
@@ -107,6 +110,7 @@ export default function TagInput({
           ref={inputRef}
           type="text"
           role="combobox"
+          aria-required={required || undefined}
           value={draft}
           onChange={(e) => {
             setDraft(e.target.value);

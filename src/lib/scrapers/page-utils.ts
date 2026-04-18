@@ -2,7 +2,8 @@ import axios from "axios";
 import * as cheerio from "cheerio";
 import { cleanHtmlToText, extractDeadline } from "./parsing-utils";
 import { SCRAPER_USER_AGENT } from "./config";
-import { log } from "@/lib/errors";
+import { isSafeUrl } from "./url-utils";
+import { log, logWarn } from "@/lib/errors";
 
 /**
  * Returns true if the page text looks like an error page (404, 500, etc.)
@@ -114,6 +115,10 @@ export function isActualGrantPage(url: string, title: string, pageText: string):
 export async function fetchPageDetails(
   url: string,
 ): Promise<{ description: string; deadline?: Date } | null> {
+  if (!isSafeUrl(url)) {
+    logWarn("page-utils", "Refused to fetch unsafe URL", { url, reason: "ssrf_blocked" });
+    return null;
+  }
   try {
     const response = await axios.get(url, {
       headers: {

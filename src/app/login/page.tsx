@@ -63,11 +63,13 @@ export default function LoginPage() {
               className={fieldInputClass}
             />
           </FormField>
-          <FormField label="Password" htmlFor="password" required>
+          <FormField label="Password" htmlFor="password" required hint="At least 12 characters.">
             <input
               id="password"
               type="password"
               required
+              minLength={12}
+              aria-describedby="password-hint"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className={fieldInputClass}

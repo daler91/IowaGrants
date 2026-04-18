@@ -10,6 +10,8 @@ interface ComboboxProps {
   onChange: (next: string | undefined) => void;
   /** Optional hint rendered below the input */
   hint?: string;
+  /** Marks the field as required and shows a visual asterisk. */
+  required?: boolean;
 }
 
 /**
@@ -29,6 +31,7 @@ export default function Combobox({
   placeholder,
   onChange,
   hint,
+  required = false,
 }: Readonly<ComboboxProps>) {
   // `query` is the visible text. When the caller sets `value` externally
   // (e.g., "Clear all filters"), we reset the draft by comparing against
@@ -128,14 +131,29 @@ export default function Combobox({
     }
   };
 
+  const hintId = useId();
+
   return (
     <div ref={containerRef} className="relative">
-      <label className="block text-sm font-medium text-[var(--muted)] mb-1">{label}</label>
+      <label className="block text-sm font-medium text-[var(--muted)] mb-1">
+        {label}
+        {required && (
+          <>
+            <span aria-hidden="true" className="text-[var(--danger)] ml-0.5">
+              *
+            </span>
+            <span className="sr-only"> (required)</span>
+          </>
+        )}
+      </label>
       <div className="flex items-center gap-1">
         <input
           ref={inputRef}
           type="text"
           role="combobox"
+          required={required}
+          aria-required={required || undefined}
+          aria-describedby={hint ? hintId : undefined}
           value={query}
           placeholder={placeholder}
           onChange={(e) => {
@@ -175,7 +193,11 @@ export default function Combobox({
           </button>
         )}
       </div>
-      {hint && !open && <p className="text-xs text-[var(--muted)] mt-1">{hint}</p>}
+      {hint && !open && (
+        <p id={hintId} className="text-xs text-[var(--muted)] mt-1">
+          {hint}
+        </p>
+      )}
       {open && filtered.length > 0 && (
         // WAI-ARIA combobox autocomplete pattern: requires role="listbox" on
         // the popover and role="option" on each item. <datalist>/<select>

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
+import { logError } from "@/lib/errors";
 
 interface CalendarGrant {
   id: string;
@@ -128,7 +129,7 @@ export default function DeadlineCalendar() {
         const data = await res.json();
         setGrants(data.grants || {});
       } catch (error) {
-        console.error("Failed to fetch calendar:", error);
+        logError("deadline-calendar", "Failed to fetch calendar data", error, { year, month });
         setError("Failed to load calendar data. Please try again.");
         setGrants({});
       } finally {

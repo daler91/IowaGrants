@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { Prisma } from "@prisma/client";
 import { requireAdmin, UnauthorizedError } from "@/lib/auth";
-import { GRANT_INCLUDE } from "@/lib/constants";
+import { GRANT_INCLUDE_DETAIL, truncateDescription } from "@/lib/constants";
 import { errorResponse, log, logError } from "@/lib/errors";
 import { parseJson } from "@/lib/http/parse-json";
 import { grantUpdateSchema } from "@/lib/http/schemas";
@@ -17,9 +17,10 @@ const ARRAY_FIELDS = ["locations", "industries"] as const;
 
 function setRequiredStrings(data: Prisma.GrantUpdateInput, body: GrantUpdatePayload) {
   for (const field of REQUIRED_STRING_FIELDS) {
-    if (body[field] !== undefined) {
-      (data as Record<string, unknown>)[field] = body[field]!.trim();
-    }
+    if (body[field] === undefined) continue;
+    const trimmed = body[field]!.trim();
+    (data as Record<string, unknown>)[field] =
+      field === "description" ? truncateDescription(trimmed) : trimmed;
   }
 }
 
@@ -94,14 +95,20 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
     const grant = await prisma.grant.findUnique({
       where: { id },
-      include: GRANT_INCLUDE,
+      include: GRANT_INCLUDE_DETAIL,
     });
 
     if (!grant) {
       return errorResponse(request, 404, "Grant not found", "NOT_FOUND");
     }
 
-    return NextResponse.json(grant);
+    const response = NextResponse.json(grant);
+    // OPEN / CLOSED / FORECASTED grants are safe to cache for 5 min at the
+    // edge. DRAFT (if it ever exists) stays uncached.
+    if (grant.status !== "FORECASTED") {
+      response.headers.set("Cache-Control", "public, s-maxage=300, stale-while-revalidate=3600");
+    }
+    return response;
   } catch (error) {
     logError("grants-api", "Failed to fetch grant", error);
     return errorResponse(request, 500, "Internal server error");
@@ -140,7 +147,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     const updated = await prisma.grant.update({
       where: { id },
       data,
-      include: GRANT_INCLUDE,
+      include: GRANT_INCLUDE_DETAIL,
     });
 
     log("admin-audit", "Grant updated", { admin: admin.email, grantId: id });

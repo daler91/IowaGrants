@@ -1,9 +1,41 @@
 export async function register() {
-  // Only seed on the server side (not edge runtime)
-  // Note: NEXT_RUNTIME is set by Next.js itself before instrumentation runs,
-  // so it must be read directly from process.env (not via env.ts).
+  // NEXT_RUNTIME is "nodejs" for the server runtime, "edge" for middleware.
   if (process.env.NEXT_RUNTIME === "nodejs") {
+    await initSentry();
     await seedAdmin();
+  } else if (process.env.NEXT_RUNTIME === "edge") {
+    await initSentry();
+  }
+}
+
+async function initSentry() {
+  const dsn = process.env.SENTRY_DSN;
+  if (!dsn) return;
+  try {
+    const Sentry = await import("@sentry/nextjs");
+    const sampleRate = Number.parseFloat(process.env.SENTRY_TRACES_SAMPLE_RATE ?? "0.1");
+    Sentry.init({
+      dsn,
+      environment: process.env.NODE_ENV ?? "development",
+      tracesSampleRate: Number.isFinite(sampleRate) ? sampleRate : 0.1,
+    });
+  } catch (error) {
+    const { logError } = await import("@/lib/errors");
+    logError("sentry", "Failed to initialize Sentry", error);
+  }
+}
+
+export async function onRequestError(
+  error: unknown,
+  request: { path: string; method: string; headers: Record<string, string | string[] | undefined> },
+  context: { routerKind: "Pages Router" | "App Router"; routePath: string; routeType: string },
+) {
+  if (!process.env.SENTRY_DSN) return;
+  try {
+    const Sentry = await import("@sentry/nextjs");
+    Sentry.captureRequestError(error, request, context);
+  } catch {
+    // Swallow — never let Sentry plumbing break request handling.
   }
 }
 
