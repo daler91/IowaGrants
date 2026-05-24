@@ -28,7 +28,7 @@
     "@anthropic-ai/sdk": "^0.81.0",
     "@prisma/client": "^6.19.2",
     "@sentry/nextjs": "^10.49.0",
-    "axios": "^1.15.0",
+    "axios": "^1.16.1",
     "bcryptjs": "^3.0.3",
     "cheerio": "^1.2.0",
     "jose": "^6.2.2",
