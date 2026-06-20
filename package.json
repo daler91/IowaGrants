@@ -58,7 +58,7 @@
     "vitest": "^4.1.2"
   },
   "overrides": {
-    "dompurify": "^3.4.10"
+    "dompurify": "^3.4.11"
   },
   "engines": {
     "node": ">=20"
